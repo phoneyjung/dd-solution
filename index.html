@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#D97706">
+<title>D.D. Solution - ระบบจัดการธุรกิจโซล่าเซลล์</title>
+
+<!-- PWA Manifest -->
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/869/869869.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&family=Bebas+Neue&display=swap" rel="stylesheet">
+
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- React -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<!-- Lucide Icons -->
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+
+<!-- SheetJS with style support (xlsx-js-style) -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+
+<!-- Firebase -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getFirestore, doc, setDoc, getDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  
+  // ✅ Firebase config สำหรับ D.D. Solution
+  const firebaseConfig = {
+    apiKey: "AIzaSyBDX37AxELa_YqQYRr7tO2YXaeSvmtM5-Y",
+    authDomain: "dd-solution-fedaf.firebaseapp.com",
+    projectId: "dd-solution-fedaf",
+    storageBucket: "dd-solution-fedaf.firebasestorage.app",
+    messagingSenderId: "572669685451",
+    appId: "1:572669685451:web:545ed3a216190829bdf54e"
+  };
+  
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const auth = getAuth(app);
+  
+  // Sign in anonymously (ไม่ต้องใส่ password ทุกครั้ง)
+  signInAnonymously(auth).catch(err => console.error('Auth error:', err));
+  
+  // Expose Firebase API to window
+  window.firebaseDb = db;
+  window.firebaseDoc = doc;
+  window.firebaseSetDoc = setDoc;
+  window.firebaseGetDoc = getDoc;
+  window.firebaseDeleteDoc = deleteDoc;
+  window.firebaseOnSnapshot = onSnapshot;
+  window.firebaseReady = true;
+  window.dispatchEvent(new Event('firebase-ready'));
+</script>
+
+<style>
+  * { font-family: 'Sarabun', system-ui, sans-serif; }
+  .display-font { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.04em; }
+  
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-10px); }
+    75% { transform: translateX(10px); }
+  }
+  .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+  .animate-slide-up { animation: slideUp 0.3s ease-out; }
+  .animate-shake { animation: shake 0.4s ease-in-out 2; }
+  
+  /* Hide scrollbar but allow scrolling */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #f5f5f4; }
+  ::-webkit-scrollbar-thumb { background: #d6d3d1; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #a8a29e; }
+  
+  /* Mobile optimizations */
+  input, select, textarea { font-size: 16px !important; } /* prevent iOS zoom */
+</style>
+</head>
+<body class="bg-stone-100">
+<div id="root"></div>
+
+<!-- Firebase Storage Adapter -->
+<script>
+  // ============== FIREBASE STORAGE ADAPTER ==============
+  // ทำให้ window.storage ทำงานเหมือน Anthropic shared storage แต่ใช้ Firebase Firestore
+  
+  const COLLECTION = 'dd_solution_v1';
+  
+  window.storage = {
+    async get(key, shared = true) {
+      if (!window.firebaseReady) {
+        await new Promise(resolve => window.addEventListener('firebase-ready', resolve, { once: true }));
+      }
+      try {
+        const docRef = window.firebaseDoc(window.firebaseDb, COLLECTION, key.replace(/:/g, '_'));
+        const snap = await window.firebaseGetDoc(docRef);
+        if (snap.exists()) {
+          return { key, value: snap.data().value, shared };
+        }
+        return null;
+      } catch (e) {
+        console.error('Firebase get error:', e);
+        // Fallback to localStorage
+        const v = localStorage.getItem(`fb_${key}`);
+        return v ? { key, value: v, shared } : null;
+      }
+    },
+    
+    async set(key, value, shared = true) {
+      if (!window.firebaseReady) {
+        await new Promise(resolve => window.addEventListener('firebase-ready', resolve, { once: true }));
+      }
+      try {
+        const docRef = window.firebaseDoc(window.firebaseDb, COLLECTION, key.replace(/:/g, '_'));
+        await window.firebaseSetDoc(docRef, { value, updatedAt: new Date().toISOString() });
+        // Also save to localStorage as backup
+        localStorage.setItem(`fb_${key}`, value);
+        return { key, value, shared };
+      } catch (e) {
+        console.error('Firebase set error:', e);
+        // Fallback to localStorage only
+        localStorage.setItem(`fb_${key}`, value);
+        return { key, value, shared };
+      }
+    },
+    
+    async delete(key, shared = true) {
+      if (!window.firebaseReady) {
+        await new Promise(resolve => window.addEventListener('firebase-ready', resolve, { once: true }));
+      }
+      try {
+        const docRef = window.firebaseDoc(window.firebaseDb, COLLECTION, key.replace(/:/g, '_'));
+        await window.firebaseDeleteDoc(docRef);
+        localStorage.removeItem(`fb_${key}`);
+        return { key, deleted: true, shared };
+      } catch (e) {
+        console.error('Firebase delete error:', e);
+        localStorage.removeItem(`fb_${key}`);
+        return { key, deleted: true, shared };
+      }
+    }
+  };
+  
+  // Subscribe to real-time updates from Firebase
+  window.subscribeToKey = function(key, callback) {
+    if (!window.firebaseReady) {
+      window.addEventListener('firebase-ready', () => window.subscribeToKey(key, callback), { once: true });
+      return () => {};
+    }
+    const docRef = window.firebaseDoc(window.firebaseDb, COLLECTION, key.replace(/:/g, '_'));
+    return window.firebaseOnSnapshot(docRef, (snap) => {
+      if (snap.exists() && snap.data().value) {
+        callback(snap.data().value);
+      }
+    });
+  };
+</script>
+
+<!-- App Code -->
+<script type="text/babel" data-presets="react" src="app.js"></script>
+
+<!-- Service Worker registration for offline support -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }
+</script>
+</body>
+</html>
