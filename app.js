@@ -411,7 +411,7 @@ function LoginScreen({ onLogin }) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-stone-900 via-amber-900 to-stone-900 flex items-center justify-center p-4" style={{fontFamily: "'Sarabun', system-ui, sans-serif"}}>
+    <div className="min-h-screen flex items-center justify-center p-4" style={{fontFamily: "'Sarabun', system-ui, sans-serif", background: 'linear-gradient(135deg, #0d1f43 0%, #1e3a5f 50%, #0d1f43 100%)'}}>
       <style>{`
         
         .display-font { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.04em; }
@@ -424,9 +424,7 @@ function LoginScreen({ onLogin }) {
       `}</style>
       <div className={`bg-white rounded-3xl shadow-2xl p-8 w-full max-w-sm ${shake ? 'animate-shake' : ''}`}>
         <div className="text-center mb-6">
-          <div className="bg-amber-400 rounded-2xl w-16 h-16 mx-auto flex items-center justify-center mb-3">
-            <Sun className="w-9 h-9 text-stone-900" strokeWidth={2.5} />
-          </div>
+          <img src="icons/icon-192.png" alt="DD Logo" className="w-24 h-24 mx-auto mb-3 rounded-2xl shadow-md" />
           <h1 className="display-font text-3xl text-stone-900">D.D. SOLUTION</h1>
           <p className="text-sm text-stone-500 mt-1">ใส่ PIN 4 หลักเพื่อเข้าใช้งาน</p>
         </div>
@@ -1023,10 +1021,10 @@ function DDSolutionManager({ currentUser, onLogout }) {
         .animate-fade-in { animation: fade-in 0.3s ease-out; }
       `}</style>
 
-      <header className="bg-gradient-to-r from-stone-900 to-amber-900 text-white sticky top-0 z-40 shadow-lg">
+      <header className="text-white sticky top-0 z-40 shadow-lg" style={{background: 'linear-gradient(to right, #0d1f43, #1e3a5f)'}}>
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="bg-amber-400 rounded-xl p-2 flex-shrink-0"><Sun className="w-7 h-7 text-stone-900" strokeWidth={2.5} /></div>
+            <img src="icons/icon-192.png" alt="DD" className="w-11 h-11 rounded-xl shadow-md flex-shrink-0" />
             <div className="min-w-0">
               <h1 className="display-font text-xl md:text-3xl">D.D. SOLUTION</h1>
               <p className="text-xs text-amber-200 truncate">{currentUser.icon} {currentUser.name} กำลังใช้งาน</p>
