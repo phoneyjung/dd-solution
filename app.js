@@ -427,9 +427,8 @@ const DEFAULT_COMPANY_INFO = {
   // === สเปคที่ใช้ (ใส่ใจรายละเอียด) ===
   specs: [
     { id: 's-dc',     label: 'สาย DC (PV)',         value: 'PV1-F 6mm² ทนแดด UV' },
-    { id: 's-ac',     label: 'สาย AC',              value: 'Yasaki THW 16mm²' },
-    { id: 's-comb',   label: 'ตู้ Combiner',        value: 'IP65 + Surge Protection' },
-    { id: 's-mdb',    label: 'ตู้ MDB',             value: 'กันน้ำ IP65 + RCBO' },
+    { id: 's-ac',     label: 'สาย AC',              value: 'Yasaki 10mm² (เครื่อง 10kW ขึ้นไปใช้ 16mm²)' },
+    { id: 's-comb',   label: 'ตู้ Combiner',        value: 'พร้อม Surge Protection' },
     { id: 's-rail',   label: 'รางอลูมิเนียม',       value: 'หนา 1.6mm + Stainless' },
     { id: 's-test',   label: 'ทดสอบหลังติดตั้ง',   value: 'Megger Test + ขนานไฟ' },
     { id: 's-cert',   label: 'มาตรฐาน',             value: 'ตามวิศวกรไฟฟ้า + กกพ.' },
@@ -1234,6 +1233,14 @@ function DDSolutionManager({ currentUser, onLogout }) {
         const ciData = ci ? JSON.parse(ci.value) : DEFAULT_COMPANY_INFO;
         if (!ciData.warranty) ciData.warranty = DEFAULT_COMPANY_INFO.warranty;
         if (!ciData.specs) ciData.specs = DEFAULT_COMPANY_INFO.specs;
+        // Force migrate specs: ถ้ามี IP65, MDB หรือสาย 16mm² (เก่า) → reset
+        else if (ciData.specs.some(s => 
+          (s.id === 's-mdb') || 
+          (s.value && s.value.includes('IP65')) ||
+          (s.id === 's-ac' && s.value && s.value.includes('16mm²') && !s.value.includes('10mm²'))
+        )) {
+          ciData.specs = DEFAULT_COMPANY_INFO.specs;
+        }
         if (!ciData.freebies) ciData.freebies = DEFAULT_COMPANY_INFO.freebies;
         if (!ciData.saleSlogan) ciData.saleSlogan = DEFAULT_COMPANY_INFO.saleSlogan;
         setCompanyInfo(ciData);
