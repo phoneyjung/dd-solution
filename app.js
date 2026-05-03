@@ -415,6 +415,36 @@ const DEFAULT_COMPANY_INFO = {
   bankAccounts: [
     { bank: 'ธ.กสิกรไทย', number: '868-2-17752-8', name: 'ศิรินทร์ ริวัฒนา' },
   ],
+  // === รับประกัน (แสดงในใบเสนอราคา) ===
+  warranty: [
+    { id: 'w-inv',     icon: '🔌', label: 'Inverter',                years: 10, note: '' },
+    { id: 'w-batt',    icon: '🔋', label: 'แบตเตอรี่',                 years: 10, note: '' },
+    { id: 'w-panel-p', icon: '☀️', label: 'แผง (Power Output)',       years: 30, note: '' },
+    { id: 'w-panel-m', icon: '☀️', label: 'แผง (Product/Material)',   years: 15, note: '' },
+    { id: 'w-install', icon: '🔧', label: 'งานติดตั้ง',                  years: 10, note: '' },
+    { id: 'w-support', icon: '📞', label: 'After-sale Support',         years: 99, note: 'ตลอดอายุระบบ' },
+  ],
+  // === สเปคที่ใช้ (ใส่ใจรายละเอียด) ===
+  specs: [
+    { id: 's-dc',     label: 'สาย DC (PV)',         value: 'PV1-F 6mm² ทนแดด UV' },
+    { id: 's-ac',     label: 'สาย AC',              value: 'Yasaki THW 16mm²' },
+    { id: 's-comb',   label: 'ตู้ Combiner',        value: 'IP65 + Surge Protection' },
+    { id: 's-mdb',    label: 'ตู้ MDB',             value: 'กันน้ำ IP65 + RCBO' },
+    { id: 's-rail',   label: 'รางอลูมิเนียม',       value: 'หนา 1.6mm + Stainless' },
+    { id: 's-test',   label: 'ทดสอบหลังติดตั้ง',   value: 'Megger Test + ขนานไฟ' },
+    { id: 's-cert',   label: 'มาตรฐาน',             value: 'ตามวิศวกรไฟฟ้า + กกพ.' },
+  ],
+  // === ของแถม / Value-add ===
+  freebies: [
+    { id: 'f-net',     icon: '🪺', label: 'ตาข่ายกันนก',                  active: true },
+    { id: 'f-clean',   icon: '🧹', label: 'ทำความสะอาดแผงปีแรก ฟรี!',  active: true },
+    { id: 'f-check',   icon: '🔍', label: 'ตรวจระบบฟรี 1 ปี',           active: true },
+    { id: 'f-monitor', icon: '📱', label: 'แอป Monitor ตลอดอายุ',        active: true },
+    { id: 'f-manual',  icon: '📖', label: 'คู่มือการใช้งาน',              active: true },
+  ],
+  // === Slogan สำหรับใบเสนอราคา ===
+  saleSlogan: 'คืนทุนเร็ว สำรองไฟ คุ้มค่าระยะยาว',
+  // === DEPRECATED (เก็บไว้กันพัง) ===
   defaultWarranty: [
     'แผงโซล่าเซลล์: 25 ปี',
     'Inverter: 10 ปี',
@@ -672,7 +702,7 @@ function applyMargin(cost, marginPct) {
 // คำนวณ ROI พร้อม 2 mode
 // mode='dream' ขายฝัน: ใช้ PSH ทฤษฎี ไม่หัก degradation
 // mode='honest' จริงใจ: ใช้ PSH × PR (จริง) + หัก degradation 0.6%/ปี (NREL)
-function calculateROI({ kW, region, meterType = 'normal', electricityRate = null, touRates = null, inflation = null, mode = 'honest' }) {
+function calculateROI({ kW, region, meterType = 'normal', electricityRate = null, touRates = null, inflation = null, mode = 'dream' }) {
   const regionData = SOLAR_REGIONS[region] || SOLAR_REGIONS.central;
   // เลือก PSH ตาม mode
   const peakHours = mode === 'dream' 
@@ -732,7 +762,7 @@ function calculateCO2(yearlyKwh, years) {
 }
 
 // Smart Package Recommender — ใช้ catalog + smart pricing
-function recommendPackages({ monthlyBill, hasBattery, region, stock = [], catalog = [], companyInfo = null }) {
+function recommendPackages({ monthlyBill, hasBattery, region, meterType = 'normal', stock = [], catalog = [], companyInfo = null }) {
   // ใช้ dream peakHours (PSH ทฤษฎี) สำหรับ filter
   // เพื่อให้ filter สอดคล้องกับการแสดงผล (Closer แสดงด้วย dream by default)
   const regionData = SOLAR_REGIONS[region] || SOLAR_REGIONS.central;
@@ -788,9 +818,15 @@ function recommendPackages({ monthlyBill, hasBattery, region, stock = [], catalo
     const sellPrice = applyMargin(grandCost, margin);
     
     const totalKW = (panel.watt * panelCount) / 1000;
-    // ใช้ mode 'dream' (PSH ทฤษฎี) ตอน filter — ถ้า dream ยังไม่เกิน cap
-    // honest mode (3.7) ก็จะไม่เกินแน่นอน (เพราะน้อยกว่า)
-    const roi = calculateROI({ kW: Math.min(totalKW, inverter.size), region, mode: 'dream' });
+    // ใช้ mode 'dream' + meterType + touRates ตามลูกค้าเลือก
+    // เพื่อให้ตัวเลขที่แสดงในทุกหน้าตรงกัน
+    const roi = calculateROI({ 
+      kW: Math.min(totalKW, inverter.size), 
+      region, 
+      meterType,
+      touRates: { onPeak: PRICING_CONFIG.touOnPeak, offPeak: PRICING_CONFIG.touOffPeak },
+      mode: 'dream' 
+    });
     const breakEven = sellPrice / roi.yearlySavings;
     
     return {
@@ -1194,7 +1230,13 @@ function DDSolutionManager({ currentUser, onLogout }) {
         setCustomers(c ? JSON.parse(c.value) : DEFAULT_CUSTOMERS);
         setActivityLog(a ? JSON.parse(a.value) : []);
         setDocuments(d ? migrateDocuments(JSON.parse(d.value)) : DEFAULT_DOCUMENTS);
-        setCompanyInfo(ci ? JSON.parse(ci.value) : DEFAULT_COMPANY_INFO);
+        // Migration: ถ้า companyInfo เก่าไม่มี fields ใหม่ ใส่ default ให้
+        const ciData = ci ? JSON.parse(ci.value) : DEFAULT_COMPANY_INFO;
+        if (!ciData.warranty) ciData.warranty = DEFAULT_COMPANY_INFO.warranty;
+        if (!ciData.specs) ciData.specs = DEFAULT_COMPANY_INFO.specs;
+        if (!ciData.freebies) ciData.freebies = DEFAULT_COMPANY_INFO.freebies;
+        if (!ciData.saleSlogan) ciData.saleSlogan = DEFAULT_COMPANY_INFO.saleSlogan;
+        setCompanyInfo(ciData);
         // Migrate catalog: ถ้าเป็น version เก่า (มีไม่ถึง 10 รายการ) → reset เป็น default ใหม่
         let catalogToUse = sc ? JSON.parse(sc.value) : DEFAULT_SALES_CATALOG;
         const needsMigration = !sc || catalogToUse.length < 10 || !catalogToUse.some(c => c.brand === 'Solis' || c.brand === 'TMDA');
@@ -4493,7 +4535,7 @@ function SalesPresentation({ customers, stock, catalog, companyInfo, onCreateQuo
   };
   
   // Calculate packages
-  const packages = recommendPackages({ monthlyBill, hasBattery, region, stock, catalog, companyInfo });
+  const packages = recommendPackages({ monthlyBill, hasBattery, region, meterType, stock, catalog, companyInfo });
   
   // Get the active selection (package or custom)
   const getActiveSelection = () => {
@@ -4514,7 +4556,7 @@ function SalesPresentation({ customers, stock, catalog, companyInfo, onCreateQuo
       const margin = getMargin(inv.size, companyInfo);
       const sellPrice = applyMargin(grandCost, margin);
       const totalKW = (pan.watt * cnt) / 1000;
-      const roi = calculateROI({ kW: Math.min(totalKW, inv.size), ...calcOpts });
+      const roi = calculateROI({ kW: Math.min(totalKW, inv.size), ...calcOpts, mode: 'dream' });
       const breakEven = sellPrice / roi.yearlySavings;
       
       return {
@@ -4725,8 +4767,8 @@ function SalesPresentation({ customers, stock, catalog, companyInfo, onCreateQuo
         <div className="space-y-3">
           {Object.entries(packages).map(([key, pkg]) => {
             const isBest = key === 'best';
-            // คำนวณใหม่ด้วย calcOpts (รวม TOU)
-            const realRoi = calculateROI({ kW: Math.min(pkg.totalKW, pkg.inverter.size), ...calcOpts });
+            // คำนวณใหม่ด้วย calcOpts (รวม TOU) + dream mode (default แสดง)
+            const realRoi = calculateROI({ kW: Math.min(pkg.totalKW, pkg.inverter.size), ...calcOpts, mode: 'dream' });
             const realBreakEven = pkg.sellPrice / realRoi.yearlySavings;
             
             return (
@@ -5464,6 +5506,16 @@ ${battery ? `- ${battery.brand} ${battery.model} × 1 ลูก` : ''}
         />
       )}
       
+      {/* === 🏆 Hero Badge === */}
+      {active.label?.includes('คุ้มสุด') && (
+        <div className={`bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 rounded-xl p-3 text-white text-center shadow-lg animate-fade-in`}>
+          <div className="text-base font-bold">🏆 ชุดขายดี อันดับ 1</div>
+          {companyInfo?.saleSlogan && (
+            <div className="text-xs opacity-90 mt-0.5">⭐⭐⭐⭐⭐ "{companyInfo.saleSlogan}"</div>
+          )}
+        </div>
+      )}
+      
       <div className={`sticky top-2 z-20 bg-gradient-to-br from-amber-400 via-orange-400 to-orange-500 rounded-3xl p-5 text-white shadow-2xl text-center transition-all duration-700 ${animateStep >= 1 ? 'scale-100 opacity-100' : 'scale-90 opacity-0'}`}
         key="price-card-sticky">
         <div className="text-4xl mb-1">{active.badge}</div>
@@ -5700,6 +5752,66 @@ ${battery ? `- ${battery.brand} ${battery.model} × 1 ลูก` : ''}
           );
         })()}
       </div>
+
+      {/* === 🛡️ ตารางรับประกัน === */}
+      {(companyInfo?.warranty?.length > 0) && (
+        <div className={`bg-white rounded-2xl shadow-sm border-2 border-emerald-200 overflow-hidden transition-all duration-700 ${animateStep >= 4 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+          <div className="bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-2 text-white">
+            <h3 className="font-bold text-sm">🛡️ รับประกันคุณภาพทุกชิ้น</h3>
+          </div>
+          <div className="p-3 grid grid-cols-2 gap-2">
+            {companyInfo.warranty.map(w => (
+              <div key={w.id} className="flex items-center justify-between bg-emerald-50 rounded-lg px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">{w.icon}</span>
+                  <span className="text-xs text-stone-700">{w.label}</span>
+                </div>
+                <span className="font-bold text-emerald-700 text-sm whitespace-nowrap">
+                  {w.years >= 99 ? 'ตลอด' : `${w.years} ปี`}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* === 🔧 สเปคที่ใส่ใจ === */}
+      {(companyInfo?.specs?.length > 0) && (
+        <div className={`bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden transition-all duration-700 delay-100 ${animateStep >= 4 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+          <div className="bg-gradient-to-r from-stone-700 to-stone-800 px-4 py-2 text-white">
+            <h3 className="font-bold text-sm">🔧 สเปคที่ใส่ใจ</h3>
+          </div>
+          <div className="p-3 space-y-1.5">
+            {companyInfo.specs.map(s => (
+              <div key={s.id} className="flex items-start gap-2 text-xs">
+                <span className="text-emerald-600 mt-0.5">✓</span>
+                <div className="flex-1">
+                  <span className="text-stone-700 font-medium">{s.label}: </span>
+                  <span className="text-stone-500">{s.value}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* === 🎁 ของแถม === */}
+      {(companyInfo?.freebies?.filter(f => f.active !== false).length > 0) && (
+        <div className={`bg-gradient-to-br from-rose-50 to-amber-50 rounded-2xl shadow-sm border-2 border-rose-200 overflow-hidden transition-all duration-700 delay-200 ${animateStep >= 4 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+          <div className="bg-gradient-to-r from-rose-500 to-pink-500 px-4 py-2 text-white">
+            <h3 className="font-bold text-sm">🎁 ของแถมพิเศษ! ฟรี!</h3>
+          </div>
+          <div className="p-3 grid grid-cols-1 gap-1.5">
+            {companyInfo.freebies.filter(f => f.active !== false).map(f => (
+              <div key={f.id} className="flex items-center gap-2 bg-white/60 rounded-lg px-3 py-2 text-xs">
+                <span className="text-base">{f.icon}</span>
+                <span className="text-stone-700 font-medium">{f.label}</span>
+                <span className="ml-auto text-rose-600 font-bold text-[10px]">ฟรี!</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Disclaimer (ดูเป็นมืออาชีพ) */}
       <div className="bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs text-stone-500">
@@ -6259,10 +6371,71 @@ function DocumentPreview({ doc, companyInfo, fmt, onClose }) {
             </table>
           </div>
 
-          {/* Warranty */}
+          {/* === 🛡️ ตารางรับประกัน (จาก companyInfo.warranty) === */}
+          {doc.type === 'quotation' && companyInfo?.warranty?.length > 0 && (
+            <div className="mb-4 border border-emerald-300 rounded-lg overflow-hidden">
+              <div className="bg-emerald-500 text-white px-3 py-2">
+                <p className="text-xs font-bold">🛡️ รับประกันคุณภาพทุกชิ้นส่วน</p>
+              </div>
+              <div className="grid grid-cols-2 gap-0 text-xs">
+                {companyInfo.warranty.map((w, i) => (
+                  <div key={w.id} className={`flex items-center justify-between px-3 py-2 ${
+                    i % 2 === 0 ? 'bg-emerald-50/50' : 'bg-white'
+                  } ${i < companyInfo.warranty.length - 2 ? 'border-b border-emerald-100' : ''}`}>
+                    <div className="flex items-center gap-1.5">
+                      <span>{w.icon}</span>
+                      <span className="text-stone-700">{w.label}</span>
+                    </div>
+                    <span className="font-bold text-emerald-700 whitespace-nowrap">
+                      {w.years >= 99 ? 'ตลอด' : `${w.years} ปี`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* === 🔧 สเปคที่ใส่ใจ === */}
+          {doc.type === 'quotation' && companyInfo?.specs?.length > 0 && (
+            <div className="mb-4 border border-stone-300 rounded-lg overflow-hidden">
+              <div className="bg-stone-700 text-white px-3 py-2">
+                <p className="text-xs font-bold">🔧 สเปคที่ใส่ใจ - คุณภาพระดับมืออาชีพ</p>
+              </div>
+              <div className="p-3 grid grid-cols-1 gap-1 text-xs">
+                {companyInfo.specs.map(s => (
+                  <div key={s.id} className="flex items-start gap-2">
+                    <span className="text-emerald-600 mt-0.5 font-bold">✓</span>
+                    <div>
+                      <span className="text-stone-700 font-medium">{s.label}: </span>
+                      <span className="text-stone-600">{s.value}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* === 🎁 ของแถม === */}
+          {doc.type === 'quotation' && companyInfo?.freebies?.filter(f => f.active !== false).length > 0 && (
+            <div className="mb-4 border-2 border-rose-300 rounded-lg overflow-hidden bg-gradient-to-br from-rose-50 to-amber-50">
+              <div className="bg-gradient-to-r from-rose-500 to-pink-500 text-white px-3 py-2">
+                <p className="text-xs font-bold">🎁 ของแถมพิเศษ! (ฟรี!)</p>
+              </div>
+              <div className="p-3 grid grid-cols-2 gap-1.5 text-xs">
+                {companyInfo.freebies.filter(f => f.active !== false).map(f => (
+                  <div key={f.id} className="flex items-center gap-1.5 bg-white/70 rounded px-2 py-1.5">
+                    <span>{f.icon}</span>
+                    <span className="text-stone-700 flex-1">{f.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Warranty (legacy text) */}
           {doc.type === 'quotation' && doc.warrantyText && (
             <div className="border-l-4 border-emerald-500 bg-emerald-50 p-3 mb-4">
-              <p className="text-xs font-bold text-emerald-700 mb-1">🛡️ การรับประกัน</p>
+              <p className="text-xs font-bold text-emerald-700 mb-1">📝 เงื่อนไขรับประกันเพิ่มเติม</p>
               <pre className="text-xs text-emerald-800 whitespace-pre-wrap font-sans">{doc.warrantyText}</pre>
             </div>
           )}
