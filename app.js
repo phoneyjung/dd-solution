@@ -445,12 +445,45 @@ const DEFAULT_COMPANY_INFO = {
 const DEFAULT_DOCUMENTS = [];  // เอกสารเริ่มต้น (เสนอราคา/แจ้งหนี้/ใบเสร็จ)
 
 // ============== SALES PRESENTATION CONSTANTS ==============
+// Solar irradiance ของไทย — อิงจากงานวิจัย
+// ที่มา: World Bank/SolarGIS, งานวิจัยมหาวิทยาลัยและกรมพลังงาน
+// PSH ทฤษฎี = ค่าแสงเต็มทางทฤษฎี (Standard Test Condition)
+// PR (Performance Ratio) = ประสิทธิภาพระบบจริง (วิจัยพบ 0.71-0.85 ในไทย)
+// realPSH = PSH × PR = ผลผลิตจริงเฉลี่ย
 const SOLAR_REGIONS = {
-  north:   { label: '🏔️ ภาคเหนือ',     hours: 3.8, provinces: 'เชียงใหม่ เชียงราย ลำปาง น่าน...' },
-  central: { label: '🏛️ ภาคกลาง/อีสาน', hours: 4.0, provinces: 'กรุงเทพ นนทบุรี ขอนแก่น...' },
-  east:    { label: '🌅 ภาคตะวันออก',  hours: 4.2, provinces: 'ชลบุรี ระยอง จันทบุรี ตราด...' },
-  south:   { label: '🌴 ภาคใต้',        hours: 4.5, provinces: 'ภูเก็ต กระบี่ สงขลา...' },
+  north:   { 
+    label: '🏔️ ภาคเหนือ',     
+    theoreticalPSH: 4.8,    // ทฤษฎี (kWh/m²/day)
+    pr: 0.73,                // Performance Ratio (งานวิจัยไทย)
+    hours: 3.50,             // ผลิตจริง (= theoretical × PR)
+    provinces: 'เชียงใหม่ เชียงราย ลำปาง น่าน...',
+  },
+  central: { 
+    label: '🏛️ ภาคกลาง/อีสาน', 
+    theoreticalPSH: 5.06,   // SolarGIS ค่าเฉลี่ยไทย
+    pr: 0.73,
+    hours: 3.70,
+    provinces: 'กรุงเทพ นนทบุรี ขอนแก่น...',
+  },
+  east:    { 
+    label: '🌅 ภาคตะวันออก',  
+    theoreticalPSH: 5.0,
+    pr: 0.73,
+    hours: 3.65,
+    provinces: 'ชลบุรี ระยอง จันทบุรี ตราด...',
+  },
+  south:   { 
+    label: '🌴 ภาคใต้',        
+    theoreticalPSH: 4.8,    // ภาคใต้ฝนเยอะ PSH ทฤษฎีน้อยกว่า
+    pr: 0.73,
+    hours: 3.50,
+    provinces: 'ภูเก็ต กระบี่ สงขลา...',
+  },
 };
+
+// Degradation rate ของแผง (NREL: median 0.5%/ปี)
+// เขตร้อน + Rooftop จะสูงกว่าค่ากลาง — ใช้ 0.6% เพื่อความ realistic
+const PANEL_DEGRADATION_RATE = 0.006; // 0.6%/ปี (อิง NREL + tropical adjustment)
 
 const PRICING_CONFIG = {
   // ค่าไฟปัจจุบัน (งวด พ.ค.-ส.ค. 2569 + VAT 7%)
@@ -559,8 +592,16 @@ function applyMargin(cost, marginPct) {
   return Math.round(cost * (1 + marginPct / 100));
 }
 
-function calculateROI({ kW, region, meterType = 'normal', electricityRate = null, touRates = null, inflation = null }) {
-  const peakHours = SOLAR_REGIONS[region]?.hours || 4.0;
+// คำนวณ ROI พร้อม 2 mode
+// mode='dream' ขายฝัน: ใช้ PSH ทฤษฎี ไม่หัก degradation
+// mode='honest' จริงใจ: ใช้ PSH × PR (จริง) + หัก degradation 0.6%/ปี (NREL)
+function calculateROI({ kW, region, meterType = 'normal', electricityRate = null, touRates = null, inflation = null, mode = 'honest' }) {
+  const regionData = SOLAR_REGIONS[region] || SOLAR_REGIONS.central;
+  // เลือก PSH ตาม mode
+  const peakHours = mode === 'dream' 
+    ? (regionData.theoreticalPSH || regionData.hours)
+    : (regionData.hours || 3.7);
+  
   const monthlyKwh = kW * peakHours * PRICING_CONFIG.daysPerMonth;
   const yearlyKwh = monthlyKwh * 12;
   
@@ -576,10 +617,14 @@ function calculateROI({ kW, region, meterType = 'normal', electricityRate = null
   
   const inflationRate = (inflation !== null ? inflation : PRICING_CONFIG.electricityInflation) / 100;
   
+  // mode 'honest' หัก degradation, mode 'dream' ไม่หัก
+  const degradation = mode === 'honest' ? PANEL_DEGRADATION_RATE : 0;
+  
   const cumProfit = (years) => {
     let total = 0;
     for (let y = 1; y <= years; y++) {
-      total += yearlyKwh * effectiveRate * Math.pow(1 + inflationRate, y - 1);
+      const yearProduction = yearlyKwh * Math.pow(1 - degradation, y - 1);
+      total += yearProduction * effectiveRate * Math.pow(1 + inflationRate, y - 1);
     }
     return Math.round(total);
   };
@@ -594,6 +639,10 @@ function calculateROI({ kW, region, meterType = 'normal', electricityRate = null
     profit10: cumProfit(10),
     profit20: cumProfit(20),
     profit30: cumProfit(30),
+    mode,
+    peakHours,        // เพื่อแสดงให้ user เห็น
+    pr: regionData.pr || 0.73,
+    degradation,
   };
 }
 
@@ -678,87 +727,117 @@ function recommendPackages({ monthlyBill, hasBattery, region, stock = [], catalo
     };
   };
   
-  // === Brute force: ลองทุกชุด แล้วเลือกที่ดีที่สุด (ภายใต้เงื่อนไข) ===
-  // เพดานผลิตไฟ: ค่าไฟต่อปี × capRatio (ไม่ผลิตเกินที่ลูกค้าใช้จริง)
-  const yearlyBill = monthlyBill * 12;
-  
-  const findBestPackage = (capRatio, options = {}) => {
-    const { preferType = null, requirePremiumTier = false, includeBattery = hasBattery } = options;
-    let bestPkg = null;
-    let bestBreakEven = Infinity;
-    
-    for (const inv of inverters) {
-      // กรองตามประเภทถ้าระบุ
-      if (preferType && inv.type !== preferType) continue;
-      // ขนาดต้องไม่เล็กเกินไป (≥60% ของ target)
-      if (inv.size < targetKW * 0.6) continue;
-      // ขนาดต้องไม่ใหญ่เกินไป (≤ targetKW × capRatio + buffer)
-      if (inv.size > targetKW * capRatio * 1.3) continue;
-      
-      for (const pan of panels) {
-        const panelCount = Math.ceil(inv.size * 1100 / pan.watt);
-        const bat = includeBattery && batteries.length > 0 ? batteries[0] : null;
-        const pkg = buildPackage(inv, pan, panelCount, bat);
-        
-        // ⛔ กรอง: ผลิตเกินเพดาน
-        if (pkg.roi.yearlySavings > yearlyBill * capRatio) continue;
-        
-        // เลือกตาม tier ถ้าต้องการ
-        if (requirePremiumTier && inv.tier !== 'premium') continue;
-        
-        if (pkg.breakEven < bestBreakEven && pkg.breakEven > 0) {
-          bestBreakEven = pkg.breakEven;
-          bestPkg = pkg;
-        }
-      }
-    }
-    return bestPkg;
+  // === Brute force: ลองทุกชุด แล้วเลือกที่ดีที่สุด ===
+  // Helper: นับจำนวนแผงตามเงื่อนไข
+  // panelCountForRatio(inv, pan, ratio): จำนวนแผงที่วัตต์รวมไม่เกิน inv.size × ratio
+  const panelCountForRatio = (inv, pan, ratio) => {
+    return Math.floor(inv.size * 1000 * ratio / pan.watt);
   };
   
-  // === Package 1: ถูกสุด — On-grid, ไม่มีแบต, ผลิตไม่เกิน 100% ของค่าไฟ ===
-  let cheapPackage = findBestPackage(1.0, { preferType: 'ongrid', includeBattery: false });
-  // Fallback: ถ้าไม่มี on-grid → ใช้ hybrid
-  if (!cheapPackage) cheapPackage = findBestPackage(1.0, { includeBattery: false });
-  // Fallback ขั้นสุด: ใช้ตัวเล็กสุดที่ผลิตได้ในงบ
+  const yearlyBill = monthlyBill * 12;
+  
+  // ============ Package 1: ถูกสุด (ลงทุนน้อยสุด) ============
+  // Rule: ราคาขายต่ำสุด, จำนวนแผงไม่เกินกำลัง inverter (วัตต์รวม ≤ inverter kW × 100%)
+  let cheapPackage = null;
+  let cheapPrice = Infinity;
+  for (const inv of inverters) {
+    for (const pan of panels) {
+      // จำนวนแผง: เต็ม inverter (100%) แต่ไม่เกิน
+      const panelCount = panelCountForRatio(inv, pan, 1.0);
+      if (panelCount < 1) continue;
+      
+      // ไม่มีแบต (ถูกสุด)
+      const pkg = buildPackage(inv, pan, panelCount, null);
+      if (pkg.sellPrice < cheapPrice) {
+        cheapPrice = pkg.sellPrice;
+        cheapPackage = pkg;
+      }
+    }
+  }
   if (!cheapPackage) {
+    // Fallback: ใช้ตัวเล็กสุด
     const smallestInv = [...inverters].sort((a, b) => a.size - b.size)[0];
     const cheapestPan = [...panels].sort((a, b) => a.marketPrice - b.marketPrice)[0];
-    const count = Math.max(1, Math.ceil(smallestInv.size * 1100 / cheapestPan.watt));
+    const count = Math.max(1, panelCountForRatio(smallestInv, cheapestPan, 1.0));
     cheapPackage = buildPackage(smallestInv, cheapestPan, count, null);
   }
   cheapPackage.label = 'ถูกสุด';
   cheapPackage.badge = '💰';
   
-  // === Package 2: คุ้มสุด — Hybrid, ผลิตไม่เกิน 100% ของค่าไฟ (คืนทุนเร็วสุด) ===
-  let bestPackage = findBestPackage(1.0, { preferType: 'hybrid' });
-  if (!bestPackage) bestPackage = findBestPackage(1.0); // fallback ไม่ระบุ type
-  // ถ้ายังไม่ได้ — ใช้ตัวเล็กสุดที่ผลิตได้
+  // ============ Package 2: คุ้มสุด (คืนทุนเร็วสุด) ============
+  // Rule: breakEven ต่ำสุด
+  //   - จำนวนแผง วัตต์รวม ≤ inverter kW × 1.05 (เกิน 5% ได้)
+  //   - ผลิตไฟ × ค่าไฟ ≤ ค่าไฟปัจจุบัน (ไม่ผลิตเกินใช้)
+  let bestPackage = null;
+  let bestBreakEven = Infinity;
+  for (const inv of inverters) {
+    for (const pan of panels) {
+      // จำนวนแผง: ใส่ได้ถึง 105% ของ inverter
+      const panelCount = panelCountForRatio(inv, pan, 1.05);
+      if (panelCount < 1) continue;
+      
+      const bat = hasBattery && batteries.length > 0 ? batteries[0] : null;
+      const pkg = buildPackage(inv, pan, panelCount, bat);
+      
+      // ⛔ กรอง: ผลิตเกินค่าไฟปัจจุบัน
+      if (pkg.roi.yearlySavings > yearlyBill) continue;
+      
+      if (pkg.breakEven > 0 && pkg.breakEven < bestBreakEven) {
+        bestBreakEven = pkg.breakEven;
+        bestPackage = pkg;
+      }
+    }
+  }
   if (!bestPackage) {
-    const smallestInv = [...inverters].sort((a, b) => a.size - b.size)[0];
-    const longi = panels.find(p => p.watt === 640) || panels[0];
-    const count = Math.max(1, Math.ceil(smallestInv.size * 1100 / longi.watt));
-    const bat = hasBattery && batteries.length > 0 ? batteries[0] : null;
-    bestPackage = buildPackage(smallestInv, longi, count, bat);
+    bestPackage = cheapPackage;
   }
   bestPackage.label = 'คุ้มสุด';
   bestPackage.badge = '🌟';
   
-  // === Package 3: Premium — Hybrid + แบต, ผลิตไม่เกิน 200% (เพื่ออนาคต) ===
-  let premiumPackage = findBestPackage(2.0, { preferType: 'hybrid', includeBattery: true });
-  if (!premiumPackage) premiumPackage = findBestPackage(2.0, { includeBattery: true });
-  if (!premiumPackage) {
-    // Fallback: ใช้ตัวใหญ่กว่า best
-    const biggerInv = inverters
-      .filter(i => i.size > (bestPackage?.inverter.size || targetKW))
-      .sort((a, b) => a.size - b.size)[0] || bestPackage?.inverter;
-    if (biggerInv) {
-      const bestPan = [...panels].sort((a, b) => b.watt - a.watt)[0];
-      const count = Math.ceil(biggerInv.size * 1100 / bestPan.watt);
+  // ============ Package 3: Premium (เพื่ออนาคต) ============
+  // Rule: 
+  //   - inverter ผลิตไฟได้ × ค่าไฟ > 2 เท่าค่าไฟปัจจุบัน (เผื่อขยายในอนาคต)
+  //   - แต่จำนวนแผงปัจจุบัน × ผลิตไฟ × ค่าไฟ ≤ ค่าไฟปัจจุบัน
+  // → inverter ใหญ่ + แผงน้อย (เผื่อเพิ่มแผงในอนาคต)
+  
+  let premiumPackage = null;
+  let premiumBestBE = Infinity;
+  
+  // กำลังผลิตของ inverter เต็ม (kWh/ปี)
+  const inverterYearlyProduction = (invSize) => invSize * peakHours * 30 * 12;
+  // มูลค่าไฟ/ปี ที่ inverter ผลิตเต็มได้
+  const inverterYearlyValue = (invSize) => inverterYearlyProduction(invSize) * electricityRate;
+  
+  for (const inv of inverters) {
+    // ⛔ inverter ต้องผลิตได้ > 2x ของค่าไฟปัจจุบัน
+    if (inverterYearlyValue(inv.size) <= yearlyBill * 2) continue;
+    
+    for (const pan of panels) {
+      // จำนวนแผง: ผลิตไฟ × ค่าไฟ ≤ ค่าไฟปัจจุบัน (100%)
+      // → maxPanelKW = yearlyBill / (peakHours × 30 × 12 × rate)
+      const maxPanelKW = yearlyBill / (peakHours * 30 * 12 * electricityRate);
+      const panelCount = Math.floor(maxPanelKW * 1000 / pan.watt);
+      if (panelCount < 1) continue;
+      
       const bat = batteries.length > 0 ? batteries[0] : null;
-      premiumPackage = buildPackage(biggerInv, bestPan, count, bat);
-    } else {
-      premiumPackage = bestPackage;
+      const pkg = buildPackage(inv, pan, panelCount, bat);
+      
+      // เลือกตัวที่ breakEven ต่ำสุด (ในกลุ่ม premium)
+      if (pkg.breakEven > 0 && pkg.breakEven < premiumBestBE) {
+        premiumBestBE = pkg.breakEven;
+        premiumPackage = pkg;
+      }
     }
+  }
+  
+  // Fallback: ถ้าไม่มี inverter ใหญ่พอ ให้ใช้ตัวใหญ่สุดที่มี
+  if (!premiumPackage) {
+    const biggestInv = [...inverters].sort((a, b) => b.size - a.size)[0];
+    const bestPan = [...panels].sort((a, b) => b.watt - a.watt)[0];
+    // จำนวนแผงเต็ม (100% ของ inverter)
+    const count = Math.max(1, panelCountForRatio(biggestInv, bestPan, 1.0));
+    const bat = batteries.length > 0 ? batteries[0] : null;
+    premiumPackage = buildPackage(biggestInv, bestPan, count, bat);
   }
   premiumPackage.label = 'Premium';
   premiumPackage.badge = '👑';
@@ -4770,6 +4849,8 @@ function SalesPresentation({ customers, stock, catalog, companyInfo, onCreateQuo
 // ============== SALES CLOSING INFOGRAPHIC ==============
 function SalesPresentationCloser({ active: initialActive, customerName, customerPhone, customerAddress, customerMode, selectedCustomerId, region, meterType, monthlyBill, electricityRate, inflationRate, companyInfo, stock, catalog, calcOpts, onBack, onCreateQuotation, onSaveCustomer, onEdit }) {
   const [animateStep, setAnimateStep] = useState(0);
+  // Presentation mode: 'dream' = ขายฝัน (PSH ทฤษฎี), 'honest' = จริงใจ (PSH × PR + degradation)
+  const [presentationMode, setPresentationMode] = useState('dream');
   
   // Equipment state — ลูกค้าเล่นเปลี่ยนได้ในหน้านี้
   const [curInverter, setCurInverter] = useState(initialActive.inverter);
@@ -4797,7 +4878,7 @@ function SalesPresentationCloser({ active: initialActive, customerName, customer
     const autoSellPrice = applyMargin(grandCost, margin);
     const sellPrice = customSellPrice != null ? customSellPrice : autoSellPrice;
     const totalKW = (curPanel.watt * curPanelCount) / 1000;
-    const roi = calculateROI({ kW: Math.min(totalKW, curInverter.size), ...(calcOpts || {}) });
+    const roi = calculateROI({ kW: Math.min(totalKW, curInverter.size), ...(calcOpts || {}), mode: presentationMode });
     const breakEven = sellPrice / roi.yearlySavings;
     const actualMargin = Math.round(((sellPrice / grandCost) - 1) * 100);
     
@@ -4815,7 +4896,7 @@ function SalesPresentationCloser({ active: initialActive, customerName, customer
       roi,
       breakEven: Math.round(breakEven * 10) / 10,
     };
-  }, [curInverter, curPanel, curPanelCount, curBattery, customSellPrice, companyInfo, calcOpts, initialActive, stock]);
+  }, [curInverter, curPanel, curPanelCount, curBattery, customSellPrice, companyInfo, calcOpts, initialActive, stock, presentationMode]);
   
   useEffect(() => {
     const timers = [];
@@ -4884,6 +4965,36 @@ ${battery ? `- ${battery.brand} ${battery.model} × 1 ลูก` : ''}
           <p className="text-sm text-stone-500">สำหรับ {customerName}</p>
         </div>
         <button onClick={onBack} className="text-sm text-stone-600 hover:text-stone-800">← กลับ</button>
+      </div>
+
+      {/* Presentation Mode Toggle — เซลส์เลือก mode ก่อนคุยกับลูกค้า */}
+      <div className="bg-white rounded-2xl p-2 shadow-sm border border-stone-200">
+        <div className="grid grid-cols-2 gap-1">
+          <button onClick={() => setPresentationMode('dream')}
+            className={`px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+              presentationMode === 'dream' 
+                ? 'bg-gradient-to-r from-amber-400 to-orange-400 text-white shadow-md' 
+                : 'text-stone-600 hover:bg-stone-50'
+            }`}>
+            <div className="flex items-center justify-center gap-1">
+              <span>✨</span>
+              <span>โหมดขายฝัน</span>
+            </div>
+            <div className="text-xs opacity-80 mt-0.5">เลขสวย คืนทุนเร็ว</div>
+          </button>
+          <button onClick={() => setPresentationMode('honest')}
+            className={`px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+              presentationMode === 'honest' 
+                ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-md' 
+                : 'text-stone-600 hover:bg-stone-50'
+            }`}>
+            <div className="flex items-center justify-center gap-1">
+              <span>💎</span>
+              <span>โหมดจริงใจ</span>
+            </div>
+            <div className="text-xs opacity-80 mt-0.5">ตรงไปตรงมา ตามจริง</div>
+          </button>
+        </div>
       </div>
 
       {/* Big Price Card — Sticky on scroll */}
@@ -5124,15 +5235,61 @@ ${battery ? `- ${battery.brand} ${battery.model} × 1 ลูก` : ''}
         })()}
       </div>
 
-      {/* Disclaimer */}
-      <div className="bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs text-stone-500">
-        <p>⚠️ <strong>หมายเหตุ:</strong> ตัวเลขประมาณการจาก:</p>
-        <ul className="ml-4 mt-1 space-y-0.5">
-          <li>• ค่าไฟ: {electricityRate}, เพิ่ม {inflationRate}%/ปี</li>
-          <li>• ผลิตไฟ {SOLAR_REGIONS[region]?.hours} ชม./วัน ({SOLAR_REGIONS[region]?.label})</li>
-          <li>• ค่าจริงอาจแตกต่างตามสภาพอากาศและการใช้งาน</li>
-        </ul>
-      </div>
+      {/* Disclaimer + ที่มาของตัวเลข */}
+      {presentationMode === 'dream' ? (
+        <div className="bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs text-stone-500">
+          <p>⚠️ <strong>หมายเหตุ:</strong> ตัวเลขประมาณการจาก:</p>
+          <ul className="ml-4 mt-1 space-y-0.5">
+            <li>• ค่าไฟ: {electricityRate}</li>
+            <li>• ผลิตไฟ {SOLAR_REGIONS[region]?.theoreticalPSH || SOLAR_REGIONS[region]?.hours} ชม./วัน ({SOLAR_REGIONS[region]?.label})</li>
+            <li>• ค่าจริงอาจแตกต่างตามสภาพอากาศและการใช้งาน</li>
+          </ul>
+        </div>
+      ) : (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-stone-600">
+          <p className="font-bold text-blue-800 mb-2">💎 ที่มาของตัวเลข — โหมดจริงใจ</p>
+          
+          <div className="space-y-2">
+            <div className="bg-white rounded-lg p-2.5">
+              <div className="font-medium text-stone-700 mb-1">☀️ ค่าแสงแดด (Peak Sun Hours)</div>
+              <div>• PSH ทฤษฎี: <strong>{SOLAR_REGIONS[region]?.theoreticalPSH} ชม./วัน</strong></div>
+              <div>• Performance Ratio: <strong>{(SOLAR_REGIONS[region]?.pr * 100).toFixed(0)}%</strong> (ประสิทธิภาพระบบ)</div>
+              <div>• <strong className="text-blue-700">PSH จริง = {active.roi.peakHours.toFixed(2)} ชม./วัน</strong></div>
+              <div className="text-stone-500 mt-1 italic">
+                อ้างอิง: World Bank/SolarGIS, งานวิจัย "Performance Analysis of Solar PV in Thailand" (RMUTSB Academic Journal 2021), งานวิจัยของ ม.ขอนแก่น
+              </div>
+            </div>
+            
+            <div className="bg-white rounded-lg p-2.5">
+              <div className="font-medium text-stone-700 mb-1">📉 การเสื่อมของแผง (Degradation)</div>
+              <div>• แผงเสื่อมประมาณ <strong>{(active.roi.degradation * 100).toFixed(1)}% ต่อปี</strong></div>
+              <div>• ปีที่ 25 แผงจะเหลือประสิทธิภาพ ~{Math.round(Math.pow(1 - active.roi.degradation, 25) * 100)}%</div>
+              <div className="text-stone-500 mt-1 italic">
+                อ้างอิง: NREL (National Renewable Energy Laboratory) — median 0.5%/ปี, ปรับเป็น 0.6% สำหรับเขตร้อนชื้น
+              </div>
+            </div>
+            
+            <div className="bg-white rounded-lg p-2.5">
+              <div className="font-medium text-stone-700 mb-1">⚡ อัตราค่าไฟ</div>
+              <div>• {electricityRate}</div>
+              <div className="text-stone-500 mt-1 italic">
+                อ้างอิง: ประกาศ กกพ. งวด พ.ค.-ส.ค. 2569 (รวม VAT 7%)
+              </div>
+            </div>
+            
+            <div className="bg-white rounded-lg p-2.5">
+              <div className="font-medium text-stone-700 mb-1">⚠️ ปัจจัยที่อาจส่งผล</div>
+              <ul className="ml-3 space-y-0.5">
+                <li>• ทิศและมุมหลังคา (optimal: หันใต้, มุม 10-15°)</li>
+                <li>• เงาบัง (ต้นไม้, ตึก, ฝุ่น)</li>
+                <li>• ฤดูฝน ผลผลิตอาจลด 20-30%</li>
+                <li>• อุณหภูมิ (แผงร้อน → ประสิทธิภาพลด)</li>
+                <li>• คุณภาพการติดตั้ง + การบำรุงรักษา</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Action Buttons */}
       <div className="sticky bottom-2 bg-white p-2 rounded-2xl shadow-lg border border-stone-200">
