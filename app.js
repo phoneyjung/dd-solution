@@ -275,13 +275,18 @@ const DEFAULT_PARTNERS = [
 
 const DEFAULT_STOCK = [
   // ✅ มีของเหลือในสต๊อกจริง (qty > 0)
-  { id: 'stk-longi', name: 'แผง Longi 640W', category: 'panel', qty: 27, unitCost: 2911, supplier: '-', owner: 'บริษัท', note: 'ซื้อจากเงินงานแรก+ทุน · ซื้อมา 36 ใช้ในงาน 2 ไป 9', purchaseDate: '2026-04-08', unit: 'แผ่น' },
-  { id: 'stk-inv10', name: 'Inverter Hybrid 10kW', category: 'inverter', qty: 1, unitCost: 59000, supplier: '-', owner: 'โฟน', note: 'โฟนซื้อตุนไว้', purchaseDate: '2026-04-26', unit: 'เครื่อง' },
+  { id: 'stk-longi', name: 'แผง Longi 640W', category: 'panel', qty: 27, unitCost: 2911, supplier: '-', owner: 'บริษัท', note: 'ซื้อจากเงินงานแรก+ทุน · ซื้อมา 36 ใช้ในงาน 2 ไป 9', purchaseDate: '2026-04-08', unit: 'แผ่น',
+    inSalesCatalog: true, salesSpecs: { brand: 'Longi', model: '640W', watt: 640, tier: 'standard' } },
+  { id: 'stk-inv10', name: 'Inverter Hybrid 10kW', category: 'inverter', qty: 1, unitCost: 59000, supplier: '-', owner: 'โฟน', note: 'โฟนซื้อตุนไว้', purchaseDate: '2026-04-26', unit: 'เครื่อง',
+    inSalesCatalog: true, salesSpecs: { brand: 'Hybrid', model: '10kW', size: 10, type: 'hybrid', tier: 'premium' } },
   // 📋 ประวัติ — ของที่เคยซื้อแล้วใช้หมด (qty = 0)
-  { id: 'stk-hist-1', name: 'แผง Jinko 725W N-Type', category: 'panel', qty: 0, unitCost: 3585, supplier: 'aku connection', owner: 'อาม', note: 'ใช้ในงาน 1 (8 แผ่น)', purchaseDate: '2026-04-08', unit: 'แผ่น' },
-  { id: 'stk-hist-2', name: 'Inverter Hybrid 5kW (งาน 1)', category: 'inverter', qty: 0, unitCost: 33500, supplier: '-', owner: 'โฟน', note: 'ใช้ในงาน 1', purchaseDate: '2026-04-08', unit: 'เครื่อง' },
+  { id: 'stk-hist-1', name: 'แผง Jinko 725W N-Type', category: 'panel', qty: 0, unitCost: 3585, supplier: 'aku connection', owner: 'อาม', note: 'ใช้ในงาน 1 (8 แผ่น)', purchaseDate: '2026-04-08', unit: 'แผ่น',
+    inSalesCatalog: true, salesSpecs: { brand: 'Jinko', model: '725W', watt: 725, tier: 'premium' } },
+  { id: 'stk-hist-2', name: 'Inverter Hybrid 5kW (งาน 1)', category: 'inverter', qty: 0, unitCost: 33500, supplier: '-', owner: 'โฟน', note: 'ใช้ในงาน 1', purchaseDate: '2026-04-08', unit: 'เครื่อง',
+    inSalesCatalog: true, salesSpecs: { brand: 'Deye', model: 'Hybrid 5kW', size: 5, type: 'hybrid', tier: 'standard' } },
   { id: 'stk-hist-3', name: 'Inverter Deye 5kW Hybrid', category: 'inverter', qty: 0, unitCost: 33705, supplier: '-', owner: 'อาม', note: 'รวม VAT 7% · ใช้ในงาน 2', purchaseDate: '2026-04-16', unit: 'เครื่อง' },
-  { id: 'stk-hist-4', name: 'แบต Deye 51.2V 314Ah 16kWh', category: 'battery', qty: 0, unitCost: 67303, supplier: '-', owner: 'อาม', note: 'รวม VAT · ใช้ในงาน 2', purchaseDate: '2026-04-18', unit: 'ลูก' },
+  { id: 'stk-hist-4', name: 'แบต Deye 51.2V 314Ah 16kWh', category: 'battery', qty: 0, unitCost: 67303, supplier: '-', owner: 'อาม', note: 'รวม VAT · ใช้ในงาน 2', purchaseDate: '2026-04-18', unit: 'ลูก',
+    inSalesCatalog: true, salesSpecs: { brand: 'Deye', model: '16kWh', capacity: 16, tier: 'standard' } },
   { id: 'stk-hist-5', name: 'สาย PV 6mm KUKA แดง', category: 'wire', qty: 0, unitCost: 37.236, supplier: 'aku', owner: 'อาม', note: 'ม้วน 100ม. 3,723.60 ฿ (รวม VAT) · ใช้ในงาน 1', purchaseDate: '2026-04-08', unit: 'เมตร', perRoll: 100, rollPrice: 3723.6 },
   { id: 'stk-hist-6', name: 'สาย PV 6mm KUKA ดำ', category: 'wire', qty: 0, unitCost: 37.236, supplier: 'aku', owner: 'อาม', note: 'ม้วน 100ม. 3,723.60 ฿ (รวม VAT) · ใช้ในงาน 1', purchaseDate: '2026-04-08', unit: 'เมตร', perRoll: 100, rollPrice: 3723.6 },
   { id: 'stk-hist-7', name: 'สาย Yazaki 10mm เมน', category: 'wire', qty: 0, unitCost: 48.50, supplier: '-', owner: 'พ่อ', note: 'ม้วน 100ม. 4,850 ฿ · ใช้ในงาน 1', purchaseDate: '2026-04-04', unit: 'เมตร', perRoll: 100, rollPrice: 4850 },
@@ -417,25 +422,243 @@ const DEFAULT_COMPANY_INFO = {
     'งานติดตั้ง: 5 ปี',
   ],
   defaultPaymentTerms: 'มัดจำ 50% ตอนยืนยันสั่งซื้อ\nชำระส่วนที่เหลือหลังติดตั้งเสร็จ',
+  // === Sales Settings ===
+  margins: {
+    small: 25,   // < 5kW
+    medium: 20,  // 5-10kW
+    large: 15,   // > 10kW
+  },
+  installCostPct: 10,  // ค่าติดตั้งคิด 10% ของวัสดุ
 };
 
 const DEFAULT_DOCUMENTS = [];  // เอกสารเริ่มต้น (เสนอราคา/แจ้งหนี้/ใบเสร็จ)
 
-// ============== DOCUMENT NUMBER GENERATOR ==============
+// ============== SALES PRESENTATION CONSTANTS ==============
+const SOLAR_REGIONS = {
+  north:   { label: '🏔️ ภาคเหนือ',     hours: 3.8, provinces: 'เชียงใหม่ เชียงราย ลำปาง น่าน...' },
+  central: { label: '🏛️ ภาคกลาง/อีสาน', hours: 4.0, provinces: 'กรุงเทพ นนทบุรี ขอนแก่น...' },
+  east:    { label: '🌅 ภาคตะวันออก',  hours: 4.2, provinces: 'ชลบุรี ระยอง จันทบุรี ตราด...' },
+  south:   { label: '🌴 ภาคใต้',        hours: 4.5, provinces: 'ภูเก็ต กระบี่ สงขลา...' },
+};
+
+const PRICING_CONFIG = {
+  electricityRate: 4.5,
+  electricityInflation: 3,
+  marginByCategory: { small: 25, medium: 20, large: 15 },
+  comparisonRates: { bank: 1.5, stock: 8, gold: 5 },
+  daysPerMonth: 30,
+};
+
+// Equipment Catalog (ใช้ใน Sales Presentation)
+const EQUIPMENT_CATALOG = {
+  inverters: [
+    { id: 'inv-deye-5h', brand: 'Deye',   model: 'Hybrid 5kW', size: 5,  type: 'hybrid', cost: 33500, tier: 'standard' },
+    { id: 'inv-hyb-10',  brand: 'Hybrid', model: '10kW',       size: 10, type: 'hybrid', cost: 59000, tier: 'premium' },
+  ],
+  panels: [
+    { id: 'pan-jinko-725', brand: 'Jinko', model: '725W', watt: 725, cost: 4000, tier: 'premium' },
+    { id: 'pan-longi-640', brand: 'Longi', model: '640W', watt: 640, cost: 2911, tier: 'standard' },
+  ],
+  batteries: [
+    { id: 'bat-deye-16', brand: 'Deye', model: '16kWh', capacity: 16, cost: 67303, tier: 'standard' },
+  ],
+};
+
+function getMargin(inverterKW, companyInfo = null) {
+  const margins = companyInfo?.margins || PRICING_CONFIG.marginByCategory;
+  if (inverterKW < 5)  return margins.small;
+  if (inverterKW <= 10) return margins.medium;
+  return margins.large;
+}
+
+function applyMargin(cost, marginPct) {
+  return Math.round(cost * (1 + marginPct / 100));
+}
+
+function calculateROI({ kW, region, meterType = 'normal', electricityRate = null, touRates = null, inflation = null }) {
+  const peakHours = SOLAR_REGIONS[region]?.hours || 4.0;
+  const monthlyKwh = kW * peakHours * PRICING_CONFIG.daysPerMonth;
+  const yearlyKwh = monthlyKwh * 12;
+  
+  // คำนวณค่าไฟตามประเภทมิเตอร์
+  let effectiveRate;
+  if (meterType === 'tou' && touRates) {
+    // Solar ผลิตช่วง on-peak (กลางวัน) ~95% ของผลผลิต
+    const onPeakPct = 0.95;
+    effectiveRate = (touRates.onPeak * onPeakPct) + (touRates.offPeak * (1 - onPeakPct));
+  } else {
+    effectiveRate = electricityRate || PRICING_CONFIG.electricityRate;
+  }
+  
+  const inflationRate = (inflation !== null ? inflation : PRICING_CONFIG.electricityInflation) / 100;
+  
+  const cumProfit = (years) => {
+    let total = 0;
+    for (let y = 1; y <= years; y++) {
+      total += yearlyKwh * effectiveRate * Math.pow(1 + inflationRate, y - 1);
+    }
+    return Math.round(total);
+  };
+  
+  return {
+    monthlyKwh: Math.round(monthlyKwh),
+    yearlyKwh: Math.round(yearlyKwh),
+    monthlySavings: Math.round(monthlyKwh * effectiveRate),
+    yearlySavings: Math.round(yearlyKwh * effectiveRate),
+    effectiveRate,
+    profit5: cumProfit(5),
+    profit10: cumProfit(10),
+    profit20: cumProfit(20),
+    profit30: cumProfit(30),
+  };
+}
+
+function calculateInvestmentComparison(principal, years, ratePct) {
+  return Math.round(principal * (Math.pow(1 + ratePct / 100, years) - 1));
+}
+
+function calculateCO2(yearlyKwh, years) {
+  return Math.round(yearlyKwh * 0.5 * years / 1000); // ตัน
+}
+
+// Smart Package Recommender — ดึง equipment จาก stock
+function recommendPackages({ monthlyBill, hasBattery, region, stock = [], companyInfo = null }) {
+  const peakHours = SOLAR_REGIONS[region]?.hours || 4.0;
+  const electricityRate = PRICING_CONFIG.electricityRate;
+  
+  const monthlyKwhUsage = monthlyBill / electricityRate;
+  const requiredKW = monthlyKwhUsage / 30 / peakHours;
+  
+  // ดึง equipment จาก stock ที่ติด inSalesCatalog
+  const stockInverters = stock.filter(s => s.inSalesCatalog && s.category === 'inverter' && s.salesSpecs);
+  const stockPanels = stock.filter(s => s.inSalesCatalog && s.category === 'panel' && s.salesSpecs);
+  const stockBatteries = stock.filter(s => s.inSalesCatalog && s.category === 'battery' && s.salesSpecs);
+  
+  // Map ให้เป็นรูปแบบ catalog (เผื่อ stock ว่าง ใช้ default)
+  const inverters = stockInverters.length > 0 
+    ? stockInverters.map(s => ({ id: s.id, brand: s.salesSpecs.brand, model: s.salesSpecs.model, size: s.salesSpecs.size, type: s.salesSpecs.type || 'hybrid', cost: s.unitCost, tier: s.salesSpecs.tier || 'standard', stockId: s.id }))
+    : EQUIPMENT_CATALOG.inverters;
+  const panels = stockPanels.length > 0
+    ? stockPanels.map(s => ({ id: s.id, brand: s.salesSpecs.brand, model: s.salesSpecs.model, watt: s.salesSpecs.watt, cost: s.unitCost, tier: s.salesSpecs.tier || 'standard', stockId: s.id }))
+    : EQUIPMENT_CATALOG.panels;
+  const batteries = stockBatteries.length > 0
+    ? stockBatteries.map(s => ({ id: s.id, brand: s.salesSpecs.brand, model: s.salesSpecs.model, capacity: s.salesSpecs.capacity, cost: s.unitCost, tier: s.salesSpecs.tier || 'standard', stockId: s.id }))
+    : EQUIPMENT_CATALOG.batteries;
+  
+  if (inverters.length === 0 || panels.length === 0) return null;
+  
+  // === Package 1: ถูกสุด ===
+  const cheapInverter = [...inverters].sort((a, b) => a.cost - b.cost)[0];
+  const cheapPanel = [...panels].sort((a, b) => a.cost - b.cost)[0];
+  const cheapPanelCount = Math.ceil(cheapInverter.size * 1100 / cheapPanel.watt);
+  
+  // === Package 2: คุ้มสุด ===
+  const bestInverter = inverters.find(i => i.size === 5) || inverters[0];
+  const bestPanel = panels.find(p => p.watt === 640) || panels[0];
+  const bestPanelCount = Math.ceil(bestInverter.size * 1100 / bestPanel.watt);
+  const bestBattery = hasBattery && batteries.length > 0 ? batteries[0] : null;
+  
+  // === Package 3: Premium ===
+  const premiumInverter = [...inverters].sort((a, b) => b.size - a.size)[0];
+  const premiumPanel = [...panels].sort((a, b) => b.watt - a.watt)[0];
+  const premiumPanelCount = Math.ceil(premiumInverter.size * 1100 / premiumPanel.watt);
+  const premiumBattery = batteries.length > 0 ? batteries[0] : null;
+  
+  const installPct = (companyInfo?.installCostPct || 10) / 100;
+  
+  const buildPackage = (inverter, panel, panelCount, battery, label, badge) => {
+    const equipmentCost = inverter.cost + (panel.cost * panelCount) + (battery?.cost || 0);
+    const installCost = Math.round(equipmentCost * installPct);
+    const grandCost = equipmentCost + installCost;
+    const margin = getMargin(inverter.size, companyInfo);
+    const sellPrice = applyMargin(grandCost, margin);
+    
+    const totalKW = (panel.watt * panelCount) / 1000;
+    const roi = calculateROI({ kW: Math.min(totalKW, inverter.size), region });
+    const breakEven = sellPrice / roi.yearlySavings;
+    
+    return {
+      label, badge,
+      inverter, panel, panelCount, battery,
+      equipmentCost,
+      installCost,
+      totalCost: grandCost,
+      sellPrice,
+      margin,
+      profit: sellPrice - grandCost,
+      totalKW: Math.round(totalKW * 100) / 100,
+      roi,
+      breakEven: Math.round(breakEven * 10) / 10,
+    };
+  };
+  
+  return {
+    cheap: buildPackage(cheapInverter, cheapPanel, cheapPanelCount, null,        'ถูกสุด',   '💰'),
+    best:  buildPackage(bestInverter,  bestPanel,  bestPanelCount,  bestBattery, 'คุ้มสุด',  '🌟'),
+    premium: buildPackage(premiumInverter, premiumPanel, premiumPanelCount, premiumBattery, 'Premium', '👑'),
+  };
+}
+
+// ============== DOCUMENT TYPES ==============
+const DOC_TYPES = {
+  quotation:        { label: 'ใบเสนอราคา',          shortLabel: 'ใบเสนอราคา',  prefix: 'QT',   color: 'blue',    icon: '📄' },
+  invoice:          { label: 'ใบแจ้งหนี้',           shortLabel: 'ใบแจ้งหนี้',   prefix: 'INV',  color: 'amber',   icon: '🧾' },
+  'receipt-deposit':{ label: 'ใบเสร็จรับเงิน (มัดจำ)', shortLabel: 'RC มัดจำ',     prefix: 'RCD',  color: 'cyan',    icon: '💰' },
+  'receipt-final':  { label: 'ใบเสร็จรับเงิน (เต็ม)',  shortLabel: 'RC เต็ม',      prefix: 'RC',   color: 'emerald', icon: '✅' },
+  receipt:          { label: 'ใบเสร็จรับเงิน',         shortLabel: 'ใบเสร็จ',      prefix: 'RC',   color: 'emerald', icon: '✅' },
+};
+
 // QT2026/04-001 = ใบเสนอราคา ปี 2026 เดือน 04 ลำดับที่ 001
 function generateDocNumber(type, existingDocs = []) {
-  const prefix = { quotation: 'QT', invoice: 'INV', receipt: 'RC' }[type] || 'DOC';
+  const info = DOC_TYPES[type] || { prefix: 'DOC' };
+  const prefix = info.prefix;
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const yearMonth = `${year}/${month}`;
   
-  // หาเลขลำดับล่าสุดของเดือนนี้
+  // หาเลขลำดับล่าสุดของเดือนนี้ (เช็คทั้ง prefix เดียวกัน)
   const sameMonthDocs = existingDocs.filter(d => 
-    d.type === type && d.docNumber && d.docNumber.includes(`${prefix}${yearMonth}`)
+    d.docNumber && d.docNumber.startsWith(`${prefix}${yearMonth}`)
   );
   const seq = sameMonthDocs.length + 1;
   return `${prefix}${yearMonth}-${String(seq).padStart(3, '0')}`;
+}
+
+// Helper: รับ type info (รองรับเอกสารเก่าที่ type='receipt')
+function getDocTypeInfo(type) {
+  return DOC_TYPES[type] || DOC_TYPES.quotation;
+}
+
+// Migration: เพิ่ม jobChainId, jobStatus ให้เอกสารเก่า
+function migrateDocuments(docs) {
+  if (!Array.isArray(docs)) return [];
+  return docs.map(d => {
+    // ถ้าเป็นเอกสารเก่าที่ไม่มี jobChainId
+    if (!d.jobChainId) {
+      // ถ้าเป็น quotation → ใช้ id ตัวเองเป็น chain (เป็น master)
+      // ถ้าเป็นใบอื่น → ถ้ามี linkedDocId ให้ตามไปหา quotation root
+      let chainId = d.id;
+      if (d.type !== 'quotation' && d.linkedDocId) {
+        // ตามไปหา root (quotation)
+        const visited = new Set();
+        let current = d;
+        while (current && current.linkedDocId && !visited.has(current.id)) {
+          visited.add(current.id);
+          const next = docs.find(x => x.id === current.linkedDocId);
+          if (!next) break;
+          current = next;
+        }
+        chainId = current?.id || d.id;
+      }
+      d = { ...d, jobChainId: chainId };
+    }
+    // เพิ่ม jobStatus default
+    if (!d.jobStatus) {
+      d = { ...d, jobStatus: d.status === 'closed' ? 'closed' : 'active' };
+    }
+    return d;
+  });
 }
 
 // ============== APP WRAPPER WITH LOGIN ==============
@@ -636,7 +859,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
         setTransactions(t ? JSON.parse(t.value) : DEFAULT_TRANSACTIONS);
         setCustomers(c ? JSON.parse(c.value) : DEFAULT_CUSTOMERS);
         setActivityLog(a ? JSON.parse(a.value) : []);
-        setDocuments(d ? JSON.parse(d.value) : DEFAULT_DOCUMENTS);
+        setDocuments(d ? migrateDocuments(JSON.parse(d.value)) : DEFAULT_DOCUMENTS);
         setCompanyInfo(ci ? JSON.parse(ci.value) : DEFAULT_COMPANY_INFO);
         if (!j) await window.storage.set('dd5:jobs', JSON.stringify(DEFAULT_JOBS), true);
         if (!s) await window.storage.set('dd5:stock', JSON.stringify(DEFAULT_STOCK), true);
@@ -1204,6 +1427,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
         <div className="max-w-7xl mx-auto px-2 flex overflow-x-auto">
           {[
             { id: 'dashboard', label: 'แดชบอร์ด', icon: BarChart3 },
+            { id: 'sales', label: 'เสนอขาย', icon: TrendingUp },
             { id: 'jobs', label: 'งาน', icon: Briefcase },
             { id: 'customers', label: 'ลูกค้า', icon: UserCircle },
             { id: 'stock', label: 'สต็อก', icon: Package },
@@ -1343,6 +1567,71 @@ function DDSolutionManager({ currentUser, onLogout }) {
               </div>
             </div>
           </div>
+        )}
+
+        {activeTab === 'sales' && (
+          <SalesPresentation
+            customers={customers}
+            stock={stock}
+            companyInfo={companyInfo}
+            onCreateQuotation={(data) => {
+              // 1. ถ้าเป็นลูกค้าใหม่ → save customer ก่อน
+              let customerId = data.selectedCustomerId || '';
+              if (data.customerMode === 'new' && data.customerName) {
+                const existing = customers.find(c => c.name === data.customerName && c.phone === data.customerPhone);
+                if (existing) {
+                  customerId = existing.id;
+                } else {
+                  const newCustomer = {
+                    id: `cust-${Date.now()}`,
+                    name: data.customerName,
+                    phone: data.customerPhone,
+                    address: data.customerAddress,
+                    photos: [],
+                    createdAt: new Date().toISOString(),
+                  };
+                  saveCustomers([...customers, newCustomer], 'add', `เพิ่มลูกค้า: ${data.customerName}`);
+                  customerId = newCustomer.id;
+                }
+              }
+              
+              // 2. สร้าง quotation ใหม่
+              const newDoc = {
+                id: `doc-${Date.now()}`,
+                type: 'quotation',
+                docNumber: generateDocNumber('quotation', documents),
+                docDate: new Date().toISOString().split('T')[0],
+                validUntil: new Date(Date.now() + 14*86400000).toISOString().split('T')[0],
+                customerId,
+                customerName: data.customerName,
+                customerPhone: data.customerPhone,
+                customerAddress: data.customerAddress,
+                items: data.items,
+                subtotal: data.totalAmount,
+                discount: 0,
+                totalAmount: data.totalAmount,
+                paymentTerms: '',
+                depositPercent: 50,
+                depositAmount: Math.round(data.totalAmount * 0.5),
+                warrantyText: companyInfo?.defaultWarranty?.join('\n') || '',
+                notes: 'สร้างจากการเสนอขาย',
+                jobId: '',
+                jobChainId: `doc-${Date.now()}`, // เป็น chain master
+                jobStatus: 'active',
+                status: 'active',
+                linkedDocId: '',
+                createdAt: new Date().toISOString(),
+              };
+              newDoc.jobChainId = newDoc.id; // ตัวเองเป็น chain master
+              
+              saveDocuments([...documents, newDoc], 'add', 
+                `สร้างใบเสนอราคา ${newDoc.docNumber} (${data.customerName}) จากการเสนอขาย`);
+              
+              alert(`✅ สร้างใบเสนอราคา ${newDoc.docNumber} เรียบร้อย!`);
+              setActiveTab('documents');
+            }}
+            onSaveCustomer={(c) => saveCustomers([...customers, c], 'add', `เพิ่มลูกค้า: ${c.name}`)}
+          />
         )}
 
         {activeTab === 'jobs' && (
@@ -1703,8 +1992,54 @@ function DDSolutionManager({ currentUser, onLogout }) {
         )}
 
         {activeTab === 'documents' && (() => {
-          // Helper functions
+          // Helper: หา jobChainId ของ doc (สำหรับ docs เก่าใช้ id ตัวเอง)
+          const getChainId = (doc) => doc.jobChainId || doc.id;
+          
+          // Helper: หา doc ทั้งหมดของงาน (chain เดียวกัน)
+          const getChainDocs = (chainId) => documents.filter(d => getChainId(d) === chainId);
+          
+          // Helper: หา quotation master ของ chain
+          const getMaster = (chainId) => {
+            const chainDocs = getChainDocs(chainId);
+            return chainDocs.find(d => d.type === 'quotation') || chainDocs[0];
+          };
+          
+          // Helper: หา jobStatus ของ chain (ดูจาก quotation master)
+          const getChainStatus = (chainId) => {
+            const master = getMaster(chainId);
+            return master?.jobStatus || 'active';
+          };
+
+          // Helper: คำนวณยอดจ่ายในงาน
+          const getChainPaid = (chainId) => {
+            const chainDocs = getChainDocs(chainId);
+            return chainDocs
+              .filter(d => d.type === 'receipt-deposit' || d.type === 'receipt-final' || d.type === 'receipt')
+              .reduce((sum, d) => sum + Number(d.totalAmount || 0), 0);
+          };
+
+          // === Actions ===
+          
+          // สร้างเอกสารใหม่จาก source โดยใช้ jobChainId เดียวกัน
           const cloneFromDoc = (sourceDoc, newType) => {
+            const chainId = getChainId(sourceDoc);
+            const isReceiptDeposit = newType === 'receipt-deposit';
+            
+            // ถ้าเป็น RC มัดจำ: เอาเงินมัดจำจาก quotation มาเป็นยอด
+            let totalAmount = sourceDoc.totalAmount;
+            let items = sourceDoc.items.map(it => ({ ...it, id: `item-${Date.now()}-${Math.random().toString(36).slice(2,5)}` }));
+            
+            if (isReceiptDeposit && Number(sourceDoc.depositAmount || 0) > 0) {
+              totalAmount = Number(sourceDoc.depositAmount);
+              items = [{
+                id: `item-${Date.now()}`,
+                name: `เงินมัดจำสำหรับ ${sourceDoc.docNumber}`,
+                qty: 1, unit: 'รายการ',
+                unitPrice: totalAmount,
+                amount: totalAmount,
+              }];
+            }
+            
             const newDoc = {
               id: `doc-${Date.now()}`,
               type: newType,
@@ -1715,71 +2050,132 @@ function DDSolutionManager({ currentUser, onLogout }) {
               customerName: sourceDoc.customerName || '',
               customerPhone: sourceDoc.customerPhone || '',
               customerAddress: sourceDoc.customerAddress || '',
-              items: sourceDoc.items.map(it => ({ ...it, id: `item-${Date.now()}-${Math.random().toString(36).slice(2,5)}` })),
-              subtotal: sourceDoc.subtotal,
-              discount: sourceDoc.discount,
-              totalAmount: sourceDoc.totalAmount,
+              items,
+              subtotal: items.reduce((s, it) => s + Number(it.amount || 0), 0),
+              discount: 0,
+              totalAmount,
               paymentTerms: sourceDoc.paymentTerms || '',
               depositPercent: 0,
               depositAmount: 0,
-              warrantyText: '',
+              warrantyText: newType === 'receipt-final' ? (sourceDoc.warrantyText || '') : '',
               notes: '',
               jobId: sourceDoc.jobId || '',
-              status: 'active',
+              jobChainId: chainId,           // ✨ เชื่อม chain
+              jobStatus: 'active',
+              status: 'active',               // legacy field
               linkedDocId: sourceDoc.id,
               createdAt: new Date().toISOString(),
             };
+            
+            const typeLabel = getDocTypeInfo(newType).label;
             saveDocuments([...documents, newDoc], 'add',
-              `สร้าง${newType === 'invoice' ? 'ใบแจ้งหนี้' : 'ใบเสร็จ'} ${newDoc.docNumber} จาก ${sourceDoc.docNumber}`);
-            // Open the new doc for editing
+              `สร้าง${typeLabel} ${newDoc.docNumber} จาก ${sourceDoc.docNumber}`);
             setEditingItem(newDoc);
             setDefaultDocType(newType);
             setTimeout(() => setShowDocumentModal(true), 100);
           };
 
-          const closeJob = (doc) => {
-            if (!window.confirm(`จบงาน ${doc.docNumber}?\n\nเอกสารจะถูกย้ายไปยังประวัติ และจะไม่แสดงในรายการหลัก`)) return;
+          // จบงาน — กระทำที่ chain → ทุกใบเข้า archive
+          const closeChain = (chainId) => {
+            const master = getMaster(chainId);
+            const chainDocs = getChainDocs(chainId);
+            const total = Number(master?.totalAmount || 0);
+            const paid = getChainPaid(chainId);
+            const unpaid = total - paid;
+            
+            let warning = '';
+            if (unpaid > 0) {
+              warning = `\n\n⚠️ ลูกค้ายังจ่ายไม่ครบ\n• ยอดรวม: ${total.toLocaleString()} ฿\n• จ่ายแล้ว: ${paid.toLocaleString()} ฿\n• ค้าง: ${unpaid.toLocaleString()} ฿`;
+            }
+            
+            if (!window.confirm(`จบงาน ${master?.docNumber || '-'}\n(${master?.customerName || '-'})\n\nเอกสารทั้งหมดในงานนี้ (${chainDocs.length} ฉบับ) จะถูกซ่อนเข้าประวัติ${warning}\n\nยืนยันจบงาน?`)) return;
+            
+            const closedAt = new Date().toISOString();
             saveDocuments(
-              documents.map(d => d.id === doc.id ? { ...d, status: 'closed', closedAt: new Date().toISOString() } : d),
+              documents.map(d => getChainId(d) === chainId ? { ...d, jobStatus: 'closed', status: 'closed', closedAt } : d),
               'edit',
-              `จบงาน: ${doc.docNumber} (${doc.customerName})`
+              `จบงาน: ${master?.docNumber} (${master?.customerName}) — ซ่อน ${chainDocs.length} ฉบับ`
             );
           };
 
-          const reopenJob = (doc) => {
+          // ยกเลิกงาน
+          const cancelChain = (chainId) => {
+            const master = getMaster(chainId);
+            const chainDocs = getChainDocs(chainId);
+            
+            if (!window.confirm(`ยกเลิกงาน ${master?.docNumber || '-'}\n(${master?.customerName || '-'})\n\nเอกสารทั้งหมดในงานนี้ (${chainDocs.length} ฉบับ) จะเปลี่ยนสถานะเป็น "ยกเลิก"\n\nยืนยันยกเลิก?`)) return;
+            
+            const cancelledAt = new Date().toISOString();
             saveDocuments(
-              documents.map(d => d.id === doc.id ? { ...d, status: 'active' } : d),
+              documents.map(d => getChainId(d) === chainId ? { ...d, jobStatus: 'cancelled', status: 'cancelled', cancelledAt } : d),
               'edit',
-              `เปิดใหม่: ${doc.docNumber}`
+              `ยกเลิกงาน: ${master?.docNumber} (${master?.customerName})`
             );
           };
 
-          // Filter & search
-          const isClosed = (d) => d.status === 'closed';
-          let filtered = [...documents];
+          // เปิดงานใหม่ (จาก closed/cancelled กลับเป็น active)
+          const reopenChain = (chainId) => {
+            const master = getMaster(chainId);
+            saveDocuments(
+              documents.map(d => getChainId(d) === chainId ? { ...d, jobStatus: 'active', status: 'active' } : d),
+              'edit',
+              `เปิดงานใหม่: ${master?.docNumber}`
+            );
+          };
+
+          // === Group documents by chain ===
+          // จัดกลุ่มเอกสารตาม jobChainId
+          const chainsMap = {};
+          documents.forEach(doc => {
+            const chainId = getChainId(doc);
+            if (!chainsMap[chainId]) {
+              chainsMap[chainId] = { chainId, docs: [], jobStatus: getChainStatus(chainId) };
+            }
+            chainsMap[chainId].docs.push(doc);
+          });
+          let chains = Object.values(chainsMap);
+
+          // Filter
           if (docFilter === 'closed') {
-            filtered = filtered.filter(isClosed);
+            chains = chains.filter(c => c.jobStatus === 'closed');
+          } else if (docFilter === 'cancelled') {
+            chains = chains.filter(c => c.jobStatus === 'cancelled');
           } else if (docFilter === 'active') {
-            filtered = filtered.filter(d => !isClosed(d));
+            chains = chains.filter(c => c.jobStatus === 'active');
           } else {
-            filtered = filtered.filter(d => d.type === docFilter && !isClosed(d));
+            // กรอง type → แสดง chain ที่มี doc ประเภทนั้นและ active
+            chains = chains.filter(c => 
+              c.jobStatus === 'active' && c.docs.some(d => d.type === docFilter)
+            );
           }
+
+          // Search
           if (docSearch.trim()) {
             const q = docSearch.toLowerCase();
-            filtered = filtered.filter(d => 
-              (d.customerName || '').toLowerCase().includes(q) ||
-              (d.docNumber || '').toLowerCase().includes(q)
+            chains = chains.filter(c =>
+              c.docs.some(d =>
+                (d.customerName || '').toLowerCase().includes(q) ||
+                (d.docNumber || '').toLowerCase().includes(q)
+              )
             );
           }
-          filtered.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+          
+          // Sort: ล่าสุดก่อน (ดูจาก master)
+          chains.sort((a, b) => {
+            const aMaster = getMaster(a.chainId);
+            const bMaster = getMaster(b.chainId);
+            return (aMaster?.createdAt || '') < (bMaster?.createdAt || '') ? 1 : -1;
+          });
 
-          // Counts
+          // Counts (chain-based)
           const counts = {
-            active: documents.filter(d => !isClosed(d)).length,
-            quotation: documents.filter(d => d.type === 'quotation' && !isClosed(d)).length,
-            invoice: documents.filter(d => d.type === 'invoice' && !isClosed(d)).length,
-            receipt: documents.filter(d => d.type === 'receipt' && !isClosed(d)).length,
-            closed: documents.filter(isClosed).length,
+            active: Object.values(chainsMap).filter(c => c.jobStatus === 'active').length,
+            closed: Object.values(chainsMap).filter(c => c.jobStatus === 'closed').length,
+            cancelled: Object.values(chainsMap).filter(c => c.jobStatus === 'cancelled').length,
+            quotation: documents.filter(d => d.type === 'quotation' && getChainStatus(getChainId(d)) === 'active').length,
+            invoice: documents.filter(d => d.type === 'invoice' && getChainStatus(getChainId(d)) === 'active').length,
+            'receipt-deposit': documents.filter(d => d.type === 'receipt-deposit' && getChainStatus(getChainId(d)) === 'active').length,
+            'receipt-final': documents.filter(d => (d.type === 'receipt-final' || d.type === 'receipt') && getChainStatus(getChainId(d)) === 'active').length,
           };
 
           return (
@@ -1798,24 +2194,30 @@ function DDSolutionManager({ currentUser, onLogout }) {
             {/* Quick Action Buttons */}
             <div className="bg-gradient-to-br from-stone-50 to-stone-100 rounded-2xl p-3 border border-stone-200">
               <p className="text-xs font-medium text-stone-600 mb-2 px-1">📝 สร้างเอกสารใหม่</p>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <button onClick={() => { setEditingItem(null); setDefaultDocType('quotation'); setShowDocumentModal(true); }}
                   className="bg-white hover:bg-blue-50 border-2 border-blue-200 hover:border-blue-400 rounded-xl p-3 text-center transition-all active:scale-95">
-                  <div className="text-3xl mb-1">📄</div>
+                  <div className="text-2xl mb-1">📄</div>
                   <div className="text-xs font-bold text-blue-700">ใบเสนอราคา</div>
                   <div className="text-xs text-stone-400 mt-1">{counts.quotation} ฉบับ</div>
                 </button>
                 <button onClick={() => { setEditingItem(null); setDefaultDocType('invoice'); setShowDocumentModal(true); }}
                   className="bg-white hover:bg-amber-50 border-2 border-amber-200 hover:border-amber-400 rounded-xl p-3 text-center transition-all active:scale-95">
-                  <div className="text-3xl mb-1">🧾</div>
+                  <div className="text-2xl mb-1">🧾</div>
                   <div className="text-xs font-bold text-amber-700">ใบแจ้งหนี้</div>
                   <div className="text-xs text-stone-400 mt-1">{counts.invoice} ฉบับ</div>
                 </button>
-                <button onClick={() => { setEditingItem(null); setDefaultDocType('receipt'); setShowDocumentModal(true); }}
+                <button onClick={() => { setEditingItem(null); setDefaultDocType('receipt-deposit'); setShowDocumentModal(true); }}
+                  className="bg-white hover:bg-cyan-50 border-2 border-cyan-200 hover:border-cyan-400 rounded-xl p-3 text-center transition-all active:scale-95">
+                  <div className="text-2xl mb-1">💰</div>
+                  <div className="text-xs font-bold text-cyan-700">RC มัดจำ</div>
+                  <div className="text-xs text-stone-400 mt-1">{counts['receipt-deposit']} ฉบับ</div>
+                </button>
+                <button onClick={() => { setEditingItem(null); setDefaultDocType('receipt-final'); setShowDocumentModal(true); }}
                   className="bg-white hover:bg-emerald-50 border-2 border-emerald-200 hover:border-emerald-400 rounded-xl p-3 text-center transition-all active:scale-95">
-                  <div className="text-3xl mb-1">✅</div>
-                  <div className="text-xs font-bold text-emerald-700">ใบเสร็จรับเงิน</div>
-                  <div className="text-xs text-stone-400 mt-1">{counts.receipt} ฉบับ</div>
+                  <div className="text-2xl mb-1">✅</div>
+                  <div className="text-xs font-bold text-emerald-700">RC เต็ม</div>
+                  <div className="text-xs text-stone-400 mt-1">{counts['receipt-final']} ฉบับ</div>
                 </button>
               </div>
             </div>
@@ -1843,11 +2245,13 @@ function DDSolutionManager({ currentUser, onLogout }) {
             {documents.length > 0 && (
               <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
                 {[
-                  { id: 'active', label: '📋 ทั้งหมด', count: counts.active },
+                  { id: 'active', label: '🔧 กำลังดำเนินการ', count: counts.active },
                   { id: 'quotation', label: '📄 ใบเสนอราคา', count: counts.quotation },
                   { id: 'invoice', label: '🧾 ใบแจ้งหนี้', count: counts.invoice },
-                  { id: 'receipt', label: '✅ ใบเสร็จ', count: counts.receipt },
+                  { id: 'receipt-deposit', label: '💰 RC มัดจำ', count: counts['receipt-deposit'] },
+                  { id: 'receipt-final', label: '✅ RC เต็ม', count: counts['receipt-final'] },
                   { id: 'closed', label: '📁 จบงานแล้ว', count: counts.closed },
+                  { id: 'cancelled', label: '❌ ยกเลิก', count: counts.cancelled },
                 ].map(f => (
                   <button key={f.id} onClick={() => setDocFilter(f.id)}
                     className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
@@ -1861,121 +2265,167 @@ function DDSolutionManager({ currentUser, onLogout }) {
               </div>
             )}
 
-            {/* Document List */}
+            {/* Document List - Grouped by Chain */}
             {documents.length === 0 ? (
               <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-stone-200">
                 <Save className="w-12 h-12 text-stone-300 mx-auto mb-2" />
                 <p className="text-stone-500 mb-1">ยังไม่มีเอกสาร</p>
                 <p className="text-xs text-stone-400">เริ่มจากกดปุ่มสร้างเอกสารด้านบน</p>
               </div>
-            ) : filtered.length === 0 ? (
+            ) : chains.length === 0 ? (
               <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-stone-200">
-                <p className="text-stone-500 text-sm">ไม่พบเอกสารตามเงื่อนไขที่ค้นหา</p>
+                <p className="text-stone-500 text-sm">ไม่พบงานตามเงื่อนไขที่ค้นหา</p>
               </div>
             ) : (
-              <div className="space-y-2">
-                {filtered.map(doc => {
-                  const typeInfo = {
-                    quotation: { label: 'ใบเสนอราคา', color: 'blue', icon: '📄' },
-                    invoice: { label: 'ใบแจ้งหนี้', color: 'amber', icon: '🧾' },
-                    receipt: { label: 'ใบเสร็จ', color: 'emerald', icon: '✅' },
-                  }[doc.type] || { label: '-', color: 'stone', icon: '📋' };
-                  const closed = doc.status === 'closed';
-                  // Find linked docs
-                  const linkedDocs = documents.filter(d => d.linkedDocId === doc.id);
+              <div className="space-y-3">
+                {chains.map(chain => {
+                  const master = getMaster(chain.chainId);
+                  if (!master) return null;
+                  
+                  const chainDocs = [...chain.docs].sort((a, b) => 
+                    (a.createdAt || '') < (b.createdAt || '') ? -1 : 1
+                  );
+                  const total = Number(master.totalAmount || 0);
+                  const paid = getChainPaid(chain.chainId);
+                  const unpaid = total - paid;
+                  
+                  const statusInfo = {
+                    active: { label: '🔧 กำลังดำเนินการ', color: 'amber' },
+                    closed: { label: '✅ จบงานแล้ว', color: 'emerald' },
+                    cancelled: { label: '❌ ยกเลิก', color: 'rose' },
+                  }[chain.jobStatus] || { label: '-', color: 'stone' };
+                  
+                  const isActive = chain.jobStatus === 'active';
+                  const isCancelled = chain.jobStatus === 'cancelled';
+                  const isClosedJob = chain.jobStatus === 'closed';
+                  
+                  // เช็คมีเอกสารประเภทไหนบ้างใน chain
+                  const hasInvoice = chainDocs.some(d => d.type === 'invoice');
+                  const hasReceiptDeposit = chainDocs.some(d => d.type === 'receipt-deposit');
+                  const hasReceiptFinal = chainDocs.some(d => d.type === 'receipt-final' || d.type === 'receipt');
                   
                   return (
-                    <div key={doc.id} className={`bg-white rounded-2xl shadow-sm border animate-slide-up overflow-hidden ${closed ? 'border-stone-200 opacity-70' : 'border-stone-200'}`}>
-                      <div className="p-4">
-                        <div className="flex items-start gap-3">
-                          <div className="text-3xl flex-shrink-0">{typeInfo.icon}</div>
+                    <div key={chain.chainId} className={`bg-white rounded-2xl shadow-sm border-2 animate-slide-up overflow-hidden ${
+                      isCancelled ? 'border-rose-200 opacity-60' : 
+                      isClosedJob ? 'border-emerald-200 opacity-70' : 
+                      'border-amber-200'
+                    }`}>
+                      {/* Job Header */}
+                      <div className={`p-4 ${
+                        isCancelled ? 'bg-rose-50' : 
+                        isClosedJob ? 'bg-emerald-50' : 
+                        'bg-amber-50'
+                      }`}>
+                        <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className={`text-xs px-2 py-0.5 rounded-full bg-${typeInfo.color}-100 text-${typeInfo.color}-700 font-medium`}>
-                                {typeInfo.label}
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                              <span className={`text-xs px-2 py-0.5 rounded-full bg-${statusInfo.color}-100 text-${statusInfo.color}-700 font-medium border border-${statusInfo.color}-200`}>
+                                {statusInfo.label}
                               </span>
-                              <span className="font-mono text-sm text-stone-500">{doc.docNumber}</span>
-                              {closed && (
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-stone-200 text-stone-600 font-medium">
-                                  📁 จบงานแล้ว
-                                </span>
+                              <span className="text-xs text-stone-500">{chainDocs.length} เอกสาร</span>
+                            </div>
+                            <h3 className="font-bold text-lg text-stone-800 truncate">{master.customerName || '-'}</h3>
+                            <div className="flex items-center gap-3 mt-1 text-xs">
+                              <span className="text-stone-600">💰 ยอด: <strong>{fmt(total)} ฿</strong></span>
+                              {paid > 0 && (
+                                <span className="text-emerald-700">✓ จ่าย: <strong>{fmt(paid)} ฿</strong></span>
                               )}
-                              {doc.linkedDocId && (
-                                <span className="text-xs text-purple-600">
-                                  🔗 จาก {documents.find(d => d.id === doc.linkedDocId)?.docNumber || '-'}
-                                </span>
+                              {unpaid > 0 && isActive && (
+                                <span className="text-rose-700">⚠ ค้าง: <strong>{fmt(unpaid)} ฿</strong></span>
                               )}
                             </div>
-                            <h3 className="font-bold text-stone-800 mt-1">{doc.customerName || '-'}</h3>
-                            <div className="text-xs text-stone-500 mt-0.5">
-                              {doc.docDate} · {fmt(doc.totalAmount || 0)} ฿
-                            </div>
-                            {linkedDocs.length > 0 && (
-                              <div className="text-xs text-purple-600 mt-1">
-                                ➡️ มี {linkedDocs.map(d => d.docNumber).join(', ')}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex gap-1 flex-shrink-0">
-                            <button onClick={() => { setPreviewDoc(doc); setShowDocumentPreview(true); }}
-                              className="p-2 hover:bg-blue-50 rounded-lg" title="ดู/พิมพ์">
-                              <Eye className="w-4 h-4 text-blue-500" />
-                            </button>
-                            {!closed && (
-                              <button onClick={() => { setEditingItem(doc); setShowDocumentModal(true); }}
-                                className="p-2 hover:bg-stone-100 rounded-lg" title="แก้ไข">
-                                <Edit2 className="w-4 h-4 text-stone-500" />
-                              </button>
-                            )}
-                            <button onClick={() => {
-                              if (window.confirm(`ลบ ${typeInfo.label} ${doc.docNumber}?\n\n⚠️ การลบไม่สามารถกู้คืนได้`)) {
-                                saveDocuments(documents.filter(x => x.id !== doc.id), 'delete', `ลบ ${typeInfo.label}: ${doc.docNumber}`);
-                              }
-                            }} className="p-2 hover:bg-red-50 rounded-lg" title="ลบ">
-                              <Trash2 className="w-4 h-4 text-red-400" />
-                            </button>
                           </div>
                         </div>
-
-                        {/* Workflow Buttons */}
-                        {!closed && (
-                          <div className="mt-3 pt-3 border-t border-stone-100 flex gap-1.5 flex-wrap">
-                            {doc.type === 'quotation' && (
-                              <button onClick={() => cloneFromDoc(doc, 'invoice')}
-                                className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 px-3 py-1.5 rounded-lg font-medium flex items-center gap-1">
-                                🧾 สร้างใบแจ้งหนี้
-                              </button>
-                            )}
-                            {doc.type === 'invoice' && (
-                              <button onClick={() => cloneFromDoc(doc, 'receipt')}
-                                className="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-lg font-medium flex items-center gap-1">
-                                ✅ สร้างใบเสร็จรับเงิน
-                              </button>
-                            )}
-                            {doc.type === 'quotation' && (
-                              <button onClick={() => cloneFromDoc(doc, 'receipt')}
-                                className="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-lg font-medium flex items-center gap-1">
-                                ✅ สร้างใบเสร็จรับเงิน
-                              </button>
-                            )}
-                            <button onClick={() => closeJob(doc)}
-                              className="text-xs bg-stone-100 hover:bg-stone-200 text-stone-700 px-3 py-1.5 rounded-lg font-medium flex items-center gap-1 ml-auto">
-                              📁 จบงาน
-                            </button>
-                          </div>
-                        )}
-                        {closed && (
-                          <div className="mt-3 pt-3 border-t border-stone-100 flex justify-between items-center">
-                            <span className="text-xs text-stone-500">
-                              จบงานเมื่อ {doc.closedAt ? new Date(doc.closedAt).toLocaleDateString('th-TH') : '-'}
-                            </span>
-                            <button onClick={() => reopenJob(doc)}
-                              className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg font-medium">
-                              🔓 เปิดใหม่
-                            </button>
-                          </div>
-                        )}
                       </div>
+
+                      {/* Doc List */}
+                      <div className="divide-y divide-stone-100">
+                        {chainDocs.map(doc => {
+                          const typeInfo = getDocTypeInfo(doc.type);
+                          return (
+                            <div key={doc.id} className="p-3 flex items-center gap-3 hover:bg-stone-50">
+                              <div className="text-2xl flex-shrink-0">{typeInfo.icon}</div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className={`text-xs px-1.5 py-0.5 rounded bg-${typeInfo.color}-100 text-${typeInfo.color}-700 font-medium`}>
+                                    {typeInfo.shortLabel}
+                                  </span>
+                                  <span className="font-mono text-xs text-stone-600">{doc.docNumber}</span>
+                                </div>
+                                <div className="text-xs text-stone-500 mt-0.5">
+                                  {doc.docDate} · {fmt(doc.totalAmount || 0)} ฿
+                                </div>
+                              </div>
+                              <div className="flex gap-0.5 flex-shrink-0">
+                                <button onClick={() => { setPreviewDoc(doc); setShowDocumentPreview(true); }}
+                                  className="p-1.5 hover:bg-blue-50 rounded-lg" title="ดู/พิมพ์">
+                                  <Eye className="w-4 h-4 text-blue-500" />
+                                </button>
+                                {isActive && (
+                                  <button onClick={() => { setEditingItem(doc); setShowDocumentModal(true); }}
+                                    className="p-1.5 hover:bg-stone-100 rounded-lg" title="แก้ไข">
+                                    <Edit2 className="w-4 h-4 text-stone-500" />
+                                  </button>
+                                )}
+                                <button onClick={() => {
+                                  if (window.confirm(`ลบ ${typeInfo.label} ${doc.docNumber}?\n\n⚠️ การลบไม่สามารถกู้คืนได้`)) {
+                                    saveDocuments(documents.filter(x => x.id !== doc.id), 'delete', `ลบ ${typeInfo.label}: ${doc.docNumber}`);
+                                  }
+                                }} className="p-1.5 hover:bg-red-50 rounded-lg" title="ลบเอกสารนี้">
+                                  <Trash2 className="w-4 h-4 text-red-400" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Job Actions */}
+                      {isActive && (
+                        <div className="p-3 bg-stone-50 border-t border-stone-100 flex gap-1.5 flex-wrap">
+                          {!hasReceiptDeposit && Number(master.depositAmount || 0) > 0 && (
+                            <button onClick={() => cloneFromDoc(master, 'receipt-deposit')}
+                              className="text-xs bg-cyan-50 hover:bg-cyan-100 text-cyan-700 border border-cyan-200 px-3 py-1.5 rounded-lg font-medium">
+                              💰 RC มัดจำ
+                            </button>
+                          )}
+                          {!hasInvoice && (
+                            <button onClick={() => cloneFromDoc(master, 'invoice')}
+                              className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 px-3 py-1.5 rounded-lg font-medium">
+                              🧾 ใบแจ้งหนี้
+                            </button>
+                          )}
+                          {!hasReceiptFinal && (
+                            <button onClick={() => cloneFromDoc(master, 'receipt-final')}
+                              className="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-lg font-medium">
+                              ✅ RC เต็ม
+                            </button>
+                          )}
+                          <button onClick={() => closeChain(chain.chainId)}
+                            className="text-xs bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg font-medium ml-auto">
+                            ✅ จบงาน
+                          </button>
+                          <button onClick={() => cancelChain(chain.chainId)}
+                            className="text-xs bg-rose-100 hover:bg-rose-200 text-rose-700 px-3 py-1.5 rounded-lg font-medium">
+                            ❌ ยกเลิก
+                          </button>
+                        </div>
+                      )}
+                      {(isClosedJob || isCancelled) && (
+                        <div className="p-3 bg-stone-50 border-t border-stone-100 flex justify-between items-center">
+                          <span className="text-xs text-stone-500">
+                            {isClosedJob ? 'จบงานเมื่อ' : 'ยกเลิกเมื่อ'} {' '}
+                            {(() => {
+                              const date = master.closedAt || master.cancelledAt;
+                              return date ? new Date(date).toLocaleDateString('th-TH') : '-';
+                            })()}
+                          </span>
+                          <button onClick={() => reopenChain(chain.chainId)}
+                            className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg font-medium">
+                            🔓 เปิดงานใหม่
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -2715,6 +3165,85 @@ function StockModal({ item, onClose, onSave }) {
         </select>
       </Field>
       <Field label="หมายเหตุ"><input value={form.note} onChange={e => update('note', e.target.value)} className={inputCls} /></Field>
+
+      {/* Sales Catalog Section */}
+      {(form.category === 'inverter' || form.category === 'panel' || form.category === 'battery') && (
+        <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-3 my-3">
+          <label className="flex items-center gap-2 cursor-pointer mb-2">
+            <input type="checkbox" 
+              checked={form.inSalesCatalog || false} 
+              onChange={e => update('inSalesCatalog', e.target.checked)}
+              className="w-5 h-5 rounded text-amber-500" />
+            <span className="text-sm font-bold text-amber-700">
+              ⭐ ใช้ใน "เสนอขาย" (Sales Presentation)
+            </span>
+          </label>
+          {form.inSalesCatalog && (
+            <div className="space-y-2 mt-3 pl-7">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-stone-600">แบรนด์</label>
+                  <input type="text" value={form.salesSpecs?.brand || ''}
+                    onChange={e => update('salesSpecs', {...(form.salesSpecs || {}), brand: e.target.value})}
+                    placeholder="เช่น Deye, Jinko" className="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs text-stone-600">รุ่น/Model</label>
+                  <input type="text" value={form.salesSpecs?.model || ''}
+                    onChange={e => update('salesSpecs', {...(form.salesSpecs || {}), model: e.target.value})}
+                    placeholder="เช่น Hybrid 5kW" className="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-sm" />
+                </div>
+              </div>
+              {form.category === 'inverter' && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs text-stone-600">ขนาด (kW)</label>
+                    <input type="number" step="0.1" value={form.salesSpecs?.size || ''}
+                      onChange={e => update('salesSpecs', {...(form.salesSpecs || {}), size: Number(e.target.value)})}
+                      placeholder="5" className="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-stone-600">ประเภท</label>
+                    <select value={form.salesSpecs?.type || 'hybrid'}
+                      onChange={e => update('salesSpecs', {...(form.salesSpecs || {}), type: e.target.value})}
+                      className="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-sm">
+                      <option value="hybrid">Hybrid</option>
+                      <option value="ongrid">On-grid</option>
+                      <option value="offgrid">Off-grid</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+              {form.category === 'panel' && (
+                <div>
+                  <label className="text-xs text-stone-600">กำลัง (วัตต์)</label>
+                  <input type="number" value={form.salesSpecs?.watt || ''}
+                    onChange={e => update('salesSpecs', {...(form.salesSpecs || {}), watt: Number(e.target.value)})}
+                    placeholder="725" className="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-sm" />
+                </div>
+              )}
+              {form.category === 'battery' && (
+                <div>
+                  <label className="text-xs text-stone-600">ความจุ (kWh)</label>
+                  <input type="number" step="0.1" value={form.salesSpecs?.capacity || ''}
+                    onChange={e => update('salesSpecs', {...(form.salesSpecs || {}), capacity: Number(e.target.value)})}
+                    placeholder="16" className="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-sm" />
+                </div>
+              )}
+              <div>
+                <label className="text-xs text-stone-600">ระดับ (Tier)</label>
+                <select value={form.salesSpecs?.tier || 'standard'}
+                  onChange={e => update('salesSpecs', {...(form.salesSpecs || {}), tier: e.target.value})}
+                  className="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-sm">
+                  <option value="standard">Standard</option>
+                  <option value="premium">Premium</option>
+                </select>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <button onClick={() => onSave(form)} className="w-full bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-xl font-medium mt-4 flex items-center justify-center gap-2">
         <Save className="w-4 h-4" /> บันทึก
       </button>
@@ -3251,6 +3780,815 @@ function CapitalModal({ mode, partners, actualInvestments, cashOnHand, fmt, onCl
   );
 }
 
+// ============== SALES PRESENTATION (เสนอขาย) ==============
+function SalesPresentation({ customers, stock, companyInfo, onCreateQuotation, onSaveCustomer }) {
+  const [step, setStep] = useState(1);
+  
+  // Customer info
+  const [customerMode, setCustomerMode] = useState('new');
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerAddress, setCustomerAddress] = useState('');
+  
+  // Usage info
+  const [monthlyBill, setMonthlyBill] = useState(5000);
+  const [usagePeriod, setUsagePeriod] = useState('mixed');
+  const [region, setRegion] = useState('central');
+  const [hasBattery, setHasBattery] = useState(false);
+  
+  // Electricity meter
+  const [meterType, setMeterType] = useState('normal'); // 'normal' | 'tou'
+  const [normalRate, setNormalRate] = useState(4.5);
+  const [touOnPeak, setTouOnPeak] = useState(5.8);
+  const [touOffPeak, setTouOffPeak] = useState(2.6);
+  const [inflationRate, setInflationRate] = useState(3);
+  
+  // Selection
+  const [selectedPackage, setSelectedPackage] = useState(null);
+  const [isCustom, setIsCustom] = useState(false);
+  
+  // Custom builder
+  const [customInverter, setCustomInverter] = useState(null);
+  const [customPanel, setCustomPanel] = useState(null);
+  const [customPanelCount, setCustomPanelCount] = useState(0);
+  const [customBattery, setCustomBattery] = useState(null);
+  
+  // Helper: build calc options
+  const calcOpts = {
+    region,
+    meterType,
+    electricityRate: normalRate,
+    touRates: { onPeak: touOnPeak, offPeak: touOffPeak },
+    inflation: inflationRate,
+  };
+  
+  // Calculate packages
+  const packages = recommendPackages({ monthlyBill, hasBattery, region, stock, companyInfo });
+  
+  // Get the active selection (package or custom)
+  const getActiveSelection = () => {
+    if (isCustom) {
+      const inv = customInverter;
+      const pan = customPanel;
+      const cnt = customPanelCount;
+      const bat = customBattery;
+      if (!inv || !pan || cnt < 1) return null;
+      
+      const installPct = (companyInfo?.installCostPct || 10) / 100;
+      const equipmentCost = inv.cost + (pan.cost * cnt) + (bat?.cost || 0);
+      const installCost = Math.round(equipmentCost * installPct);
+      const grandCost = equipmentCost + installCost;
+      const margin = getMargin(inv.size, companyInfo);
+      const sellPrice = applyMargin(grandCost, margin);
+      const totalKW = (pan.watt * cnt) / 1000;
+      const roi = calculateROI({ kW: Math.min(totalKW, inv.size), ...calcOpts });
+      const breakEven = sellPrice / roi.yearlySavings;
+      
+      return {
+        label: 'Custom',
+        badge: '⚙️',
+        inverter: inv, panel: pan, panelCount: cnt, battery: bat,
+        equipmentCost, installCost,
+        totalCost: grandCost, sellPrice, margin,
+        profit: sellPrice - grandCost,
+        totalKW: Math.round(totalKW * 100) / 100,
+        roi,
+        breakEven: Math.round(breakEven * 10) / 10,
+      };
+    }
+    return selectedPackage;
+  };
+  
+  const active = getActiveSelection();
+  
+  // ถ้าไม่มี equipment ใน stock ให้แจ้งเตือน
+  if (!packages || packages === null) {
+    return (
+      <div className="bg-white rounded-2xl p-6 border border-amber-200 text-center space-y-3">
+        <div className="text-4xl">⚠️</div>
+        <h2 className="display-font text-2xl text-stone-800">ยังไม่มีอุปกรณ์ในแคตตาล็อก</h2>
+        <p className="text-sm text-stone-600">
+          ต้องเพิ่มสินค้าใน <strong>"สต็อก"</strong> และติ๊ก <strong>"ใช้สำหรับเสนอขาย"</strong> ก่อน
+          <br />
+          (ต้องมี <strong>Inverter</strong> และ <strong>แผงโซล่าเซลล์</strong> อย่างน้อย 1 รายการ)
+        </p>
+      </div>
+    );
+  }
+  
+  // ============ STEP 1: Customer Info ============
+  if (step === 1) {
+    return (
+      <div className="space-y-4 animate-fade-in">
+        <div>
+          <h2 className="display-font text-3xl text-stone-800">🎤 เสนอขายโซล่าเซลล์</h2>
+          <p className="text-sm text-stone-500">ขั้นที่ 1/4 — ข้อมูลลูกค้า</p>
+        </div>
+        
+        <div className="flex gap-2">
+          {[1,2,3,4].map(s => (
+            <div key={s} className={`flex-1 h-1.5 rounded-full ${s <= step ? 'bg-amber-500' : 'bg-stone-200'}`} />
+          ))}
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200 space-y-3">
+          <h3 className="font-bold text-stone-800">👤 ลูกค้า</h3>
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => setCustomerMode('new')}
+              className={`p-3 rounded-xl border-2 text-sm font-medium ${customerMode === 'new' ? 'border-amber-500 bg-amber-50 text-amber-700' : 'border-stone-200'}`}>
+              ➕ ลูกค้าใหม่
+            </button>
+            <button onClick={() => setCustomerMode('existing')}
+              className={`p-3 rounded-xl border-2 text-sm font-medium ${customerMode === 'existing' ? 'border-amber-500 bg-amber-50 text-amber-700' : 'border-stone-200'}`}>
+              📋 ลูกค้าเก่า
+            </button>
+          </div>
+          
+          {customerMode === 'existing' ? (
+            <select value={selectedCustomerId} onChange={e => {
+              const c = customers.find(x => x.id === e.target.value);
+              setSelectedCustomerId(e.target.value);
+              if (c) {
+                setCustomerName(c.name || '');
+                setCustomerPhone(c.phone || '');
+                setCustomerAddress(c.address || '');
+              }
+            }} className="w-full px-3 py-2 border border-stone-300 rounded-xl">
+              <option value="">-- เลือกลูกค้า --</option>
+              {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          ) : (
+            <>
+              <input value={customerName} onChange={e => setCustomerName(e.target.value)}
+                placeholder="ชื่อลูกค้า" className="w-full px-3 py-2 border border-stone-300 rounded-xl" />
+              <input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)}
+                placeholder="เบอร์โทร" className="w-full px-3 py-2 border border-stone-300 rounded-xl" />
+              <textarea value={customerAddress} onChange={e => setCustomerAddress(e.target.value)}
+                placeholder="ที่อยู่" rows={2} className="w-full px-3 py-2 border border-stone-300 rounded-xl" />
+            </>
+          )}
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200 space-y-3">
+          <h3 className="font-bold text-stone-800">💡 ข้อมูลการใช้ไฟ</h3>
+          
+          <div>
+            <label className="block text-sm text-stone-600 mb-1">ค่าไฟเฉลี่ยต่อเดือน</label>
+            <div className="flex items-center gap-2">
+              <input type="number" value={monthlyBill}
+                onChange={e => setMonthlyBill(Number(e.target.value) || 0)}
+                className="flex-1 px-3 py-2 border border-stone-300 rounded-xl text-lg font-bold text-right" />
+              <span className="font-medium text-stone-700">฿/เดือน</span>
+            </div>
+            <div className="text-xs text-stone-500 mt-1">
+              ≈ {Math.round(monthlyBill / normalRate)} kWh/เดือน
+            </div>
+          </div>
+          
+          <div>
+            <label className="block text-sm text-stone-600 mb-2">⏰ ใช้ไฟช่วงไหนมากที่สุด?</label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {[
+                { id: 'day', label: '☀️ กลางวัน' },
+                { id: 'evening', label: '🌆 เย็น-ค่ำ' },
+                { id: 'night', label: '🌙 กลางคืน' },
+                { id: 'mixed', label: '🔄 ทุกเวลา' },
+              ].map(p => (
+                <button key={p.id} onClick={() => {
+                  setUsagePeriod(p.id);
+                  if (p.id === 'day') setHasBattery(false);
+                  else if (p.id === 'night' || p.id === 'evening') setHasBattery(true);
+                }}
+                  className={`p-2 rounded-xl border-2 text-xs font-medium ${usagePeriod === p.id ? 'border-amber-500 bg-amber-50 text-amber-700' : 'border-stone-200'}`}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          
+          <div>
+            <label className="block text-sm text-stone-600 mb-2">📍 ภูมิภาค</label>
+            <div className="grid grid-cols-2 gap-2">
+              {Object.entries(SOLAR_REGIONS).map(([k, v]) => (
+                <button key={k} onClick={() => setRegion(k)}
+                  className={`p-2 rounded-xl border-2 text-xs ${region === k ? 'border-amber-500 bg-amber-50' : 'border-stone-200'}`}>
+                  <div className="font-medium">{v.label}</div>
+                  <div className="text-stone-500">{v.hours} ชม./วัน</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={hasBattery} onChange={e => setHasBattery(e.target.checked)}
+                className="w-5 h-5 rounded text-amber-500" />
+              <span className="text-sm">
+                <strong>🔋 อยากมีแบตเตอรี่</strong>
+                <span className="text-xs text-stone-500 ml-1">(ไฟดับใช้ได้ + ใช้กลางคืนได้)</span>
+              </span>
+            </label>
+          </div>
+        </div>
+
+        {/* Electricity Meter Type */}
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200 space-y-3">
+          <h3 className="font-bold text-stone-800">⚡ ประเภทมิเตอร์ไฟ</h3>
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => setMeterType('normal')}
+              className={`p-3 rounded-xl border-2 text-left ${meterType === 'normal' ? 'border-amber-500 bg-amber-50' : 'border-stone-200'}`}>
+              <div className="font-medium text-sm">🏠 มิเตอร์ปกติ</div>
+              <div className="text-xs text-stone-500">อัตราเดียวทั้งวัน</div>
+            </button>
+            <button onClick={() => setMeterType('tou')}
+              className={`p-3 rounded-xl border-2 text-left ${meterType === 'tou' ? 'border-amber-500 bg-amber-50' : 'border-stone-200'}`}>
+              <div className="font-medium text-sm">⏰ TOU</div>
+              <div className="text-xs text-stone-500">แยก peak/off-peak</div>
+            </button>
+          </div>
+          
+          {meterType === 'normal' ? (
+            <div className="bg-stone-50 rounded-xl p-3">
+              <label className="block text-xs text-stone-600 mb-1">อัตราค่าไฟ (฿/หน่วย)</label>
+              <input type="number" step="0.01" value={normalRate}
+                onChange={e => setNormalRate(Number(e.target.value) || 0)}
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-right font-bold" />
+              <div className="text-xs text-stone-500 mt-1">ค่าเฉลี่ยปัจจุบัน ~4.5 ฿/หน่วย</div>
+            </div>
+          ) : (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+              <div className="text-xs text-amber-700 font-medium">⏰ Solar เหมาะกับ TOU มาก! ผลิตช่วง on-peak = ประหยัดเยอะกว่า</div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs text-stone-600 mb-1">On-peak (9-22น.)</label>
+                  <input type="number" step="0.01" value={touOnPeak}
+                    onChange={e => setTouOnPeak(Number(e.target.value) || 0)}
+                    className="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-right text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs text-stone-600 mb-1">Off-peak</label>
+                  <input type="number" step="0.01" value={touOffPeak}
+                    onChange={e => setTouOffPeak(Number(e.target.value) || 0)}
+                    className="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-right text-sm" />
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <div className="bg-stone-50 rounded-xl p-3">
+            <label className="block text-xs text-stone-600 mb-1">📈 อัตราค่าไฟเพิ่มขึ้น/ปี (เงินเฟ้อ)</label>
+            <div className="flex items-center gap-2">
+              <input type="number" step="0.5" value={inflationRate}
+                onChange={e => setInflationRate(Number(e.target.value) || 0)}
+                className="flex-1 px-3 py-2 border border-stone-300 rounded-lg text-right" />
+              <span className="text-stone-700">%</span>
+            </div>
+            <div className="text-xs text-stone-500 mt-1">ปกติ 3-5% ต่อปี</div>
+          </div>
+        </div>
+
+        <button onClick={() => setStep(2)}
+          disabled={!customerName || monthlyBill < 100}
+          className="w-full bg-amber-500 hover:bg-amber-600 disabled:bg-stone-300 text-white py-3 rounded-xl font-medium">
+          ถัดไป → ดูแพ็คเกจที่แนะนำ
+        </button>
+      </div>
+    );
+  }
+  
+  // ============ STEP 2: Package Recommendation ============
+  if (step === 2) {
+    return (
+      <div className="space-y-4 animate-fade-in">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="display-font text-3xl text-stone-800">🎁 แพ็คเกจแนะนำ</h2>
+            <p className="text-sm text-stone-500">ขั้นที่ 2/4 — สำหรับ {customerName}</p>
+          </div>
+          <button onClick={() => setStep(1)} className="text-sm text-stone-600 hover:text-stone-800">← กลับ</button>
+        </div>
+        
+        <div className="flex gap-2">
+          {[1,2,3,4].map(s => (
+            <div key={s} className={`flex-1 h-1.5 rounded-full ${s <= step ? 'bg-amber-500' : 'bg-stone-200'}`} />
+          ))}
+        </div>
+
+        <div className="space-y-3">
+          {Object.entries(packages).map(([key, pkg]) => {
+            const isBest = key === 'best';
+            // คำนวณใหม่ด้วย calcOpts (รวม TOU)
+            const realRoi = calculateROI({ kW: Math.min(pkg.totalKW, pkg.inverter.size), ...calcOpts });
+            const realBreakEven = pkg.sellPrice / realRoi.yearlySavings;
+            
+            return (
+              <div key={key} className={`bg-white rounded-2xl shadow-sm border-2 overflow-hidden ${
+                isBest ? 'border-amber-400' : 'border-stone-200'
+              }`}>
+                {isBest && (
+                  <div className="bg-amber-400 text-white text-xs font-bold py-1 px-3 text-center">
+                    ⭐ แนะนำที่สุด - คืนทุนเร็วสุด
+                  </div>
+                )}
+                <div className="p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-2xl">{pkg.badge}</span>
+                    <h3 className="font-bold text-lg text-stone-800">{pkg.label}</h3>
+                  </div>
+                  
+                  <div className="space-y-1 text-sm text-stone-600 mb-3">
+                    <div>🔌 {pkg.inverter.brand} {pkg.inverter.model}</div>
+                    <div>☀️ {pkg.panel.brand} {pkg.panel.model} × {pkg.panelCount} แผ่น = {pkg.totalKW} kW</div>
+                    <div>{pkg.battery ? `🔋 ${pkg.battery.brand} ${pkg.battery.model}` : '❌ ไม่มีแบตเตอรี่'}</div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <div className="bg-amber-50 rounded-lg p-2 text-center">
+                      <div className="text-xs text-stone-500">ราคา</div>
+                      <div className="font-bold text-amber-700">{pkg.sellPrice.toLocaleString()} ฿</div>
+                    </div>
+                    <div className="bg-emerald-50 rounded-lg p-2 text-center">
+                      <div className="text-xs text-stone-500">คืนทุน</div>
+                      <div className="font-bold text-emerald-700">{realBreakEven.toFixed(1)} ปี</div>
+                    </div>
+                  </div>
+                  
+                  <button onClick={() => {
+                    // อัพเดท ROI ของ package ด้วย calcOpts ปัจจุบัน
+                    setSelectedPackage({ ...pkg, roi: realRoi, breakEven: Math.round(realBreakEven * 10) / 10 });
+                    setIsCustom(false);
+                    setStep(4);
+                  }} className={`w-full py-2 rounded-xl font-medium text-sm ${
+                    isBest ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
+                  }`}>
+                    เลือกแพ็คนี้ →
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <button onClick={() => {
+          setIsCustom(true);
+          setCustomInverter(packages.best.inverter);
+          setCustomPanel(packages.best.panel);
+          setCustomPanelCount(packages.best.panelCount);
+          setCustomBattery(packages.best.battery);
+          setStep(3);
+        }} className="w-full p-4 bg-stone-100 hover:bg-stone-200 border-2 border-dashed border-stone-300 rounded-2xl text-stone-700 font-medium">
+          ⚙️ ปรับแต่งเอง (Custom)
+        </button>
+      </div>
+    );
+  }
+  
+  // ============ STEP 3: Custom Builder ============
+  if (step === 3) {
+    // ดึง equipment จาก stock
+    const stockInverters = stock.filter(s => s.inSalesCatalog && s.category === 'inverter' && s.salesSpecs);
+    const stockPanels = stock.filter(s => s.inSalesCatalog && s.category === 'panel' && s.salesSpecs);
+    const stockBatteries = stock.filter(s => s.inSalesCatalog && s.category === 'battery' && s.salesSpecs);
+    
+    const inverters = stockInverters.length > 0 
+      ? stockInverters.map(s => ({ id: s.id, brand: s.salesSpecs.brand, model: s.salesSpecs.model, size: s.salesSpecs.size, type: s.salesSpecs.type || 'hybrid', cost: s.unitCost, tier: s.salesSpecs.tier || 'standard' }))
+      : EQUIPMENT_CATALOG.inverters;
+    const panels = stockPanels.length > 0
+      ? stockPanels.map(s => ({ id: s.id, brand: s.salesSpecs.brand, model: s.salesSpecs.model, watt: s.salesSpecs.watt, cost: s.unitCost, tier: s.salesSpecs.tier || 'standard' }))
+      : EQUIPMENT_CATALOG.panels;
+    const batteries = stockBatteries.length > 0
+      ? stockBatteries.map(s => ({ id: s.id, brand: s.salesSpecs.brand, model: s.salesSpecs.model, capacity: s.salesSpecs.capacity, cost: s.unitCost, tier: s.salesSpecs.tier || 'standard' }))
+      : EQUIPMENT_CATALOG.batteries;
+    
+    return (
+      <div className="space-y-4 animate-fade-in">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="display-font text-3xl text-stone-800">⚙️ ปรับแต่งระบบ</h2>
+            <p className="text-sm text-stone-500">ขั้นที่ 3/4 — เลือกอุปกรณ์เอง</p>
+          </div>
+          <button onClick={() => setStep(2)} className="text-sm text-stone-600 hover:text-stone-800">← กลับ</button>
+        </div>
+        
+        <div className="flex gap-2">
+          {[1,2,3,4].map(s => (
+            <div key={s} className={`flex-1 h-1.5 rounded-full ${s <= step ? 'bg-amber-500' : 'bg-stone-200'}`} />
+          ))}
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
+          <h3 className="font-bold text-stone-800 mb-3">🔌 Inverter ({inverters.length} รุ่น)</h3>
+          <div className="space-y-2">
+            {inverters.map(inv => (
+              <button key={inv.id} onClick={() => setCustomInverter(inv)}
+                className={`w-full p-3 rounded-xl border-2 text-left ${
+                  customInverter?.id === inv.id ? 'border-amber-500 bg-amber-50' : 'border-stone-200'
+                }`}>
+                <div className="font-medium">{inv.brand} {inv.model}</div>
+                <div className="text-xs text-stone-500">ขนาด {inv.size}kW · {inv.type}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
+          <h3 className="font-bold text-stone-800 mb-3">☀️ แผงโซล่าเซลล์ ({panels.length} รุ่น)</h3>
+          <div className="space-y-2 mb-3">
+            {panels.map(p => (
+              <button key={p.id} onClick={() => {
+                setCustomPanel(p);
+                if (customInverter) {
+                  setCustomPanelCount(Math.ceil(customInverter.size * 1100 / p.watt));
+                }
+              }}
+                className={`w-full p-3 rounded-xl border-2 text-left ${
+                  customPanel?.id === p.id ? 'border-amber-500 bg-amber-50' : 'border-stone-200'
+                }`}>
+                <div className="font-medium">{p.brand} {p.model}</div>
+                <div className="text-xs text-stone-500">{p.watt}W ต่อแผ่น</div>
+              </button>
+            ))}
+          </div>
+          {customPanel && (
+            <div className="bg-stone-50 rounded-xl p-3">
+              <label className="block text-sm text-stone-600 mb-2">จำนวนแผ่น</label>
+              <div className="flex items-center justify-center gap-3">
+                <button onClick={() => setCustomPanelCount(Math.max(1, customPanelCount - 1))}
+                  className="w-10 h-10 bg-stone-200 hover:bg-stone-300 rounded-full font-bold text-xl">−</button>
+                <div className="text-center">
+                  <div className="text-3xl font-bold text-amber-600">{customPanelCount}</div>
+                  <div className="text-xs text-stone-500">= {((customPanel.watt * customPanelCount) / 1000).toFixed(2)} kW</div>
+                </div>
+                <button onClick={() => setCustomPanelCount(customPanelCount + 1)}
+                  className="w-10 h-10 bg-stone-200 hover:bg-stone-300 rounded-full font-bold text-xl">+</button>
+              </div>
+              {customInverter && (
+                <div className="text-xs text-center text-stone-500 mt-2">
+                  💡 แนะนำ {Math.ceil(customInverter.size * 1100 / customPanel.watt)} แผ่น สำหรับ {customInverter.size}kW
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
+          <h3 className="font-bold text-stone-800 mb-3">🔋 แบตเตอรี่ ({batteries.length} รุ่น)</h3>
+          <button onClick={() => setCustomBattery(null)}
+            className={`w-full p-3 rounded-xl border-2 text-left mb-2 ${
+              customBattery === null ? 'border-amber-500 bg-amber-50' : 'border-stone-200'
+            }`}>
+            <div className="font-medium">❌ ไม่ใช้แบตเตอรี่</div>
+            <div className="text-xs text-stone-500">เหมาะกับ on-grid / ใช้ไฟกลางวันเยอะ</div>
+          </button>
+          {batteries.map(bat => (
+            <button key={bat.id} onClick={() => setCustomBattery(bat)}
+              className={`w-full p-3 rounded-xl border-2 text-left ${
+                customBattery?.id === bat.id ? 'border-amber-500 bg-amber-50' : 'border-stone-200'
+              }`}>
+              <div className="font-medium">{bat.brand} {bat.model}</div>
+              <div className="text-xs text-stone-500">ความจุ {bat.capacity}kWh</div>
+            </button>
+          ))}
+        </div>
+
+        <button onClick={() => setStep(4)}
+          disabled={!customInverter || !customPanel || customPanelCount < 1}
+          className="w-full bg-amber-500 hover:bg-amber-600 disabled:bg-stone-300 text-white py-3 rounded-xl font-medium">
+          ดูสรุปและการวิเคราะห์ →
+        </button>
+      </div>
+    );
+  }
+  
+  // ============ STEP 4: Closing Infographic ============
+  if (step === 4 && active) {
+    return (
+      <SalesPresentationCloser
+        active={active}
+        customerName={customerName}
+        customerPhone={customerPhone}
+        customerAddress={customerAddress}
+        customerMode={customerMode}
+        selectedCustomerId={selectedCustomerId}
+        region={region}
+        meterType={meterType}
+        monthlyBill={monthlyBill}
+        electricityRate={meterType === 'tou' ? `On-peak ${touOnPeak} / Off-peak ${touOffPeak}` : `${normalRate} ฿/หน่วย`}
+        inflationRate={inflationRate}
+        companyInfo={companyInfo}
+        onBack={() => setStep(isCustom ? 3 : 2)}
+        onCreateQuotation={onCreateQuotation}
+        onSaveCustomer={onSaveCustomer}
+        onEdit={() => { setIsCustom(true); setCustomInverter(active.inverter); setCustomPanel(active.panel); setCustomPanelCount(active.panelCount); setCustomBattery(active.battery); setStep(3); }}
+      />
+    );
+  }
+  
+  return null;
+}
+
+// ============== SALES CLOSING INFOGRAPHIC ==============
+function SalesPresentationCloser({ active: initialActive, customerName, customerPhone, customerAddress, customerMode, selectedCustomerId, region, meterType, monthlyBill, electricityRate, inflationRate, companyInfo, onBack, onCreateQuotation, onSaveCustomer, onEdit }) {
+  const [animateStep, setAnimateStep] = useState(0);
+  const [showProfit, setShowProfit] = useState(false);
+  const [editPrice, setEditPrice] = useState(false);
+  const [customSellPrice, setCustomSellPrice] = useState(initialActive.sellPrice);
+  
+  // Recalculate active with custom price
+  const active = customSellPrice !== initialActive.sellPrice ? {
+    ...initialActive,
+    sellPrice: customSellPrice,
+    profit: customSellPrice - initialActive.totalCost,
+    margin: Math.round(((customSellPrice / initialActive.totalCost) - 1) * 100),
+    breakEven: Math.round((customSellPrice / initialActive.roi.yearlySavings) * 10) / 10,
+  } : initialActive;
+  
+  useEffect(() => {
+    const timers = [];
+    for (let i = 1; i <= 6; i++) {
+      timers.push(setTimeout(() => setAnimateStep(i), i * 400));
+    }
+    return () => timers.forEach(clearTimeout);
+  }, []);
+  
+  const { roi, sellPrice, breakEven, totalKW, inverter, panel, panelCount, battery, profit, margin, totalCost, equipmentCost, installCost } = active;
+  
+  const compareBank = calculateInvestmentComparison(sellPrice, 30, PRICING_CONFIG.comparisonRates.bank);
+  const compareStock = calculateInvestmentComparison(sellPrice, 30, PRICING_CONFIG.comparisonRates.stock);
+  const compareGold = calculateInvestmentComparison(sellPrice, 30, PRICING_CONFIG.comparisonRates.gold);
+  const co2Saved = calculateCO2(roi.yearlyKwh, 30);
+  const treeEquivalent = Math.round(co2Saved * 50);
+  
+  const handleCreateQuotation = () => {
+    const itemDescription = `ระบบโซล่าเซลล์ ${totalKW} kW
+- ${inverter.brand} ${inverter.model} × 1 ชุด
+- ${panel.brand} ${panel.model} × ${panelCount} แผ่น
+${battery ? `- ${battery.brand} ${battery.model} × 1 ลูก` : ''}
+- พร้อมติดตั้งและรับประกัน`;
+    
+    onCreateQuotation({
+      customerName, customerPhone, customerAddress,
+      customerMode, selectedCustomerId,
+      items: [{
+        id: `item-${Date.now()}`,
+        name: itemDescription,
+        qty: 1, unit: 'ชุด',
+        unitPrice: sellPrice, amount: sellPrice,
+      }],
+      totalAmount: sellPrice,
+    });
+  };
+
+  const AnimatedNumber = ({ value, suffix = '', show, duration = 800 }) => {
+    const [display, setDisplay] = useState(0);
+    useEffect(() => {
+      if (!show) return;
+      const startTime = Date.now();
+      const tick = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        setDisplay(Math.round(value * eased));
+        if (progress < 1) requestAnimationFrame(tick);
+      };
+      tick();
+    }, [show, value]);
+    return <>{display.toLocaleString()}{suffix}</>;
+  };
+
+  return (
+    <div className="space-y-4 animate-fade-in">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="display-font text-3xl text-stone-800">🎯 ข้อเสนอพิเศษ</h2>
+          <p className="text-sm text-stone-500">สำหรับ {customerName}</p>
+        </div>
+        <button onClick={onBack} className="text-sm text-stone-600 hover:text-stone-800">← กลับ</button>
+      </div>
+
+      {/* Big Price Card */}
+      <div className={`bg-gradient-to-br from-amber-400 via-orange-400 to-orange-500 rounded-3xl p-6 text-white shadow-xl text-center transition-all duration-700 ${animateStep >= 1 ? 'scale-100 opacity-100' : 'scale-90 opacity-0'}`}>
+        <div className="text-6xl mb-2">{active.badge}</div>
+        <div className="text-xs opacity-90 mb-1">ระบบที่เลือก</div>
+        <div className="text-xl font-bold mb-3">{active.label}</div>
+        <div className="bg-white/20 rounded-2xl p-4 backdrop-blur">
+          <div className="text-xs opacity-90">ราคาทั้งหมด</div>
+          {editPrice ? (
+            <div className="flex items-center gap-2 my-2">
+              <input type="number" value={customSellPrice}
+                onChange={e => setCustomSellPrice(Number(e.target.value) || 0)}
+                className="flex-1 px-3 py-2 rounded-xl text-stone-800 text-2xl font-bold text-right" />
+              <button onClick={() => setEditPrice(false)}
+                className="px-3 py-2 bg-white text-amber-600 rounded-xl font-bold text-sm">✓</button>
+            </div>
+          ) : (
+            <div className="text-5xl font-bold mt-1 cursor-pointer" onClick={() => setEditPrice(true)}>
+              <AnimatedNumber value={sellPrice} show={animateStep >= 1} />
+            </div>
+          )}
+          <div className="text-xs opacity-90 mt-1">
+            ≈ {Math.round(sellPrice / totalKW).toLocaleString()} ฿/kW
+            {!editPrice && <button onClick={() => setEditPrice(true)} className="ml-2 underline opacity-80">✏️ ปรับราคา</button>}
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-2 mt-4 text-xs">
+          <div>🔌 {inverter.size}kW</div>
+          <div>☀️ {panelCount} แผ่น</div>
+          <div>{battery ? `🔋 ${battery.capacity}kWh` : '❌ ไม่มีแบต'}</div>
+        </div>
+      </div>
+
+      {/* Profit (เซลส์เห็น — ซ่อนปกติ) */}
+      <div className="bg-white rounded-2xl p-3 border-2 border-dashed border-stone-300">
+        <button onClick={() => setShowProfit(!showProfit)}
+          className="w-full flex items-center justify-between text-sm">
+          <span className="font-medium text-stone-700">🔒 ข้อมูลภายใน (เซลส์)</span>
+          <span className="text-stone-500">{showProfit ? '▼' : '▶'}</span>
+        </button>
+        {showProfit && (
+          <div className="mt-3 space-y-1.5 text-sm">
+            <div className="flex justify-between"><span className="text-stone-600">ต้นทุนอุปกรณ์:</span><span>{equipmentCost?.toLocaleString() || 0} ฿</span></div>
+            <div className="flex justify-between"><span className="text-stone-600">ค่าติดตั้ง ({companyInfo?.installCostPct || 10}%):</span><span>{installCost?.toLocaleString() || 0} ฿</span></div>
+            <div className="flex justify-between border-t pt-1.5"><span className="font-medium">ต้นทุนรวม:</span><span className="font-medium">{totalCost.toLocaleString()} ฿</span></div>
+            <div className="flex justify-between"><span className="text-stone-600">Margin:</span><span>{margin}%</span></div>
+            <div className="flex justify-between bg-emerald-50 rounded-lg p-2"><span className="font-bold text-emerald-700">💰 กำไร:</span><span className="font-bold text-emerald-700">{(profit || 0).toLocaleString()} ฿</span></div>
+          </div>
+        )}
+      </div>
+
+      {/* Energy Production */}
+      <div className={`bg-white rounded-2xl p-4 shadow-sm border border-emerald-200 transition-all duration-700 ${animateStep >= 2 ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-2xl">⚡</span>
+          <h3 className="font-bold text-stone-800">ผลผลิตและประหยัดค่าไฟ</h3>
+          {meterType === 'tou' && <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">TOU</span>}
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-emerald-50 rounded-xl p-3 text-center">
+            <div className="text-xs text-stone-600">ผลิตไฟต่อเดือน</div>
+            <div className="text-2xl font-bold text-emerald-700">
+              <AnimatedNumber value={roi.monthlyKwh} show={animateStep >= 2} />
+            </div>
+            <div className="text-xs text-stone-500">kWh</div>
+          </div>
+          <div className="bg-amber-50 rounded-xl p-3 text-center">
+            <div className="text-xs text-stone-600">ประหยัดต่อเดือน</div>
+            <div className="text-2xl font-bold text-amber-700">
+              <AnimatedNumber value={roi.monthlySavings} show={animateStep >= 2} />
+            </div>
+            <div className="text-xs text-stone-500">฿</div>
+          </div>
+        </div>
+        <div className="text-center text-sm text-stone-600 mt-2">
+          = <strong className="text-amber-700">{roi.yearlySavings.toLocaleString()} ฿/ปี</strong>
+        </div>
+      </div>
+
+      {/* Break Even */}
+      <div className={`bg-white rounded-2xl p-4 shadow-sm border border-blue-200 transition-all duration-700 ${animateStep >= 3 ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-2xl">🎯</span>
+          <h3 className="font-bold text-stone-800">จุดคุ้มทุน</h3>
+        </div>
+        <div className="text-center">
+          <div className="text-4xl font-bold text-blue-600">{breakEven} ปี</div>
+          <div className="text-xs text-stone-500 mt-1">หลังจากนั้น = กำไรล้วน!</div>
+        </div>
+        <div className="mt-3 bg-stone-100 rounded-full h-3 overflow-hidden">
+          <div className="h-full bg-gradient-to-r from-amber-400 to-emerald-500 rounded-full transition-all duration-1500" 
+               style={{ width: animateStep >= 3 ? `${Math.min(100, (breakEven/30)*100)}%` : '0%' }} />
+        </div>
+        <div className="flex justify-between text-xs text-stone-500 mt-1">
+          <span>เริ่ม</span>
+          <span>30 ปี (อายุระบบ)</span>
+        </div>
+      </div>
+
+      {/* 30-Year Profit Bars */}
+      <div className={`bg-white rounded-2xl p-4 shadow-sm border border-emerald-200 transition-all duration-700 ${animateStep >= 4 ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-2xl">💎</span>
+          <h3 className="font-bold text-stone-800">กำไรในระยะยาว</h3>
+        </div>
+        <div className="space-y-2">
+          {[
+            { years: 5, value: roi.profit5 - sellPrice, color: 'stone' },
+            { years: 10, value: roi.profit10 - sellPrice, color: 'amber' },
+            { years: 20, value: roi.profit20 - sellPrice, color: 'orange' },
+            { years: 30, value: roi.profit30 - sellPrice, color: 'emerald' },
+          ].map((d, idx) => {
+            const max = roi.profit30 - sellPrice;
+            const pct = max > 0 ? (d.value / max) * 100 : 0;
+            return (
+              <div key={d.years}>
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <span className="font-medium text-stone-700">{d.years} ปี</span>
+                  <span className={`font-bold text-${d.color}-700`}>
+                    {d.value > 0 ? '+' : ''}{d.value.toLocaleString()} ฿
+                  </span>
+                </div>
+                <div className="h-6 bg-stone-100 rounded-lg overflow-hidden">
+                  <div className={`h-full bg-${d.color}-400 rounded-lg transition-all duration-1000 flex items-center justify-end px-2`}
+                       style={{ width: animateStep >= 4 ? `${Math.max(0, pct)}%` : '0%', transitionDelay: `${idx * 200}ms` }}>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Investment Comparison */}
+      <div className={`bg-white rounded-2xl p-4 shadow-sm border border-amber-200 transition-all duration-700 ${animateStep >= 5 ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-2xl">🏆</span>
+          <h3 className="font-bold text-stone-800">เทียบกับการลงทุนอื่น (30 ปี)</h3>
+        </div>
+        <p className="text-xs text-stone-500 mb-3">หากนำเงิน {sellPrice.toLocaleString()} ฿ ไปลงทุนแบบอื่น</p>
+        
+        {(() => {
+          const solarProfit = roi.profit30 - sellPrice;
+          const max = Math.max(solarProfit, compareBank, compareStock, compareGold);
+          const items = [
+            { icon: '💰', label: 'เงินฝาก', rate: '1.5%', value: compareBank, color: 'stone' },
+            { icon: '🥇', label: 'ทอง',     rate: '5%',   value: compareGold, color: 'yellow' },
+            { icon: '📈', label: 'หุ้น',    rate: '8%',   value: compareStock, color: 'blue' },
+            { icon: '☀️', label: 'Solar (this)', rate: '', value: solarProfit, color: 'emerald', winner: true },
+          ];
+          return (
+            <div className="space-y-2">
+              {items.map((it, idx) => {
+                const pct = max > 0 ? (it.value / max) * 100 : 0;
+                return (
+                  <div key={it.label}>
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className={`font-medium ${it.winner ? 'text-emerald-700' : 'text-stone-700'}`}>
+                        {it.icon} {it.label} {it.rate}
+                      </span>
+                      <span className={`font-bold ${it.winner ? 'text-emerald-700 text-base' : 'text-stone-600'}`}>
+                        +{it.value.toLocaleString()} ฿ {it.winner && '🏆'}
+                      </span>
+                    </div>
+                    <div className="h-5 bg-stone-100 rounded-lg overflow-hidden">
+                      <div className={`h-full ${it.winner ? 'bg-gradient-to-r from-amber-400 to-emerald-500' : `bg-${it.color}-300`} transition-all duration-1500`}
+                           style={{ width: animateStep >= 5 ? `${Math.max(2, pct)}%` : '0%', transitionDelay: `${idx * 200}ms` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* CO2 */}
+      <div className={`bg-gradient-to-br from-emerald-400 to-teal-500 rounded-2xl p-4 text-white shadow-md transition-all duration-700 ${animateStep >= 6 ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-2xl">🌍</span>
+          <h3 className="font-bold">ผลกระทบต่อสิ่งแวดล้อม</h3>
+        </div>
+        <div className="grid grid-cols-2 gap-3 text-center">
+          <div className="bg-white/20 rounded-xl p-3 backdrop-blur">
+            <div className="text-3xl font-bold">
+              <AnimatedNumber value={co2Saved} show={animateStep >= 6} />
+            </div>
+            <div className="text-xs">ตัน CO₂ ที่ลดได้</div>
+          </div>
+          <div className="bg-white/20 rounded-xl p-3 backdrop-blur">
+            <div className="text-3xl font-bold">
+              🌳 <AnimatedNumber value={treeEquivalent} show={animateStep >= 6} />
+            </div>
+            <div className="text-xs">ต้น (เทียบเท่า)</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Disclaimer */}
+      <div className="bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs text-stone-500">
+        <p>⚠️ <strong>หมายเหตุ:</strong> ตัวเลขประมาณการจาก:</p>
+        <ul className="ml-4 mt-1 space-y-0.5">
+          <li>• ค่าไฟ: {electricityRate}, เพิ่ม {inflationRate}%/ปี</li>
+          <li>• ผลิตไฟ {SOLAR_REGIONS[region]?.hours} ชม./วัน ({SOLAR_REGIONS[region]?.label})</li>
+          <li>• ค่าจริงอาจแตกต่างตามสภาพอากาศและการใช้งาน</li>
+        </ul>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex gap-2 sticky bottom-2 bg-white p-2 rounded-2xl shadow-lg border border-stone-200">
+        <button onClick={onEdit}
+          className="flex-1 px-4 py-3 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl font-medium">
+          ⚙️ ปรับแต่ง
+        </button>
+        <button onClick={handleCreateQuotation}
+          className="flex-[2] px-4 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-medium">
+          📄 สร้างใบเสนอราคา
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ============== DOCUMENT MODAL (สร้าง/แก้ไขเอกสาร) ==============
 function DocumentModal({ doc, defaultType = 'quotation', documents, customers, jobs, companyInfo, onClose, onSave }) {
   const isEdit = !!doc;
@@ -3350,9 +4688,10 @@ function DocumentModal({ doc, defaultType = 'quotation', documents, customers, j
   };
 
   const typeOptions = [
-    { id: 'quotation', label: '📄 ใบเสนอราคา (Quotation)', color: 'blue' },
-    { id: 'invoice', label: '🧾 ใบแจ้งหนี้ (Invoice)', color: 'amber' },
-    { id: 'receipt', label: '✅ ใบเสร็จรับเงิน (Receipt)', color: 'emerald' },
+    { id: 'quotation', label: '📄 ใบเสนอราคา', color: 'blue' },
+    { id: 'invoice', label: '🧾 ใบแจ้งหนี้', color: 'amber' },
+    { id: 'receipt-deposit', label: '💰 RC มัดจำ', color: 'cyan' },
+    { id: 'receipt-final', label: '✅ RC เต็ม', color: 'emerald' },
   ];
 
   const [submitError, setSubmitError] = useState('');
@@ -3388,7 +4727,7 @@ function DocumentModal({ doc, defaultType = 'quotation', documents, customers, j
       {/* Type Selector */}
       <div className="mb-4">
         <label className="block text-sm font-medium text-stone-700 mb-2">ประเภทเอกสาร</label>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {typeOptions.map(opt => (
             <button
               key={opt.id}
@@ -3398,7 +4737,7 @@ function DocumentModal({ doc, defaultType = 'quotation', documents, customers, j
                 const newDocNumber = isEdit ? form.docNumber : generateDocNumber(newType, documents);
                 setForm({...form, type: newType, docNumber: newDocNumber});
               }}
-              className={`p-3 rounded-xl border-2 text-sm font-medium transition-all ${
+              className={`p-2 rounded-xl border-2 text-xs font-medium transition-all ${
                 form.type === opt.id ? `border-${opt.color}-500 bg-${opt.color}-50 text-${opt.color}-700` : 'border-stone-200 bg-white'
               }`}
             >
@@ -3625,11 +4964,15 @@ function DocumentPreview({ doc, companyInfo, fmt, onClose }) {
   const typeLabel = {
     quotation: 'ใบเสนอราคา',
     invoice: 'ใบแจ้งหนี้',
+    'receipt-deposit': 'ใบเสร็จรับเงิน (มัดจำ)',
+    'receipt-final': 'ใบเสร็จรับเงิน (เต็มจำนวน)',
     receipt: 'ใบเสร็จรับเงิน',
   }[doc.type] || 'เอกสาร';
   const typeLabelEn = {
     quotation: 'Quotation',
     invoice: 'Invoice',
+    'receipt-deposit': 'Deposit Receipt',
+    'receipt-final': 'Final Receipt',
     receipt: 'Receipt',
   }[doc.type] || 'Document';
 
@@ -3948,6 +5291,61 @@ function CompanySettingsModal({ companyInfo, onClose, onSave }) {
           className={inputCls} rows={4}
           placeholder="แผงโซล่าเซลล์: 25 ปี" />
       </Field>
+
+      {/* Sales Settings */}
+      <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-3 my-3">
+        <h3 className="font-bold text-amber-800 text-sm mb-2">💰 ตั้งค่าการเสนอขาย</h3>
+        <p className="text-xs text-stone-600 mb-3">ปรับ % กำไรที่บวกจากต้นทุนของแต่ละขนาดงาน</p>
+        
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <div>
+            <label className="text-xs text-stone-600">เล็ก (&lt;5kW)</label>
+            <div className="flex items-center gap-1">
+              <input type="number" 
+                value={form.margins?.small ?? 25}
+                onChange={e => update('margins', {...(form.margins || {}), small: Number(e.target.value) || 0})}
+                className="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-sm text-right" />
+              <span className="text-stone-600 text-sm">%</span>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-stone-600">กลาง (5-10kW)</label>
+            <div className="flex items-center gap-1">
+              <input type="number"
+                value={form.margins?.medium ?? 20}
+                onChange={e => update('margins', {...(form.margins || {}), medium: Number(e.target.value) || 0})}
+                className="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-sm text-right" />
+              <span className="text-stone-600 text-sm">%</span>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-stone-600">ใหญ่ (&gt;10kW)</label>
+            <div className="flex items-center gap-1">
+              <input type="number"
+                value={form.margins?.large ?? 15}
+                onChange={e => update('margins', {...(form.margins || {}), large: Number(e.target.value) || 0})}
+                className="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-sm text-right" />
+              <span className="text-stone-600 text-sm">%</span>
+            </div>
+          </div>
+        </div>
+        
+        <div>
+          <label className="text-xs text-stone-600">💼 ค่าติดตั้ง (% ของวัสดุ)</label>
+          <div className="flex items-center gap-1">
+            <input type="number"
+              value={form.installCostPct ?? 10}
+              onChange={e => update('installCostPct', Number(e.target.value) || 0)}
+              className="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-sm text-right" />
+            <span className="text-stone-600 text-sm">%</span>
+          </div>
+          <p className="text-xs text-stone-500 mt-1">ระบบจะบวก % นี้เข้ากับต้นทุนวัสดุก่อนคำนวณ margin</p>
+        </div>
+        
+        <div className="bg-white rounded-lg p-2 mt-3 text-xs">
+          <strong>ตัวอย่าง:</strong> ต้นทุนวัสดุ 100,000 ฿ + ติดตั้ง {form.installCostPct ?? 10}% = {(100000 * (1 + (form.installCostPct ?? 10)/100)).toLocaleString()} ฿ → margin {form.margins?.medium ?? 20}% = ขาย {Math.round(100000 * (1 + (form.installCostPct ?? 10)/100) * (1 + (form.margins?.medium ?? 20)/100)).toLocaleString()} ฿
+        </div>
+      </div>
 
       <button onClick={() => onSave(form)} className="w-full bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-xl font-medium mt-4 flex items-center justify-center gap-2">
         <Save className="w-4 h-4" /> บันทึก
