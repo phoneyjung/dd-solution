@@ -2644,13 +2644,27 @@ function DDSolutionManager({ currentUser, onLogout }) {
             const paid = getChainPaid(chainId);
             const unpaid = total - paid;
             
-            // ค้นหา job ที่ผูกกับ chain นี้
-            const linkedJob = master?.jobId ? jobs.find(j => j.id === master.jobId) : null;
+            // ค้นหา job ที่ผูกกับ chain นี้ — ลองหาหลายทาง:
+            // 1. job.quotationId === master.id (ที่ตั้งตอนสร้างงาน — แม่นที่สุด)
+            // 2. master.jobId (ตั้งตอนสร้างงาน อาจ stale)
+            // 3. job.quotationId === chainId
+            let linkedJob = jobs.find(j => 
+              j.quotationId === master?.id || 
+              j.quotationId === chainId ||
+              (master?.jobId && j.id === master.jobId)
+            );
+            
+            console.log('[จบงาน] master:', master?.docNumber, 'master.id:', master?.id, 'chainId:', chainId);
+            console.log('[จบงาน] master.jobId:', master?.jobId);
+            console.log('[จบงาน] all jobs:', jobs.map(j => ({id: j.id, customer: j.customer, qId: j.quotationId})));
+            console.log('[จบงาน] linkedJob:', linkedJob?.customer || 'ไม่พบ');
+            console.log('[จบงาน] costsByCategory.wire:', linkedJob?.costsByCategory?.wire);
             
             // ค้นหาสายไฟ "ม้วนใหม่" ที่มีของเหลือ
             const wireRemainings = [];
             if (linkedJob && linkedJob.costsByCategory?.wire) {
               linkedJob.costsByCategory.wire.forEach(item => {
+                console.log('[จบงาน] wire item:', item);
                 // เฉพาะที่ไม่ใช่ stock (เป็นม้วนใหม่ที่ซื้อมา) และมีเหลือ
                 if (!item.stockId && Number(item.rollLength || 0) > 0) {
                   const remaining = Number(item.rollLength || 0) - Number(item.usedLength || 0);
@@ -2666,6 +2680,8 @@ function DDSolutionManager({ currentUser, onLogout }) {
                 }
               });
             }
+            
+            console.log('[จบงาน] wireRemainings:', wireRemainings);
             
             let warning = '';
             if (unpaid > 0) {
@@ -3160,11 +3176,17 @@ function DDSolutionManager({ currentUser, onLogout }) {
         <JobModal job={editingItem} partners={partners} stock={stock} documents={documents} onUpdateStock={saveStock}
           onClose={() => { setShowJobModal(false); setEditingItem(null); }}
           onSave={(data) => {
-            if (editingItem) {
-              saveJobs(jobs.map(j => j.id === editingItem.id ? data : j), 'edit', `แก้ไข: ${data.customer}`);
+            // เช็คว่าเป็น "แก้ไข" หรือ "เพิ่มใหม่" จาก id
+            // - แก้ไข: editingItem มี id (มาจาก JobCard)
+            // - เพิ่มใหม่: editingItem เป็น null หรือ draftJob (ไม่มี id)
+            const isEditing = editingItem && editingItem.id;
+            
+            if (isEditing) {
+              saveJobs(jobs.map(j => j.id === editingItem.id ? { ...data, id: editingItem.id } : j), 'edit', `แก้ไข: ${data.customer}`);
             } else {
               const newJobId = `job-${Date.now()}`;
-              saveJobs([...jobs, { ...data, id: newJobId }], 'add', `เพิ่ม: ${data.customer} (${data.salePrice} ฿)`);
+              const newJob = { ...data, id: newJobId };
+              saveJobs([...jobs, newJob], 'add', `เพิ่ม: ${data.customer} (${data.salePrice} ฿)`);
               // ถ้ามี quotationId → ผูก doc ↔ job (อัพเดทกลับ)
               if (data.quotationId) {
                 saveDocuments(
