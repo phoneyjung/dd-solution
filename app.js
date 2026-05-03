@@ -452,20 +452,58 @@ const PRICING_CONFIG = {
   daysPerMonth: 30,
 };
 
-// Equipment Catalog (ใช้ใน Sales Presentation)
+// Sales Catalog Default (สินค้าที่ขาย + ราคาตลาด) - เซลส์จัดการได้ในแอป
+// ราคา = ราคาตลาดปัจจุบัน (ใช้เมื่อสต็อกหมด ต้องซื้อใหม่)
+const DEFAULT_SALES_CATALOG = [
+  // Inverters
+  { id: 'sc-inv-deye-5h', category: 'inverter', brand: 'Deye',   model: 'Hybrid 5kW', size: 5,  type: 'hybrid', marketPrice: 33500, tier: 'standard', active: true },
+  { id: 'sc-inv-hyb-10',  category: 'inverter', brand: 'Hybrid', model: '10kW',       size: 10, type: 'hybrid', marketPrice: 59000, tier: 'premium',  active: true },
+  // Panels
+  { id: 'sc-pan-jinko-725', category: 'panel', brand: 'Jinko', model: '725W', watt: 725, marketPrice: 4000, tier: 'premium',  active: true },
+  { id: 'sc-pan-longi-640', category: 'panel', brand: 'Longi', model: '640W', watt: 640, marketPrice: 2911, tier: 'standard', active: true },
+  // Batteries
+  { id: 'sc-bat-deye-16', category: 'battery', brand: 'Deye', model: '16kWh', capacity: 16, marketPrice: 67303, tier: 'standard', active: true },
+];
+
+// Legacy fallback (เผื่อ catalog ว่าง)
 const EQUIPMENT_CATALOG = {
-  inverters: [
-    { id: 'inv-deye-5h', brand: 'Deye',   model: 'Hybrid 5kW', size: 5,  type: 'hybrid', cost: 33500, tier: 'standard' },
-    { id: 'inv-hyb-10',  brand: 'Hybrid', model: '10kW',       size: 10, type: 'hybrid', cost: 59000, tier: 'premium' },
-  ],
-  panels: [
-    { id: 'pan-jinko-725', brand: 'Jinko', model: '725W', watt: 725, cost: 4000, tier: 'premium' },
-    { id: 'pan-longi-640', brand: 'Longi', model: '640W', watt: 640, cost: 2911, tier: 'standard' },
-  ],
-  batteries: [
-    { id: 'bat-deye-16', brand: 'Deye', model: '16kWh', capacity: 16, cost: 67303, tier: 'standard' },
-  ],
+  inverters: DEFAULT_SALES_CATALOG.filter(i => i.category === 'inverter').map(i => ({...i, cost: i.marketPrice})),
+  panels: DEFAULT_SALES_CATALOG.filter(i => i.category === 'panel').map(i => ({...i, cost: i.marketPrice})),
+  batteries: DEFAULT_SALES_CATALOG.filter(i => i.category === 'battery').map(i => ({...i, cost: i.marketPrice})),
 };
+
+// Smart cost calculator: ใช้ stock ก่อน → ส่วนที่เหลือ market price
+function calcSmartCost(catalogItem, qtyNeeded, stock = []) {
+  // หา stock ที่ตรงกับ catalog (match brand+model+watt/size/capacity)
+  const matchingStock = stock
+    .filter(s => s.qty > 0 && s.salesSpecs &&
+      s.salesSpecs.brand === catalogItem.brand && 
+      s.salesSpecs.model === catalogItem.model)
+    .sort((a, b) => a.unitCost - b.unitCost); // ใช้ของถูกก่อน
+  
+  let cost = 0;
+  let remaining = qtyNeeded;
+  let fromStock = 0;
+  let fromMarket = 0;
+  const breakdown = [];
+  
+  for (const stk of matchingStock) {
+    if (remaining <= 0) break;
+    const useQty = Math.min(stk.qty, remaining);
+    cost += useQty * stk.unitCost;
+    fromStock += useQty;
+    breakdown.push({ source: 'stock', stockId: stk.id, qty: useQty, unitCost: stk.unitCost });
+    remaining -= useQty;
+  }
+  
+  if (remaining > 0) {
+    cost += remaining * catalogItem.marketPrice;
+    fromMarket = remaining;
+    breakdown.push({ source: 'market', qty: remaining, unitCost: catalogItem.marketPrice });
+  }
+  
+  return { cost, fromStock, fromMarket, breakdown, total: qtyNeeded };
+}
 
 function getMargin(inverterKW, companyInfo = null) {
   const margins = companyInfo?.margins || PRICING_CONFIG.marginByCategory;
@@ -524,35 +562,25 @@ function calculateCO2(yearlyKwh, years) {
   return Math.round(yearlyKwh * 0.5 * years / 1000); // ตัน
 }
 
-// Smart Package Recommender — ดึง equipment จาก stock
-function recommendPackages({ monthlyBill, hasBattery, region, stock = [], companyInfo = null }) {
+// Smart Package Recommender — ใช้ catalog + smart pricing
+function recommendPackages({ monthlyBill, hasBattery, region, stock = [], catalog = [], companyInfo = null }) {
   const peakHours = SOLAR_REGIONS[region]?.hours || 4.0;
   const electricityRate = PRICING_CONFIG.electricityRate;
   
   const monthlyKwhUsage = monthlyBill / electricityRate;
   const requiredKW = monthlyKwhUsage / 30 / peakHours;
   
-  // ดึง equipment จาก stock ที่ติด inSalesCatalog
-  const stockInverters = stock.filter(s => s.inSalesCatalog && s.category === 'inverter' && s.salesSpecs);
-  const stockPanels = stock.filter(s => s.inSalesCatalog && s.category === 'panel' && s.salesSpecs);
-  const stockBatteries = stock.filter(s => s.inSalesCatalog && s.category === 'battery' && s.salesSpecs);
-  
-  // Map ให้เป็นรูปแบบ catalog (เผื่อ stock ว่าง ใช้ default)
-  const inverters = stockInverters.length > 0 
-    ? stockInverters.map(s => ({ id: s.id, brand: s.salesSpecs.brand, model: s.salesSpecs.model, size: s.salesSpecs.size, type: s.salesSpecs.type || 'hybrid', cost: s.unitCost, tier: s.salesSpecs.tier || 'standard', stockId: s.id }))
-    : EQUIPMENT_CATALOG.inverters;
-  const panels = stockPanels.length > 0
-    ? stockPanels.map(s => ({ id: s.id, brand: s.salesSpecs.brand, model: s.salesSpecs.model, watt: s.salesSpecs.watt, cost: s.unitCost, tier: s.salesSpecs.tier || 'standard', stockId: s.id }))
-    : EQUIPMENT_CATALOG.panels;
-  const batteries = stockBatteries.length > 0
-    ? stockBatteries.map(s => ({ id: s.id, brand: s.salesSpecs.brand, model: s.salesSpecs.model, capacity: s.salesSpecs.capacity, cost: s.unitCost, tier: s.salesSpecs.tier || 'standard', stockId: s.id }))
-    : EQUIPMENT_CATALOG.batteries;
+  // ดึงเฉพาะ active items ใน catalog
+  const activeCatalog = (catalog || []).filter(c => c.active !== false);
+  const inverters = activeCatalog.filter(c => c.category === 'inverter');
+  const panels = activeCatalog.filter(c => c.category === 'panel');
+  const batteries = activeCatalog.filter(c => c.category === 'battery');
   
   if (inverters.length === 0 || panels.length === 0) return null;
   
   // === Package 1: ถูกสุด ===
-  const cheapInverter = [...inverters].sort((a, b) => a.cost - b.cost)[0];
-  const cheapPanel = [...panels].sort((a, b) => a.cost - b.cost)[0];
+  const cheapInverter = [...inverters].sort((a, b) => a.marketPrice - b.marketPrice)[0];
+  const cheapPanel = [...panels].sort((a, b) => a.marketPrice - b.marketPrice)[0];
   const cheapPanelCount = Math.ceil(cheapInverter.size * 1100 / cheapPanel.watt);
   
   // === Package 2: คุ้มสุด ===
@@ -570,7 +598,12 @@ function recommendPackages({ monthlyBill, hasBattery, region, stock = [], compan
   const installPct = (companyInfo?.installCostPct || 10) / 100;
   
   const buildPackage = (inverter, panel, panelCount, battery, label, badge) => {
-    const equipmentCost = inverter.cost + (panel.cost * panelCount) + (battery?.cost || 0);
+    // Smart cost: ใช้ stock ก่อน → ที่ขาด ใช้ market
+    const invCost = calcSmartCost(inverter, 1, stock);
+    const panCost = calcSmartCost(panel, panelCount, stock);
+    const batCost = battery ? calcSmartCost(battery, 1, stock) : { cost: 0, fromStock: 0, fromMarket: 0, breakdown: [], total: 0 };
+    
+    const equipmentCost = invCost.cost + panCost.cost + batCost.cost;
     const installCost = Math.round(equipmentCost * installPct);
     const grandCost = equipmentCost + installCost;
     const margin = getMargin(inverter.size, companyInfo);
@@ -583,6 +616,8 @@ function recommendPackages({ monthlyBill, hasBattery, region, stock = [], compan
     return {
       label, badge,
       inverter, panel, panelCount, battery,
+      // เก็บ invCost ไว้ เผื่อใช้แสดง breakdown
+      costBreakdown: { invCost, panCost, batCost },
       equipmentCost,
       installCost,
       totalCost: grandCost,
@@ -826,6 +861,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
   const [activityLog, setActivityLog] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [companyInfo, setCompanyInfo] = useState(DEFAULT_COMPANY_INFO);
+  const [salesCatalog, setSalesCatalog] = useState([]);
   const [showJobModal, setShowJobModal] = useState(false);
   const [showStockModal, setShowStockModal] = useState(false);
   const [showPartnerModal, setShowPartnerModal] = useState(false);
@@ -846,7 +882,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
   useEffect(() => {
     const load = async () => {
       try {
-        const [j, s, p, t, c, a, d, ci] = await Promise.all([
+        const [j, s, p, t, c, a, d, ci, sc] = await Promise.all([
           window.storage.get('dd5:jobs', true).catch(() => null),
           window.storage.get('dd5:stock', true).catch(() => null),
           window.storage.get('dd5:partners', true).catch(() => null),
@@ -855,6 +891,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
           window.storage.get('dd5:activity', true).catch(() => null),
           window.storage.get('dd5:documents', true).catch(() => null),
           window.storage.get('dd5:company', true).catch(() => null),
+          window.storage.get('dd5:salesCatalog', true).catch(() => null),
         ]);
         setJobs(j ? JSON.parse(j.value) : DEFAULT_JOBS);
         setStock(s ? JSON.parse(s.value) : DEFAULT_STOCK);
@@ -864,11 +901,13 @@ function DDSolutionManager({ currentUser, onLogout }) {
         setActivityLog(a ? JSON.parse(a.value) : []);
         setDocuments(d ? migrateDocuments(JSON.parse(d.value)) : DEFAULT_DOCUMENTS);
         setCompanyInfo(ci ? JSON.parse(ci.value) : DEFAULT_COMPANY_INFO);
+        setSalesCatalog(sc ? JSON.parse(sc.value) : DEFAULT_SALES_CATALOG);
         if (!j) await window.storage.set('dd5:jobs', JSON.stringify(DEFAULT_JOBS), true);
         if (!s) await window.storage.set('dd5:stock', JSON.stringify(DEFAULT_STOCK), true);
         if (!p) await window.storage.set('dd5:partners', JSON.stringify(DEFAULT_PARTNERS), true);
         if (!t) await window.storage.set('dd5:transactions', JSON.stringify(DEFAULT_TRANSACTIONS), true);
         if (!c) await window.storage.set('dd5:customers', JSON.stringify(DEFAULT_CUSTOMERS), true);
+        if (!sc) await window.storage.set('dd5:salesCatalog', JSON.stringify(DEFAULT_SALES_CATALOG), true);
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
     };
@@ -900,6 +939,11 @@ function DDSolutionManager({ currentUser, onLogout }) {
     setStock(data);
     try { await window.storage.set('dd5:stock', JSON.stringify(data), true); } catch(e){}
     if (action) await logActivity(action, 'สต๊อก', details);
+  };
+  const saveSalesCatalog = async (data, action, details) => {
+    setSalesCatalog(data);
+    try { await window.storage.set('dd5:salesCatalog', JSON.stringify(data), true); } catch(e){}
+    if (action) await logActivity(action, 'แคตตาล็อกขาย', details);
   };
   const savePartners = async (data, action, details) => {
     setPartners(data);
@@ -1431,6 +1475,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
           {[
             { id: 'dashboard', label: 'แดชบอร์ด', icon: BarChart3 },
             { id: 'sales', label: 'เสนอขาย', icon: TrendingUp },
+            { id: 'catalog', label: 'แคตตาล็อกขาย', icon: DollarSign },
             { id: 'jobs', label: 'งาน', icon: Briefcase },
             { id: 'customers', label: 'ลูกค้า', icon: UserCircle },
             { id: 'stock', label: 'สต็อก', icon: Package },
@@ -1576,6 +1621,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
           <SalesPresentation
             customers={customers}
             stock={stock}
+            catalog={salesCatalog}
             companyInfo={companyInfo}
             onCreateQuotation={(data) => {
               // 1. ถ้าเป็นลูกค้าใหม่ → save customer ก่อน
@@ -1634,6 +1680,20 @@ function DDSolutionManager({ currentUser, onLogout }) {
               setActiveTab('documents');
             }}
             onSaveCustomer={(c) => saveCustomers([...customers, c], 'add', `เพิ่มลูกค้า: ${c.name}`)}
+          />
+        )}
+
+        {activeTab === 'catalog' && (
+          <SalesCatalogManager 
+            catalog={salesCatalog}
+            stock={stock}
+            companyInfo={companyInfo}
+            onSaveCatalog={saveSalesCatalog}
+            onSaveCompany={async (data, action, details) => {
+              setCompanyInfo(data);
+              try { await window.storage.set('dd5:company', JSON.stringify(data), true); } catch(e){}
+              if (action) await logActivity(action, 'ข้อมูลบริษัท', details);
+            }}
           />
         )}
 
@@ -3783,8 +3843,259 @@ function CapitalModal({ mode, partners, actualInvestments, cashOnHand, fmt, onCl
   );
 }
 
+// ============== SALES CATALOG MANAGER (แคตตาล็อกขาย) ==============
+function SalesCatalogManager({ catalog, stock, companyInfo, onSaveCatalog, onSaveCompany }) {
+  const [editing, setEditing] = useState(null); // null | 'new' | item
+  const [filterCat, setFilterCat] = useState('all');
+  
+  // Helpers: หาสต็อกที่ตรงกับ catalog item
+  const getStockMatch = (item) => {
+    return (stock || []).filter(s => 
+      s.qty > 0 && s.salesSpecs &&
+      s.salesSpecs.brand === item.brand && 
+      s.salesSpecs.model === item.model
+    );
+  };
+  
+  const filteredCatalog = catalog.filter(c => filterCat === 'all' || c.category === filterCat);
+  
+  const handleAdd = () => setEditing('new');
+  const handleEdit = (item) => setEditing(item);
+  const handleDelete = (item) => {
+    if (!window.confirm(`ลบ "${item.brand} ${item.model}" ออกจากแคตตาล็อก?`)) return;
+    onSaveCatalog(catalog.filter(c => c.id !== item.id), 'delete', `ลบ: ${item.brand} ${item.model}`);
+  };
+  const handleSave = (data) => {
+    if (editing === 'new') {
+      const newItem = { ...data, id: `sc-${Date.now()}` };
+      onSaveCatalog([...catalog, newItem], 'add', `เพิ่ม: ${data.brand} ${data.model}`);
+    } else {
+      onSaveCatalog(catalog.map(c => c.id === editing.id ? { ...editing, ...data } : c), 'edit', `แก้ไข: ${data.brand} ${data.model}`);
+    }
+    setEditing(null);
+  };
+  const handleToggleActive = (item) => {
+    onSaveCatalog(catalog.map(c => c.id === item.id ? { ...c, active: !c.active } : c), 'edit', `${item.active ? 'หยุดขาย' : 'เปิดขาย'}: ${item.brand} ${item.model}`);
+  };
+  
+  return (
+    <div className="space-y-4 animate-fade-in">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="display-font text-3xl text-stone-800">💰 แคตตาล็อกขาย</h2>
+          <p className="text-sm text-stone-500">รายการสินค้าและราคาตลาดสำหรับเสนอลูกค้า</p>
+        </div>
+        <button onClick={handleAdd} className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl font-medium shadow-sm">
+          <Plus className="w-4 h-4" /> เพิ่ม
+        </button>
+      </div>
+
+      {/* Cost Settings Section */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-bold text-stone-800">⚙️ ค่าใช้จ่าย + กำไร</h3>
+        </div>
+        
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div>
+            <label className="text-xs text-stone-600 block mb-1">ค่าติดตั้ง (% ของวัสดุ)</label>
+            <div className="flex items-center gap-1">
+              <input type="number" value={companyInfo?.installCostPct ?? 10}
+                onChange={e => onSaveCompany({...companyInfo, installCostPct: Number(e.target.value) || 0}, 'edit', `ปรับค่าติดตั้ง: ${e.target.value}%`)}
+                className="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-sm text-right" />
+              <span className="text-stone-600 text-sm">%</span>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-stone-600 block mb-1">Margin เล็ก (&lt;5kW)</label>
+            <div className="flex items-center gap-1">
+              <input type="number" value={companyInfo?.margins?.small ?? 25}
+                onChange={e => onSaveCompany({...companyInfo, margins: {...(companyInfo?.margins || {}), small: Number(e.target.value) || 0}}, 'edit', `ปรับ margin เล็ก: ${e.target.value}%`)}
+                className="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-sm text-right" />
+              <span className="text-stone-600 text-sm">%</span>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-stone-600 block mb-1">Margin กลาง (5-10kW)</label>
+            <div className="flex items-center gap-1">
+              <input type="number" value={companyInfo?.margins?.medium ?? 20}
+                onChange={e => onSaveCompany({...companyInfo, margins: {...(companyInfo?.margins || {}), medium: Number(e.target.value) || 0}}, 'edit', `ปรับ margin กลาง: ${e.target.value}%`)}
+                className="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-sm text-right" />
+              <span className="text-stone-600 text-sm">%</span>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-stone-600 block mb-1">Margin ใหญ่ (&gt;10kW)</label>
+            <div className="flex items-center gap-1">
+              <input type="number" value={companyInfo?.margins?.large ?? 15}
+                onChange={e => onSaveCompany({...companyInfo, margins: {...(companyInfo?.margins || {}), large: Number(e.target.value) || 0}}, 'edit', `ปรับ margin ใหญ่: ${e.target.value}%`)}
+                className="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-sm text-right" />
+              <span className="text-stone-600 text-sm">%</span>
+            </div>
+          </div>
+        </div>
+        <p className="text-xs text-stone-500 mt-3">
+          💡 ระบบจะใช้ <strong>ของในสต็อก</strong>ก่อน (ราคาทุนเดิม) → ที่เหลือใช้ <strong>ราคาตลาด</strong> (ซื้อใหม่)
+        </p>
+      </div>
+
+      {/* Filter tabs */}
+      <div className="flex gap-2 overflow-x-auto">
+        {[
+          { id: 'all', label: 'ทั้งหมด' },
+          { id: 'inverter', label: '🔌 Inverter' },
+          { id: 'panel', label: '☀️ แผง' },
+          { id: 'battery', label: '🔋 แบต' },
+        ].map(f => (
+          <button key={f.id} onClick={() => setFilterCat(f.id)}
+            className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap ${filterCat === f.id ? 'bg-amber-500 text-white' : 'bg-stone-200 text-stone-600'}`}>
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Catalog list */}
+      <div className="space-y-2">
+        {filteredCatalog.length === 0 ? (
+          <div className="bg-white rounded-2xl p-6 text-center text-stone-500 border border-stone-200">
+            ไม่มีสินค้า — กด ➕ เพื่อเพิ่ม
+          </div>
+        ) : filteredCatalog.map(item => {
+          const stockMatch = getStockMatch(item);
+          const stockTotal = stockMatch.reduce((sum, s) => sum + s.qty, 0);
+          const stockUnitCost = stockMatch.length > 0 ? stockMatch[0].unitCost : null;
+          const catIcon = item.category === 'inverter' ? '🔌' : item.category === 'panel' ? '☀️' : '🔋';
+          
+          return (
+            <div key={item.id} className={`bg-white rounded-2xl p-3 shadow-sm border-2 ${item.active === false ? 'border-stone-200 opacity-60' : 'border-amber-200'}`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xl">{catIcon}</span>
+                    <h3 className="font-bold text-stone-800">{item.brand} {item.model}</h3>
+                    {item.active === false && <span className="text-xs bg-stone-200 text-stone-600 px-2 py-0.5 rounded-full">หยุดขาย</span>}
+                  </div>
+                  <div className="text-xs text-stone-500 mt-1">
+                    {item.category === 'inverter' && `${item.size}kW · ${item.type}`}
+                    {item.category === 'panel' && `${item.watt}W ต่อแผ่น`}
+                    {item.category === 'battery' && `${item.capacity}kWh`}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    <div className="bg-amber-50 rounded-lg p-2">
+                      <div className="text-xs text-stone-500">ราคาตลาด</div>
+                      <div className="font-bold text-amber-700">{item.marketPrice.toLocaleString()} ฿</div>
+                    </div>
+                    <div className={`rounded-lg p-2 ${stockTotal > 0 ? 'bg-emerald-50' : 'bg-stone-50'}`}>
+                      <div className="text-xs text-stone-500">ในสต็อก</div>
+                      {stockTotal > 0 ? (
+                        <div>
+                          <div className="font-bold text-emerald-700">{stockTotal} ชิ้น</div>
+                          <div className="text-xs text-stone-500">@ {stockUnitCost?.toLocaleString()} ฿</div>
+                        </div>
+                      ) : (
+                        <div className="text-stone-400">หมด</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <button onClick={() => handleEdit(item)} className="p-2 hover:bg-stone-100 rounded-lg" title="แก้ไข">
+                    <Edit2 className="w-4 h-4 text-stone-500" />
+                  </button>
+                  <button onClick={() => handleToggleActive(item)} className="p-2 hover:bg-stone-100 rounded-lg" title={item.active === false ? 'เปิดขาย' : 'หยุดขาย'}>
+                    {item.active === false ? <Eye className="w-4 h-4 text-stone-500" /> : <EyeOff className="w-4 h-4 text-stone-500" />}
+                  </button>
+                  <button onClick={() => handleDelete(item)} className="p-2 hover:bg-stone-100 rounded-lg" title="ลบ">
+                    <Trash2 className="w-4 h-4 text-rose-500" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {editing && (
+        <CatalogItemModal item={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSave={handleSave} />
+      )}
+    </div>
+  );
+}
+
+// ============== CATALOG ITEM MODAL ==============
+function CatalogItemModal({ item, onClose, onSave }) {
+  const [form, setForm] = useState(item || {
+    category: 'panel', brand: '', model: '', marketPrice: 0,
+    tier: 'standard', active: true,
+    watt: 0, size: 0, capacity: 0, type: 'hybrid',
+  });
+  const update = (f, v) => setForm({...form, [f]: v});
+  const isInverter = form.category === 'inverter';
+  const isPanel = form.category === 'panel';
+  const isBattery = form.category === 'battery';
+  
+  const canSave = form.brand && form.model && form.marketPrice > 0 && 
+    ((isInverter && form.size > 0) || (isPanel && form.watt > 0) || (isBattery && form.capacity > 0));
+  
+  return (
+    <Modal title={item ? 'แก้ไขสินค้า' : 'เพิ่มสินค้า'} onClose={onClose}>
+      <Field label="ประเภท">
+        <select value={form.category} onChange={e => update('category', e.target.value)} className={inputCls}>
+          <option value="inverter">🔌 Inverter</option>
+          <option value="panel">☀️ แผงโซล่าเซลล์</option>
+          <option value="battery">🔋 แบตเตอรี่</option>
+        </select>
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="แบรนด์"><input value={form.brand} onChange={e => update('brand', e.target.value)} placeholder="Deye / Jinko / Longi" className={inputCls} /></Field>
+        <Field label="รุ่น/Model"><input value={form.model} onChange={e => update('model', e.target.value)} placeholder="Hybrid 5kW / 640W" className={inputCls} /></Field>
+      </div>
+      
+      {isInverter && (
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="ขนาด (kW)"><input type="number" step="0.1" value={form.size || ''} onChange={e => update('size', Number(e.target.value))} className={inputCls} /></Field>
+          <Field label="ประเภท">
+            <select value={form.type || 'hybrid'} onChange={e => update('type', e.target.value)} className={inputCls}>
+              <option value="hybrid">Hybrid</option>
+              <option value="ongrid">On-grid</option>
+              <option value="offgrid">Off-grid</option>
+            </select>
+          </Field>
+        </div>
+      )}
+      {isPanel && (
+        <Field label="กำลัง (วัตต์)"><input type="number" value={form.watt || ''} onChange={e => update('watt', Number(e.target.value))} placeholder="725" className={inputCls} /></Field>
+      )}
+      {isBattery && (
+        <Field label="ความจุ (kWh)"><input type="number" step="0.1" value={form.capacity || ''} onChange={e => update('capacity', Number(e.target.value))} placeholder="16" className={inputCls} /></Field>
+      )}
+      
+      <Field label="ราคาตลาด (฿)" hint="ราคาที่ซื้อจากตลาดวันนี้ — ใช้เมื่อสต็อกหมด">
+        <input type="number" value={form.marketPrice || ''} onChange={e => update('marketPrice', Number(e.target.value))} className={inputCls} />
+      </Field>
+      
+      <Field label="ระดับ (Tier)">
+        <select value={form.tier || 'standard'} onChange={e => update('tier', e.target.value)} className={inputCls}>
+          <option value="standard">Standard</option>
+          <option value="premium">Premium</option>
+        </select>
+      </Field>
+      
+      <label className="flex items-center gap-2 cursor-pointer mt-2">
+        <input type="checkbox" checked={form.active !== false} onChange={e => update('active', e.target.checked)} className="w-5 h-5 rounded text-amber-500" />
+        <span className="text-sm">เปิดขาย (แสดงให้ลูกค้าเลือก)</span>
+      </label>
+      
+      <button onClick={() => onSave(form)} disabled={!canSave}
+        className="w-full bg-amber-500 hover:bg-amber-600 disabled:bg-stone-300 text-white py-3 rounded-xl font-medium mt-4 flex items-center justify-center gap-2">
+        <Save className="w-4 h-4" /> บันทึก
+      </button>
+    </Modal>
+  );
+}
+
 // ============== SALES PRESENTATION (เสนอขาย) ==============
-function SalesPresentation({ customers, stock, companyInfo, onCreateQuotation, onSaveCustomer }) {
+function SalesPresentation({ customers, stock, catalog, companyInfo, onCreateQuotation, onSaveCustomer }) {
   const [step, setStep] = useState(1);
   
   // Customer info
@@ -3827,7 +4138,7 @@ function SalesPresentation({ customers, stock, companyInfo, onCreateQuotation, o
   };
   
   // Calculate packages
-  const packages = recommendPackages({ monthlyBill, hasBattery, region, stock, companyInfo });
+  const packages = recommendPackages({ monthlyBill, hasBattery, region, stock, catalog, companyInfo });
   
   // Get the active selection (package or custom)
   const getActiveSelection = () => {
@@ -3839,7 +4150,11 @@ function SalesPresentation({ customers, stock, companyInfo, onCreateQuotation, o
       if (!inv || !pan || cnt < 1) return null;
       
       const installPct = (companyInfo?.installCostPct || 10) / 100;
-      const equipmentCost = inv.cost + (pan.cost * cnt) + (bat?.cost || 0);
+      // Smart cost (stock first → market)
+      const invCost = calcSmartCost(inv, 1, stock);
+      const panCost = calcSmartCost(pan, cnt, stock);
+      const batCost = bat ? calcSmartCost(bat, 1, stock) : { cost: 0, fromStock: 0, fromMarket: 0, breakdown: [], total: 0 };
+      const equipmentCost = invCost.cost + panCost.cost + batCost.cost;
       const installCost = Math.round(equipmentCost * installPct);
       const grandCost = equipmentCost + installCost;
       const margin = getMargin(inv.size, companyInfo);
@@ -3852,6 +4167,7 @@ function SalesPresentation({ customers, stock, companyInfo, onCreateQuotation, o
         label: 'Custom',
         badge: '⚙️',
         inverter: inv, panel: pan, panelCount: cnt, battery: bat,
+        costBreakdown: { invCost, panCost, batCost },
         equipmentCost, installCost,
         totalCost: grandCost, sellPrice, margin,
         profit: sellPrice - grandCost,
@@ -4123,20 +4439,11 @@ function SalesPresentation({ customers, stock, companyInfo, onCreateQuotation, o
   
   // ============ STEP 3: Custom Builder ============
   if (step === 3) {
-    // ดึง equipment จาก stock
-    const stockInverters = stock.filter(s => s.inSalesCatalog && s.category === 'inverter' && s.salesSpecs);
-    const stockPanels = stock.filter(s => s.inSalesCatalog && s.category === 'panel' && s.salesSpecs);
-    const stockBatteries = stock.filter(s => s.inSalesCatalog && s.category === 'battery' && s.salesSpecs);
-    
-    const inverters = stockInverters.length > 0 
-      ? stockInverters.map(s => ({ id: s.id, brand: s.salesSpecs.brand, model: s.salesSpecs.model, size: s.salesSpecs.size, type: s.salesSpecs.type || 'hybrid', cost: s.unitCost, tier: s.salesSpecs.tier || 'standard' }))
-      : EQUIPMENT_CATALOG.inverters;
-    const panels = stockPanels.length > 0
-      ? stockPanels.map(s => ({ id: s.id, brand: s.salesSpecs.brand, model: s.salesSpecs.model, watt: s.salesSpecs.watt, cost: s.unitCost, tier: s.salesSpecs.tier || 'standard' }))
-      : EQUIPMENT_CATALOG.panels;
-    const batteries = stockBatteries.length > 0
-      ? stockBatteries.map(s => ({ id: s.id, brand: s.salesSpecs.brand, model: s.salesSpecs.model, capacity: s.salesSpecs.capacity, cost: s.unitCost, tier: s.salesSpecs.tier || 'standard' }))
-      : EQUIPMENT_CATALOG.batteries;
+    // ดึง equipment จาก catalog (เฉพาะ active)
+    const activeCatalog = (catalog || []).filter(c => c.active !== false);
+    const inverters = activeCatalog.filter(c => c.category === 'inverter');
+    const panels = activeCatalog.filter(c => c.category === 'panel');
+    const batteries = activeCatalog.filter(c => c.category === 'battery');
     
     return (
       <div className="space-y-4 animate-fade-in">
@@ -4255,6 +4562,7 @@ function SalesPresentation({ customers, stock, companyInfo, onCreateQuotation, o
         inflationRate={inflationRate}
         companyInfo={companyInfo}
         stock={stock}
+        catalog={catalog}
         calcOpts={calcOpts}
         onBack={() => setStep(2)}
         onCreateQuotation={onCreateQuotation}
@@ -4267,7 +4575,7 @@ function SalesPresentation({ customers, stock, companyInfo, onCreateQuotation, o
 }
 
 // ============== SALES CLOSING INFOGRAPHIC ==============
-function SalesPresentationCloser({ active: initialActive, customerName, customerPhone, customerAddress, customerMode, selectedCustomerId, region, meterType, monthlyBill, electricityRate, inflationRate, companyInfo, stock, calcOpts, onBack, onCreateQuotation, onSaveCustomer, onEdit }) {
+function SalesPresentationCloser({ active: initialActive, customerName, customerPhone, customerAddress, customerMode, selectedCustomerId, region, meterType, monthlyBill, electricityRate, inflationRate, companyInfo, stock, catalog, calcOpts, onBack, onCreateQuotation, onSaveCustomer, onEdit }) {
   const [animateStep, setAnimateStep] = useState(0);
   
   // Equipment state — ลูกค้าเล่นเปลี่ยนได้ในหน้านี้
@@ -4277,26 +4585,20 @@ function SalesPresentationCloser({ active: initialActive, customerName, customer
   const [curBattery, setCurBattery] = useState(initialActive.battery);
   const [customSellPrice, setCustomSellPrice] = useState(null); // null = ใช้ราคา auto
   
-  // ดึง catalog จาก stock (อุปกรณ์ที่ติ๊ก inSalesCatalog)
-  const stockInverters = (stock || []).filter(s => s.inSalesCatalog && s.category === 'inverter' && s.salesSpecs);
-  const stockPanels = (stock || []).filter(s => s.inSalesCatalog && s.category === 'panel' && s.salesSpecs);
-  const stockBatteries = (stock || []).filter(s => s.inSalesCatalog && s.category === 'battery' && s.salesSpecs);
+  // ดึง catalog (เฉพาะ active)
+  const activeCatalog = (catalog || []).filter(c => c.active !== false);
+  const inverters = activeCatalog.filter(c => c.category === 'inverter');
+  const panels = activeCatalog.filter(c => c.category === 'panel');
+  const batteries = activeCatalog.filter(c => c.category === 'battery');
   
-  const inverters = stockInverters.length > 0 
-    ? stockInverters.map(s => ({ id: s.id, brand: s.salesSpecs.brand, model: s.salesSpecs.model, size: s.salesSpecs.size, type: s.salesSpecs.type || 'hybrid', cost: s.unitCost, tier: s.salesSpecs.tier || 'standard' }))
-    : EQUIPMENT_CATALOG.inverters;
-  const panels = stockPanels.length > 0
-    ? stockPanels.map(s => ({ id: s.id, brand: s.salesSpecs.brand, model: s.salesSpecs.model, watt: s.salesSpecs.watt, cost: s.unitCost, tier: s.salesSpecs.tier || 'standard' }))
-    : EQUIPMENT_CATALOG.panels;
-  const batteries = stockBatteries.length > 0
-    ? stockBatteries.map(s => ({ id: s.id, brand: s.salesSpecs.brand, model: s.salesSpecs.model, capacity: s.salesSpecs.capacity, cost: s.unitCost, tier: s.salesSpecs.tier || 'standard' }))
-    : EQUIPMENT_CATALOG.batteries;
-  
-  // คำนวณ active ใหม่ทุกครั้งที่เปลี่ยน equipment
+  // คำนวณ active ใหม่ทุกครั้งที่เปลี่ยน equipment (smart cost: stock first → market)
   const active = useMemo(() => {
     if (!curInverter || !curPanel || curPanelCount < 1) return initialActive;
     const installPct = (companyInfo?.installCostPct || 10) / 100;
-    const equipmentCost = curInverter.cost + (curPanel.cost * curPanelCount) + (curBattery?.cost || 0);
+    const invCost = calcSmartCost(curInverter, 1, stock || []);
+    const panCost = calcSmartCost(curPanel, curPanelCount, stock || []);
+    const batCost = curBattery ? calcSmartCost(curBattery, 1, stock || []) : { cost: 0, fromStock: 0, fromMarket: 0, breakdown: [], total: 0 };
+    const equipmentCost = invCost.cost + panCost.cost + batCost.cost;
     const installCost = Math.round(equipmentCost * installPct);
     const grandCost = equipmentCost + installCost;
     const margin = getMargin(curInverter.size, companyInfo);
@@ -4311,6 +4613,7 @@ function SalesPresentationCloser({ active: initialActive, customerName, customer
       label: initialActive.label,
       badge: initialActive.badge,
       inverter: curInverter, panel: curPanel, panelCount: curPanelCount, battery: curBattery,
+      costBreakdown: { invCost, panCost, batCost },
       equipmentCost, installCost,
       totalCost: grandCost,
       sellPrice,
@@ -4320,7 +4623,7 @@ function SalesPresentationCloser({ active: initialActive, customerName, customer
       roi,
       breakEven: Math.round(breakEven * 10) / 10,
     };
-  }, [curInverter, curPanel, curPanelCount, curBattery, customSellPrice, companyInfo, calcOpts, initialActive]);
+  }, [curInverter, curPanel, curPanelCount, curBattery, customSellPrice, companyInfo, calcOpts, initialActive, stock]);
   
   useEffect(() => {
     const timers = [];
