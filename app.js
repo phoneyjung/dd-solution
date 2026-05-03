@@ -2089,6 +2089,11 @@ function DDSolutionManager({ currentUser, onLogout }) {
               setActiveTab('documents');
             }}
             onSaveCustomer={(c) => saveCustomers([...customers, c], 'add', `เพิ่มลูกค้า: ${c.name}`)}
+            onSaveCompany={async (data, action, details) => {
+              await window.storage.set('dd5:company', JSON.stringify(data), true);
+              setCompanyInfo(data);
+              if (action) await logActivity(action, 'ข้อมูลบริษัท', details || 'แก้ไขข้อมูลบริษัท');
+            }}
           />
         )}
 
@@ -2654,17 +2659,10 @@ function DDSolutionManager({ currentUser, onLogout }) {
               (master?.jobId && j.id === master.jobId)
             );
             
-            console.log('[จบงาน] master:', master?.docNumber, 'master.id:', master?.id, 'chainId:', chainId);
-            console.log('[จบงาน] master.jobId:', master?.jobId);
-            console.log('[จบงาน] all jobs:', jobs.map(j => ({id: j.id, customer: j.customer, qId: j.quotationId})));
-            console.log('[จบงาน] linkedJob:', linkedJob?.customer || 'ไม่พบ');
-            console.log('[จบงาน] costsByCategory.wire:', linkedJob?.costsByCategory?.wire);
-            
             // ค้นหาสายไฟ "ม้วนใหม่" ที่มีของเหลือ
             const wireRemainings = [];
             if (linkedJob && linkedJob.costsByCategory?.wire) {
               linkedJob.costsByCategory.wire.forEach(item => {
-                console.log('[จบงาน] wire item:', item);
                 // เฉพาะที่ไม่ใช่ stock (เป็นม้วนใหม่ที่ซื้อมา) และมีเหลือ
                 if (!item.stockId && Number(item.rollLength || 0) > 0) {
                   const remaining = Number(item.rollLength || 0) - Number(item.usedLength || 0);
@@ -2680,8 +2678,6 @@ function DDSolutionManager({ currentUser, onLogout }) {
                 }
               });
             }
-            
-            console.log('[จบงาน] wireRemainings:', wireRemainings);
             
             let warning = '';
             if (unpaid > 0) {
@@ -2738,6 +2734,12 @@ function DDSolutionManager({ currentUser, onLogout }) {
               });
               saveStock(newStock, 'add', 
                 `บันทึกสายไฟเหลือเข้าสต๊อก ${wireRemainings.length} รายการ จากงาน ${master?.customerName}`);
+              
+              // แจ้งผลให้ user
+              const summary = wireRemainings.map(w => 
+                `• ${w.name}: ${w.remaining.toFixed(1)}m (${(w.remaining * w.unitCost).toFixed(2)} ฿)`
+              ).join('\n');
+              setTimeout(() => alert(`✅ จบงานเรียบร้อย!\n\n📦 บันทึกสายไฟเหลือเข้าสต๊อก:\n${summary}`), 100);
             }
           };
 
@@ -5127,7 +5129,7 @@ function CatalogItemModal({ item, onClose, onSave }) {
 }
 
 // ============== SALES PRESENTATION (เสนอขาย) ==============
-function SalesPresentation({ customers, stock, catalog, companyInfo, onCreateQuotation, onSaveCustomer }) {
+function SalesPresentation({ customers, stock, catalog, companyInfo, onCreateQuotation, onSaveCustomer, onSaveCompany }) {
   const [step, setStep] = useState(1);
   
   // Customer info
@@ -5598,6 +5600,7 @@ function SalesPresentation({ customers, stock, catalog, companyInfo, onCreateQuo
         onBack={() => setStep(2)}
         onCreateQuotation={onCreateQuotation}
         onSaveCustomer={onSaveCustomer}
+        onSaveCompany={onSaveCompany}
       />
     );
   }
@@ -5790,7 +5793,7 @@ function ProModePanel({ active, totalKW, region, curMeterType, proFactors, setPr
   );
 }
 
-function SalesPresentationCloser({ active: initialActive, customerName, customerPhone, customerAddress, customerMode, selectedCustomerId, region, meterType, monthlyBill, electricityRate, inflationRate, companyInfo, stock, catalog, calcOpts, onBack, onCreateQuotation, onSaveCustomer, onEdit }) {
+function SalesPresentationCloser({ active: initialActive, customerName, customerPhone, customerAddress, customerMode, selectedCustomerId, region, meterType, monthlyBill, electricityRate, inflationRate, companyInfo, stock, catalog, calcOpts, onBack, onCreateQuotation, onSaveCustomer, onEdit, onSaveCompany }) {
   const [animateStep, setAnimateStep] = useState(0);
   // ลูกค้าเปลี่ยนมิเตอร์ได้ในหน้านี้ (เริ่มจากที่เซลส์เลือก)
   const [curMeterType, setCurMeterType] = useState(meterType || 'normal');
@@ -6450,19 +6453,88 @@ ${battery ? `- ${battery.brand} ${battery.model} × 1 ลูก` : ''}
       )}
 
       {/* === 🎁 ของแถม === */}
-      {(companyInfo?.freebies?.filter(f => f.active !== false).length > 0) && (
+      {(companyInfo?.freebies?.length > 0 || proModeOpen) && (
         <div className={`bg-gradient-to-br from-rose-50 to-amber-50 rounded-2xl shadow-sm border-2 border-rose-200 overflow-hidden transition-all duration-700 delay-200 ${animateStep >= 4 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
-          <div className="bg-gradient-to-r from-rose-500 to-pink-500 px-4 py-2 text-white">
+          <div className="bg-gradient-to-r from-rose-500 to-pink-500 px-4 py-2 text-white flex items-center justify-between">
             <h3 className="font-bold text-sm">🎁 ของแถมพิเศษ! ฟรี!</h3>
+            {proModeOpen && (
+              <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded">🔧 Pro Mode</span>
+            )}
           </div>
           <div className="p-3 grid grid-cols-1 gap-1.5">
-            {companyInfo.freebies.filter(f => f.active !== false).map(f => (
-              <div key={f.id} className="flex items-center gap-2 bg-white/60 rounded-lg px-3 py-2 text-xs">
-                <span className="text-base">{f.icon}</span>
-                <span className="text-stone-700 font-medium">{f.label}</span>
-                <span className="ml-auto text-rose-600 font-bold text-[10px]">ฟรี!</span>
-              </div>
-            ))}
+            {/* Pro Mode: แสดงทุกตัว + edit ได้ */}
+            {proModeOpen ? (
+              <>
+                {(companyInfo?.freebies || []).map((f, idx) => (
+                  <div key={f.id} className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs ${f.active !== false ? 'bg-white/80' : 'bg-stone-100/60 opacity-60'}`}>
+                    <input 
+                      type="checkbox" 
+                      checked={f.active !== false}
+                      onChange={(e) => {
+                        const newFreebies = [...(companyInfo.freebies || [])];
+                        newFreebies[idx] = { ...newFreebies[idx], active: e.target.checked };
+                        if (onSaveCompany) {
+                          onSaveCompany({...companyInfo, freebies: newFreebies}, 'edit', `${e.target.checked ? 'เปิด' : 'ปิด'} ของแถม: ${f.label}`);
+                        }
+                      }}
+                      className="w-4 h-4 accent-rose-500"
+                    />
+                    <span className="text-base">{f.icon}</span>
+                    <input
+                      type="text"
+                      value={f.label}
+                      onChange={(e) => {
+                        const newFreebies = [...(companyInfo.freebies || [])];
+                        newFreebies[idx] = { ...newFreebies[idx], label: e.target.value };
+                        if (onSaveCompany) {
+                          onSaveCompany({...companyInfo, freebies: newFreebies}, null);
+                        }
+                      }}
+                      className="flex-1 bg-transparent border-b border-stone-300 focus:border-rose-500 outline-none text-stone-700 font-medium px-1"
+                    />
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`ลบของแถม "${f.label}"?`)) {
+                          const newFreebies = (companyInfo.freebies || []).filter((_, i) => i !== idx);
+                          if (onSaveCompany) {
+                            onSaveCompany({...companyInfo, freebies: newFreebies}, 'delete', `ลบของแถม: ${f.label}`);
+                          }
+                        }
+                      }}
+                      className="text-rose-500 hover:bg-rose-100 rounded p-1"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                ))}
+                {/* ปุ่มเพิ่มของแถม */}
+                <button
+                  onClick={() => {
+                    const newItem = { 
+                      id: `f-${Date.now()}-${Math.random().toString(36).slice(2,5)}`, 
+                      icon: '🎁', 
+                      label: 'ของแถมใหม่', 
+                      active: true 
+                    };
+                    if (onSaveCompany) {
+                      onSaveCompany({...companyInfo, freebies: [...(companyInfo.freebies || []), newItem]}, 'add', 'เพิ่มของแถม');
+                    }
+                  }}
+                  className="flex items-center justify-center gap-1 bg-white/60 hover:bg-rose-100 border-2 border-dashed border-rose-300 rounded-lg px-3 py-2 text-xs text-rose-600 font-medium"
+                >
+                  ➕ เพิ่มของแถม
+                </button>
+              </>
+            ) : (
+              /* โหมดปกติ: แสดงเฉพาะ active */
+              (companyInfo?.freebies || []).filter(f => f.active !== false).map(f => (
+                <div key={f.id} className="flex items-center gap-2 bg-white/60 rounded-lg px-3 py-2 text-xs">
+                  <span className="text-base">{f.icon}</span>
+                  <span className="text-stone-700 font-medium">{f.label}</span>
+                  <span className="ml-auto text-rose-600 font-bold text-[10px]">ฟรี!</span>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}
