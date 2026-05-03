@@ -428,7 +428,18 @@ const DEFAULT_COMPANY_INFO = {
     medium: 20,  // 5-10kW
     large: 15,   // > 10kW
   },
-  installCostPct: 10,  // ค่าติดตั้งคิด 10% ของวัสดุ
+  // ต้นทุนแฝงต่องานติดตั้ง (จะคิดเข้าไปทุกงาน — เซลส์ปรับได้)
+  // ค่าเริ่มต้น: ประมาณการจากข้อมูลงาน 1, 2 (ระบบ ~5kW)
+  hiddenCosts: [
+    { id: 'hc-mounting',  label: 'วัสดุติดตั้ง (Rail/Clamp/Hook/etc.)', amount: 13500, perJob: true },
+    { id: 'hc-wiring',    label: 'ค่าสายไฟ (PV + เมน)',                  amount: 12300, perJob: true },
+    { id: 'hc-combiner',  label: 'ตู้ Combiner + เบรคเกอร์',            amount: 3000,  perJob: true },
+    { id: 'hc-labor',     label: 'ค่าแรงช่าง',                           amount: 8000,  perJob: true },
+    { id: 'hc-travel',    label: 'ค่าเดินทาง + ค่าน้ำมัน',              amount: 1500,  perJob: true },
+    { id: 'hc-meal',      label: 'ค่าข้าวช่าง',                          amount: 1500,  perJob: true },
+    { id: 'hc-misc',      label: 'เบ็ดเตล็ด/ของเพิ่มเติมหน้างาน',      amount: 2500,  perJob: true },
+  ],
+  installCostPct: 0,  // (deprecated - เปลี่ยนมาใช้ hiddenCosts แทน)
 };
 
 const DEFAULT_DOCUMENTS = [];  // เอกสารเริ่มต้น (เสนอราคา/แจ้งหนี้/ใบเสร็จ)
@@ -453,15 +464,41 @@ const PRICING_CONFIG = {
 };
 
 // Sales Catalog Default (สินค้าที่ขาย + ราคาตลาด) - เซลส์จัดการได้ในแอป
-// ราคา = ราคาตลาดปัจจุบัน (ใช้เมื่อสต็อกหมด ต้องซื้อใหม่)
+// ราคา = ราคาตลาดปัจจุบัน (ไม่รวม VAT 7%) - ใช้เมื่อสต็อกหมด ต้องซื้อใหม่
 const DEFAULT_SALES_CATALOG = [
-  // Inverters
-  { id: 'sc-inv-deye-5h', category: 'inverter', brand: 'Deye',   model: 'Hybrid 5kW', size: 5,  type: 'hybrid', marketPrice: 33500, tier: 'standard', active: true },
-  { id: 'sc-inv-hyb-10',  category: 'inverter', brand: 'Hybrid', model: '10kW',       size: 10, type: 'hybrid', marketPrice: 59000, tier: 'premium',  active: true },
-  // Panels
+  // ============ SOLIS HYBRID INVERTER (รับประกัน 5 ปี) ============
+  { id: 'sc-solis-8k1p',  category: 'inverter', brand: 'Solis', model: 'Hybrid 8kW 1P',  size: 8,  type: 'hybrid', marketPrice: 39500, tier: 'standard', active: true },
+  { id: 'sc-solis-10k3p', category: 'inverter', brand: 'Solis', model: 'Hybrid 10kW 3P', size: 10, type: 'hybrid', marketPrice: 61500, tier: 'standard', active: true },
+  { id: 'sc-solis-15k3p', category: 'inverter', brand: 'Solis', model: 'Hybrid 15kW 3P', size: 15, type: 'hybrid', marketPrice: 65900, tier: 'standard', active: true },
+  { id: 'sc-solis-20k3p', category: 'inverter', brand: 'Solis', model: 'Hybrid 20kW 3P', size: 20, type: 'hybrid', marketPrice: 68900, tier: 'standard', active: true },
+  
+  // ============ DEYE HYBRID INVERTER (รับประกัน 10 ปี) ============
+  { id: 'sc-deye-5k1p',   category: 'inverter', brand: 'Deye', model: 'SUN-5k-SG05LP1-EU',     size: 5,  type: 'hybrid', marketPrice: 31500,  tier: 'standard', active: true },
+  { id: 'sc-deye-6k1p',   category: 'inverter', brand: 'Deye', model: 'SUN-6k-SG04LP1-SM2',    size: 6,  type: 'hybrid', marketPrice: 34500,  tier: 'standard', active: true },
+  { id: 'sc-deye-8k1p',   category: 'inverter', brand: 'Deye', model: 'SUN-8k-SG05LP1-EU-SM2', size: 8,  type: 'hybrid', marketPrice: 40900,  tier: 'standard', active: true },
+  { id: 'sc-deye-10k1p',  category: 'inverter', brand: 'Deye', model: 'SUN-10k-SG02LP1-EU-AM3', size: 10, type: 'hybrid', marketPrice: 51900,  tier: 'standard', active: true },
+  { id: 'sc-deye-5k3p',   category: 'inverter', brand: 'Deye', model: 'SUN-5k-SG05LP3-SM2',    size: 5,  type: 'hybrid', marketPrice: 49900,  tier: 'standard', active: true },
+  { id: 'sc-deye-10k3p',  category: 'inverter', brand: 'Deye', model: 'SUN-10k-SG04LP3-EU',    size: 10, type: 'hybrid', marketPrice: 59500,  tier: 'standard', active: true },
+  { id: 'sc-deye-12k3p',  category: 'inverter', brand: 'Deye', model: 'SUN-12k-SG04LP3-EU',    size: 12, type: 'hybrid', marketPrice: 62500,  tier: 'standard', active: true },
+  { id: 'sc-deye-20k3p',  category: 'inverter', brand: 'Deye', model: 'SUN-20k-SG05LP3-EU-SM2', size: 20, type: 'hybrid', marketPrice: 89500,  tier: 'standard', active: true },
+  { id: 'sc-deye-30k3p',  category: 'inverter', brand: 'Deye', model: 'SUN-30k-SG01HP3-EU-BM3 (HV)', size: 30, type: 'hybrid', marketPrice: 112500, tier: 'premium',  active: true },
+  { id: 'sc-deye-40k3p',  category: 'inverter', brand: 'Deye', model: 'SUN-40k-SG01HP3-EU-BM4 (HV)', size: 40, type: 'hybrid', marketPrice: 134900, tier: 'premium',  active: true },
+  { id: 'sc-deye-50k3p',  category: 'inverter', brand: 'Deye', model: 'SUN-50k-SG01HP3-EU-BM4 (HV)', size: 50, type: 'hybrid', marketPrice: 149000, tier: 'premium',  active: true },
+  { id: 'sc-deye-60k3p',  category: 'inverter', brand: 'Deye', model: 'SUN-60k-SG01HP3-EU-BM4 (HV)', size: 60, type: 'hybrid', marketPrice: 181550, tier: 'premium',  active: true },
+  { id: 'sc-deye-80k3p',  category: 'inverter', brand: 'Deye', model: 'SUN-80k-SG01HP3-EU-BM4 (HV)', size: 80, type: 'hybrid', marketPrice: 204900, tier: 'premium',  active: true },
+  
+  // ============ TMDA ON-GRID INVERTER (รับประกัน 10 ปี) ============
+  { id: 'sc-tmda-3k1p',   category: 'inverter', brand: 'TMDA', model: 'SUN-3K-G04P1-EU-AM1',     size: 3,  type: 'ongrid', marketPrice: 9500,  tier: 'standard', active: true },
+  { id: 'sc-tmda-5k1p',   category: 'inverter', brand: 'TMDA', model: 'SUN-5K-G05P1-EU-AM2',     size: 5,  type: 'ongrid', marketPrice: 15200, tier: 'standard', active: true },
+  { id: 'sc-tmda-10k1p',  category: 'inverter', brand: 'TMDA', model: 'SUN-10K-G02P1-EU-AM2',    size: 10, type: 'ongrid', marketPrice: 22500, tier: 'standard', active: true },
+  { id: 'sc-tmda-6k3p',   category: 'inverter', brand: 'TMDA', model: 'SUN-6K-G06P3-EU-BM2-P1',  size: 6,  type: 'ongrid', marketPrice: 18900, tier: 'standard', active: true },
+  { id: 'sc-tmda-10k3p',  category: 'inverter', brand: 'TMDA', model: 'SUN-15K-G06P3-EU-BM2-P1', size: 10, type: 'ongrid', marketPrice: 21900, tier: 'standard', active: true },
+  
+  // ============ SOLAR PANELS ============
   { id: 'sc-pan-jinko-725', category: 'panel', brand: 'Jinko', model: '725W', watt: 725, marketPrice: 4000, tier: 'premium',  active: true },
   { id: 'sc-pan-longi-640', category: 'panel', brand: 'Longi', model: '640W', watt: 640, marketPrice: 2911, tier: 'standard', active: true },
-  // Batteries
+  
+  // ============ BATTERIES ============
   { id: 'sc-bat-deye-16', category: 'battery', brand: 'Deye', model: '16kWh', capacity: 16, marketPrice: 67303, tier: 'standard', active: true },
 ];
 
@@ -510,6 +547,12 @@ function getMargin(inverterKW, companyInfo = null) {
   if (inverterKW < 5)  return margins.small;
   if (inverterKW <= 10) return margins.medium;
   return margins.large;
+}
+
+// ผลรวมต้นทุนแฝง (เปิดอยู่ทั้งหมด)
+function sumHiddenCosts(companyInfo) {
+  const items = companyInfo?.hiddenCosts || [];
+  return items.filter(i => i.perJob !== false).reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
 }
 
 function applyMargin(cost, marginPct) {
@@ -578,24 +621,56 @@ function recommendPackages({ monthlyBill, hasBattery, region, stock = [], catalo
   
   if (inverters.length === 0 || panels.length === 0) return null;
   
-  // === Package 1: ถูกสุด ===
-  const cheapInverter = [...inverters].sort((a, b) => a.marketPrice - b.marketPrice)[0];
+  // คำนวณ kW ที่เหมาะสมกับลูกค้า
+  const targetKW = Math.max(3, Math.min(20, Math.ceil(requiredKW)));
+  
+  // หา inverter ตามขนาด + ประเภท
+  const findInverter = (preferKW, preferType, preferTier) => {
+    // 1. ลองหา type ที่ต้องการ + ขนาดใกล้ preferKW
+    let candidates = inverters.filter(i => !preferType || i.type === preferType);
+    if (candidates.length === 0) candidates = inverters;
+    if (preferTier) {
+      const tiered = candidates.filter(i => i.tier === preferTier);
+      if (tiered.length > 0) candidates = tiered;
+    }
+    // เรียงตามความใกล้ kW (ถ้าเจอเท่ากันให้ราคาถูกก่อน)
+    return [...candidates].sort((a, b) => {
+      const diffA = Math.abs(a.size - preferKW);
+      const diffB = Math.abs(b.size - preferKW);
+      if (diffA !== diffB) return diffA - diffB;
+      return a.marketPrice - b.marketPrice;
+    })[0];
+  };
+  
+  // === Package 1: ถูกสุด — เน้น on-grid ราคาถูก ไม่มีแบต ===
+  const cheapInverter = findInverter(targetKW, 'ongrid', null) || findInverter(targetKW, null, null);
   const cheapPanel = [...panels].sort((a, b) => a.marketPrice - b.marketPrice)[0];
   const cheapPanelCount = Math.ceil(cheapInverter.size * 1100 / cheapPanel.watt);
   
-  // === Package 2: คุ้มสุด ===
-  const bestInverter = inverters.find(i => i.size === 5) || inverters[0];
+  // === Package 2: คุ้มสุด — Hybrid + standard ===
+  const bestInverter = findInverter(targetKW, 'hybrid', 'standard') || findInverter(targetKW, 'hybrid', null) || findInverter(targetKW, null, null);
   const bestPanel = panels.find(p => p.watt === 640) || panels[0];
   const bestPanelCount = Math.ceil(bestInverter.size * 1100 / bestPanel.watt);
   const bestBattery = hasBattery && batteries.length > 0 ? batteries[0] : null;
   
-  // === Package 3: Premium ===
-  const premiumInverter = [...inverters].sort((a, b) => b.size - a.size)[0];
+  // === Package 3: Premium — Hybrid kW ใกล้เคียง + แบต + แผงดี ===
+  // Premium ไม่ใหญ่เกินไป (ใกล้ targetKW + นิดเดียว) แต่เน้นคุณภาพ
+  const premiumInverter = findInverter(targetKW, 'hybrid', 'premium')
+    || findInverter(targetKW, 'hybrid', null)
+    || findInverter(targetKW, null, null);
+  // ถ้า premium = best ตัวเดียวกัน → ลองเพิ่มขนาดนิดหน่อย
+  let finalPremium = premiumInverter;
+  if (premiumInverter && premiumInverter.id === bestInverter?.id) {
+    const bigger = inverters
+      .filter(i => i.size > targetKW && i.type === 'hybrid')
+      .sort((a, b) => a.size - b.size)[0];
+    if (bigger) finalPremium = bigger;
+  }
   const premiumPanel = [...panels].sort((a, b) => b.watt - a.watt)[0];
-  const premiumPanelCount = Math.ceil(premiumInverter.size * 1100 / premiumPanel.watt);
+  const premiumPanelCount = Math.ceil(finalPremium.size * 1100 / premiumPanel.watt);
   const premiumBattery = batteries.length > 0 ? batteries[0] : null;
   
-  const installPct = (companyInfo?.installCostPct || 10) / 100;
+  const hiddenCostsTotal = sumHiddenCosts(companyInfo);
   
   const buildPackage = (inverter, panel, panelCount, battery, label, badge) => {
     // Smart cost: ใช้ stock ก่อน → ที่ขาด ใช้ market
@@ -604,7 +679,7 @@ function recommendPackages({ monthlyBill, hasBattery, region, stock = [], catalo
     const batCost = battery ? calcSmartCost(battery, 1, stock) : { cost: 0, fromStock: 0, fromMarket: 0, breakdown: [], total: 0 };
     
     const equipmentCost = invCost.cost + panCost.cost + batCost.cost;
-    const installCost = Math.round(equipmentCost * installPct);
+    const installCost = hiddenCostsTotal; // ต้นทุนแฝง (รวมจาก hiddenCosts)
     const grandCost = equipmentCost + installCost;
     const margin = getMargin(inverter.size, companyInfo);
     const sellPrice = applyMargin(grandCost, margin);
@@ -633,7 +708,7 @@ function recommendPackages({ monthlyBill, hasBattery, region, stock = [], catalo
   return {
     cheap: buildPackage(cheapInverter, cheapPanel, cheapPanelCount, null,        'ถูกสุด',   '💰'),
     best:  buildPackage(bestInverter,  bestPanel,  bestPanelCount,  bestBattery, 'คุ้มสุด',  '🌟'),
-    premium: buildPackage(premiumInverter, premiumPanel, premiumPanelCount, premiumBattery, 'Premium', '👑'),
+    premium: buildPackage(finalPremium, premiumPanel, premiumPanelCount, premiumBattery, 'Premium', '👑'),
   };
 }
 
@@ -901,13 +976,19 @@ function DDSolutionManager({ currentUser, onLogout }) {
         setActivityLog(a ? JSON.parse(a.value) : []);
         setDocuments(d ? migrateDocuments(JSON.parse(d.value)) : DEFAULT_DOCUMENTS);
         setCompanyInfo(ci ? JSON.parse(ci.value) : DEFAULT_COMPANY_INFO);
-        setSalesCatalog(sc ? JSON.parse(sc.value) : DEFAULT_SALES_CATALOG);
+        // Migrate catalog: ถ้าเป็น version เก่า (มีไม่ถึง 10 รายการ) → reset เป็น default ใหม่
+        let catalogToUse = sc ? JSON.parse(sc.value) : DEFAULT_SALES_CATALOG;
+        const needsMigration = !sc || catalogToUse.length < 10 || !catalogToUse.some(c => c.brand === 'Solis' || c.brand === 'TMDA');
+        if (needsMigration) {
+          catalogToUse = DEFAULT_SALES_CATALOG;
+          await window.storage.set('dd5:salesCatalog', JSON.stringify(DEFAULT_SALES_CATALOG), true);
+        }
+        setSalesCatalog(catalogToUse);
         if (!j) await window.storage.set('dd5:jobs', JSON.stringify(DEFAULT_JOBS), true);
         if (!s) await window.storage.set('dd5:stock', JSON.stringify(DEFAULT_STOCK), true);
         if (!p) await window.storage.set('dd5:partners', JSON.stringify(DEFAULT_PARTNERS), true);
         if (!t) await window.storage.set('dd5:transactions', JSON.stringify(DEFAULT_TRANSACTIONS), true);
         if (!c) await window.storage.set('dd5:customers', JSON.stringify(DEFAULT_CUSTOMERS), true);
-        if (!sc) await window.storage.set('dd5:salesCatalog', JSON.stringify(DEFAULT_SALES_CATALOG), true);
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
     };
@@ -3890,24 +3971,15 @@ function SalesCatalogManager({ catalog, stock, companyInfo, onSaveCatalog, onSav
         </button>
       </div>
 
-      {/* Cost Settings Section */}
+      {/* Margin Section */}
       <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-bold text-stone-800">⚙️ ค่าใช้จ่าย + กำไร</h3>
+          <h3 className="font-bold text-stone-800">💰 Margin (กำไรที่บวก)</h3>
         </div>
         
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <div>
-            <label className="text-xs text-stone-600 block mb-1">ค่าติดตั้ง (% ของวัสดุ)</label>
-            <div className="flex items-center gap-1">
-              <input type="number" value={companyInfo?.installCostPct ?? 10}
-                onChange={e => onSaveCompany({...companyInfo, installCostPct: Number(e.target.value) || 0}, 'edit', `ปรับค่าติดตั้ง: ${e.target.value}%`)}
-                className="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-sm text-right" />
-              <span className="text-stone-600 text-sm">%</span>
-            </div>
-          </div>
-          <div>
-            <label className="text-xs text-stone-600 block mb-1">Margin เล็ก (&lt;5kW)</label>
+            <label className="text-xs text-stone-600 block mb-1">เล็ก (&lt;5kW)</label>
             <div className="flex items-center gap-1">
               <input type="number" value={companyInfo?.margins?.small ?? 25}
                 onChange={e => onSaveCompany({...companyInfo, margins: {...(companyInfo?.margins || {}), small: Number(e.target.value) || 0}}, 'edit', `ปรับ margin เล็ก: ${e.target.value}%`)}
@@ -3916,7 +3988,7 @@ function SalesCatalogManager({ catalog, stock, companyInfo, onSaveCatalog, onSav
             </div>
           </div>
           <div>
-            <label className="text-xs text-stone-600 block mb-1">Margin กลาง (5-10kW)</label>
+            <label className="text-xs text-stone-600 block mb-1">กลาง (5-10kW)</label>
             <div className="flex items-center gap-1">
               <input type="number" value={companyInfo?.margins?.medium ?? 20}
                 onChange={e => onSaveCompany({...companyInfo, margins: {...(companyInfo?.margins || {}), medium: Number(e.target.value) || 0}}, 'edit', `ปรับ margin กลาง: ${e.target.value}%`)}
@@ -3925,7 +3997,7 @@ function SalesCatalogManager({ catalog, stock, companyInfo, onSaveCatalog, onSav
             </div>
           </div>
           <div>
-            <label className="text-xs text-stone-600 block mb-1">Margin ใหญ่ (&gt;10kW)</label>
+            <label className="text-xs text-stone-600 block mb-1">ใหญ่ (&gt;10kW)</label>
             <div className="flex items-center gap-1">
               <input type="number" value={companyInfo?.margins?.large ?? 15}
                 onChange={e => onSaveCompany({...companyInfo, margins: {...(companyInfo?.margins || {}), large: Number(e.target.value) || 0}}, 'edit', `ปรับ margin ใหญ่: ${e.target.value}%`)}
@@ -3934,9 +4006,73 @@ function SalesCatalogManager({ catalog, stock, companyInfo, onSaveCatalog, onSav
             </div>
           </div>
         </div>
-        <p className="text-xs text-stone-500 mt-3">
-          💡 ระบบจะใช้ <strong>ของในสต็อก</strong>ก่อน (ราคาทุนเดิม) → ที่เหลือใช้ <strong>ราคาตลาด</strong> (ซื้อใหม่)
+      </div>
+
+      {/* Hidden Costs Section */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm border-2 border-blue-200">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h3 className="font-bold text-stone-800">🔧 ต้นทุนแฝงต่องานติดตั้ง</h3>
+            <p className="text-xs text-stone-500">ค่าใช้จ่ายที่เกิดทุกงาน นอกเหนือจาก Inverter/แผง/แบต</p>
+          </div>
+          <button onClick={() => {
+            const newItem = { id: `hc-${Date.now()}`, label: 'รายการใหม่', amount: 0, perJob: true };
+            onSaveCompany({...companyInfo, hiddenCosts: [...(companyInfo?.hiddenCosts || []), newItem]}, 'add', 'เพิ่มต้นทุนแฝง');
+          }} className="text-blue-600 hover:bg-blue-50 px-2 py-1 rounded-lg text-sm font-medium">
+            + เพิ่ม
+          </button>
+        </div>
+        
+        <div className="space-y-2">
+          {(companyInfo?.hiddenCosts || []).map((item, idx) => (
+            <div key={item.id} className="flex items-center gap-2 bg-stone-50 rounded-lg p-2">
+              <input type="checkbox" 
+                checked={item.perJob !== false}
+                onChange={e => {
+                  const newCosts = [...companyInfo.hiddenCosts];
+                  newCosts[idx] = {...item, perJob: e.target.checked};
+                  onSaveCompany({...companyInfo, hiddenCosts: newCosts}, 'edit', `${e.target.checked ? 'เปิด' : 'ปิด'}: ${item.label}`);
+                }}
+                className="w-4 h-4 rounded text-blue-500" />
+              <input type="text" value={item.label}
+                onChange={e => {
+                  const newCosts = [...companyInfo.hiddenCosts];
+                  newCosts[idx] = {...item, label: e.target.value};
+                  onSaveCompany({...companyInfo, hiddenCosts: newCosts}, null);
+                }}
+                className="flex-1 min-w-0 px-2 py-1 bg-transparent border-0 text-sm focus:bg-white focus:border focus:border-stone-300 rounded" />
+              <div className="flex items-center gap-1">
+                <input type="number" value={item.amount}
+                  onChange={e => {
+                    const newCosts = [...companyInfo.hiddenCosts];
+                    newCosts[idx] = {...item, amount: Number(e.target.value) || 0};
+                    onSaveCompany({...companyInfo, hiddenCosts: newCosts}, null);
+                  }}
+                  className="w-24 px-2 py-1 border border-stone-300 rounded-lg text-sm text-right" />
+                <span className="text-stone-600 text-xs">฿</span>
+              </div>
+              <button onClick={() => {
+                if (!window.confirm(`ลบ "${item.label}"?`)) return;
+                onSaveCompany({...companyInfo, hiddenCosts: companyInfo.hiddenCosts.filter(c => c.id !== item.id)}, 'delete', `ลบ: ${item.label}`);
+              }} className="p-1 hover:bg-rose-50 rounded">
+                <Trash2 className="w-4 h-4 text-rose-500" />
+              </button>
+            </div>
+          ))}
+        </div>
+        
+        <div className="mt-3 pt-3 border-t border-stone-200 flex items-center justify-between">
+          <span className="text-sm font-medium text-stone-700">💰 รวมต้นทุนแฝง/งาน</span>
+          <span className="text-lg font-bold text-blue-700">{sumHiddenCosts(companyInfo).toLocaleString()} ฿</span>
+        </div>
+        <p className="text-xs text-stone-500 mt-2">
+          💡 ระบบจะคิดต้นทุนแฝงนี้เพิ่มเข้าไปใน <strong>ทุกงาน</strong> นอกเหนือจากค่าอุปกรณ์
         </p>
+      </div>
+
+      {/* Stock note */}
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-stone-600">
+        💡 <strong>การใช้สต็อก:</strong> ระบบจะใช้<strong>ของในสต็อก</strong>ก่อน (ราคาทุนเดิม) → ที่เหลือใช้<strong>ราคาตลาด</strong> (ซื้อใหม่)
       </div>
 
       {/* Filter tabs */}
@@ -4149,13 +4285,12 @@ function SalesPresentation({ customers, stock, catalog, companyInfo, onCreateQuo
       const bat = customBattery;
       if (!inv || !pan || cnt < 1) return null;
       
-      const installPct = (companyInfo?.installCostPct || 10) / 100;
       // Smart cost (stock first → market)
       const invCost = calcSmartCost(inv, 1, stock);
       const panCost = calcSmartCost(pan, cnt, stock);
       const batCost = bat ? calcSmartCost(bat, 1, stock) : { cost: 0, fromStock: 0, fromMarket: 0, breakdown: [], total: 0 };
       const equipmentCost = invCost.cost + panCost.cost + batCost.cost;
-      const installCost = Math.round(equipmentCost * installPct);
+      const installCost = sumHiddenCosts(companyInfo); // ต้นทุนแฝงต่องาน
       const grandCost = equipmentCost + installCost;
       const margin = getMargin(inv.size, companyInfo);
       const sellPrice = applyMargin(grandCost, margin);
@@ -4594,12 +4729,11 @@ function SalesPresentationCloser({ active: initialActive, customerName, customer
   // คำนวณ active ใหม่ทุกครั้งที่เปลี่ยน equipment (smart cost: stock first → market)
   const active = useMemo(() => {
     if (!curInverter || !curPanel || curPanelCount < 1) return initialActive;
-    const installPct = (companyInfo?.installCostPct || 10) / 100;
     const invCost = calcSmartCost(curInverter, 1, stock || []);
     const panCost = calcSmartCost(curPanel, curPanelCount, stock || []);
     const batCost = curBattery ? calcSmartCost(curBattery, 1, stock || []) : { cost: 0, fromStock: 0, fromMarket: 0, breakdown: [], total: 0 };
     const equipmentCost = invCost.cost + panCost.cost + batCost.cost;
-    const installCost = Math.round(equipmentCost * installPct);
+    const installCost = sumHiddenCosts(companyInfo); // ต้นทุนแฝงต่องาน
     const grandCost = equipmentCost + installCost;
     const margin = getMargin(curInverter.size, companyInfo);
     const autoSellPrice = applyMargin(grandCost, margin);
