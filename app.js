@@ -3091,7 +3091,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
       </main>
 
       {showJobModal && (
-        <JobModal job={editingItem} partners={partners} stock={stock} onUpdateStock={saveStock}
+        <JobModal job={editingItem} partners={partners} stock={stock} documents={documents} onUpdateStock={saveStock}
           onClose={() => { setShowJobModal(false); setEditingItem(null); }}
           onSave={(data) => {
             if (editingItem) {
@@ -3514,7 +3514,7 @@ function PickQuotationModal({ documents, fmt, onClose, onSelect }) {
   );
 }
 
-function JobModal({ job, partners, stock = [], onUpdateStock, onClose, onSave }) {
+function JobModal({ job, partners, stock = [], documents = [], onUpdateStock, onClose, onSave }) {
   const [form, setForm] = useState(job || {
     date: new Date().toISOString().split('T')[0],
     customer: '', location: '', type: '',
@@ -3642,7 +3642,74 @@ function JobModal({ job, partners, stock = [], onUpdateStock, onClose, onSave })
       </div>
 
       <div className="mt-4 mb-2">
-        <label className="text-sm font-bold text-stone-700 mb-2 block">📋 ต้นทุนแยกหมวด</label>
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-sm font-bold text-stone-700 block">📋 ต้นทุนแยกหมวด</label>
+          {/* ปุ่มดึงข้อมูลจากใบเสนอราคา */}
+          {(() => {
+            const quotation = form.quotationId ? documents.find(d => d.id === form.quotationId) : null;
+            const snap = quotation?.equipmentSnapshot;
+            if (!snap) return null;
+            
+            return (
+              <button 
+                type="button"
+                onClick={() => {
+                  const newCosts = { ...costsByCategory };
+                  const messages = [];
+                  
+                  // แผงโซล่า
+                  if (snap.panel) {
+                    const items = newCosts.panel || [];
+                    const itemName = `${snap.panel.brand} ${snap.panel.model} × ${snap.panel.qty} แผ่น`;
+                    const itemAmount = snap.panel.total || (snap.panel.costEach * snap.panel.qty);
+                    // เช็คว่ามีรายการชื่อนี้อยู่แล้วไหม
+                    const exists = items.some(it => it.item === itemName);
+                    if (!exists) {
+                      newCosts.panel = [...items, { item: itemName, amount: itemAmount }];
+                      messages.push(`✓ แผงโซล่า: ${itemName}`);
+                    }
+                  }
+                  
+                  // อินเวอร์เตอร์
+                  if (snap.inverter) {
+                    const items = newCosts.inverter || [];
+                    const itemName = `${snap.inverter.brand} ${snap.inverter.model}`;
+                    const itemAmount = snap.inverter.cost;
+                    const exists = items.some(it => it.item === itemName);
+                    if (!exists) {
+                      newCosts.inverter = [...items, { item: itemName, amount: itemAmount }];
+                      messages.push(`✓ อินเวอร์เตอร์: ${itemName}`);
+                    }
+                  }
+                  
+                  // แบตเตอรี่
+                  if (snap.battery) {
+                    const items = newCosts.battery || [];
+                    const itemName = `${snap.battery.brand} ${snap.battery.model}`;
+                    const itemAmount = snap.battery.cost;
+                    const exists = items.some(it => it.item === itemName);
+                    if (!exists) {
+                      newCosts.battery = [...items, { item: itemName, amount: itemAmount }];
+                      messages.push(`✓ แบตเตอรี่: ${itemName}`);
+                    }
+                  }
+                  
+                  if (messages.length === 0) {
+                    alert('⚠️ ดึงไม่ได้ - รายการอาจมีอยู่แล้ว หรือใบเสนอราคาไม่มีข้อมูลอุปกรณ์');
+                    return;
+                  }
+                  
+                  setCostsByCategory(newCosts);
+                  alert(`📥 ดึงข้อมูลจากใบเสนอราคาเรียบร้อย!\n\n${messages.join('\n')}\n\n💡 กดที่รายการเพื่อปรับแก้ชื่อ/ราคาได้`);
+                }}
+                className="text-xs bg-violet-500 hover:bg-violet-600 text-white px-3 py-1.5 rounded-lg font-medium flex items-center gap-1"
+                title="ดึงรายการ inverter/แผง/แบต จากใบเสนอราคา"
+              >
+                📥 ดึงจากใบเสนอราคา
+              </button>
+            );
+          })()}
+        </div>
         {COST_CATEGORIES.map(cat => {
           const items = costsByCategory[cat.id] || [];
           const subtotal = items.reduce((s, it) => s + Number(it.amount || 0), 0);
