@@ -647,20 +647,12 @@ function recommendPackages({ monthlyBill, hasBattery, region, stock = [], catalo
   const cheapPanel = [...panels].sort((a, b) => a.marketPrice - b.marketPrice)[0];
   const cheapPanelCount = Math.ceil(cheapInverter.size * 1100 / cheapPanel.watt);
   
-  // === Package 2: คุ้มสุด — Hybrid + standard ===
-  const bestInverter = findInverter(targetKW, 'hybrid', 'standard') || findInverter(targetKW, 'hybrid', null) || findInverter(targetKW, null, null);
-  const bestPanel = panels.find(p => p.watt === 640) || panels[0];
-  const bestPanelCount = Math.ceil(bestInverter.size * 1100 / bestPanel.watt);
-  const bestBattery = hasBattery && batteries.length > 0 ? batteries[0] : null;
-  
   // === Package 3: Premium — Hybrid kW ใกล้เคียง + แบต + แผงดี ===
-  // Premium ไม่ใหญ่เกินไป (ใกล้ targetKW + นิดเดียว) แต่เน้นคุณภาพ
   const premiumInverter = findInverter(targetKW, 'hybrid', 'premium')
     || findInverter(targetKW, 'hybrid', null)
     || findInverter(targetKW, null, null);
-  // ถ้า premium = best ตัวเดียวกัน → ลองเพิ่มขนาดนิดหน่อย
   let finalPremium = premiumInverter;
-  if (premiumInverter && premiumInverter.id === bestInverter?.id) {
+  if (premiumInverter && cheapInverter && premiumInverter.id === cheapInverter.id) {
     const bigger = inverters
       .filter(i => i.size > targetKW && i.type === 'hybrid')
       .sort((a, b) => a.size - b.size)[0];
@@ -691,7 +683,6 @@ function recommendPackages({ monthlyBill, hasBattery, region, stock = [], catalo
     return {
       label, badge,
       inverter, panel, panelCount, battery,
-      // เก็บ invCost ไว้ เผื่อใช้แสดง breakdown
       costBreakdown: { invCost, panCost, batCost },
       equipmentCost,
       installCost,
@@ -705,9 +696,40 @@ function recommendPackages({ monthlyBill, hasBattery, region, stock = [], catalo
     };
   };
   
+  // === Package 2: คุ้มสุด — เลือกชุดที่ "คืนทุนเร็วที่สุด" ===
+  // ลองทุก combination ของ inverter × panel (+/- battery ตามที่ลูกค้าเลือก)
+  // เลือกชุดที่ breakEven ต่ำสุด แต่ kW ต้องไม่ต่ำกว่า requirement มาก
+  let bestPackage = null;
+  let bestBreakEven = Infinity;
+  for (const inv of inverters) {
+    // ข้าม inverter ที่เล็กกว่าความต้องการมาก (น้อยกว่า 60% ของ targetKW)
+    if (inv.size < targetKW * 0.6) continue;
+    // ข้าม inverter ที่ใหญ่เกินไป (มากกว่า 2x ของ targetKW)
+    if (inv.size > targetKW * 2) continue;
+    
+    for (const pan of panels) {
+      const panelCount = Math.ceil(inv.size * 1100 / pan.watt);
+      const bat = hasBattery && batteries.length > 0 ? batteries[0] : null;
+      const pkg = buildPackage(inv, pan, panelCount, bat, 'คุ้มสุด', '🌟');
+      if (pkg.breakEven < bestBreakEven && pkg.breakEven > 0) {
+        bestBreakEven = pkg.breakEven;
+        bestPackage = pkg;
+      }
+    }
+  }
+  
+  // ถ้าไม่เจอ (เช่น catalog ไม่ครบ) ใช้ fallback แบบเดิม
+  if (!bestPackage) {
+    const fallbackInv = findInverter(targetKW, 'hybrid', 'standard') || findInverter(targetKW, 'hybrid', null) || findInverter(targetKW, null, null);
+    const fallbackPan = panels.find(p => p.watt === 640) || panels[0];
+    const fallbackCount = Math.ceil(fallbackInv.size * 1100 / fallbackPan.watt);
+    const fallbackBat = hasBattery && batteries.length > 0 ? batteries[0] : null;
+    bestPackage = buildPackage(fallbackInv, fallbackPan, fallbackCount, fallbackBat, 'คุ้มสุด', '🌟');
+  }
+  
   return {
     cheap: buildPackage(cheapInverter, cheapPanel, cheapPanelCount, null,        'ถูกสุด',   '💰'),
-    best:  buildPackage(bestInverter,  bestPanel,  bestPanelCount,  bestBattery, 'คุ้มสุด',  '🌟'),
+    best:  bestPackage,
     premium: buildPackage(finalPremium, premiumPanel, premiumPanelCount, premiumBattery, 'Premium', '👑'),
   };
 }
@@ -4861,44 +4883,38 @@ ${battery ? `- ${battery.brand} ${battery.model} × 1 ลูก` : ''}
         <div className="space-y-3">
           {/* Inverter selector */}
           <div>
-            <div className="text-xs font-medium text-stone-600 mb-1">🔌 Inverter</div>
-            <div className="grid grid-cols-1 gap-2">
+            <label className="text-xs font-medium text-stone-600 mb-1 block">🔌 Inverter</label>
+            <select 
+              value={curInverter?.id || ''}
+              onChange={e => {
+                const inv = inverters.find(i => i.id === e.target.value);
+                if (inv) setCurInverter(inv);
+              }}
+              className="w-full px-3 py-3 border-2 border-stone-200 rounded-xl text-sm font-medium bg-white focus:border-amber-500 focus:outline-none">
               {inverters.map(inv => (
-                <button key={inv.id} onClick={() => setCurInverter(inv)}
-                  className={`p-2.5 rounded-xl border-2 text-left text-sm transition-all ${
-                    curInverter?.id === inv.id ? 'border-amber-500 bg-amber-50' : 'border-stone-200 hover:border-stone-300'
-                  }`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-medium">{inv.brand} {inv.model}</div>
-                      <div className="text-xs text-stone-500">{inv.size}kW · {inv.type === 'hybrid' ? 'Hybrid' : inv.type === 'ongrid' ? 'On-grid' : 'Off-grid'}</div>
-                    </div>
-                    {curInverter?.id === inv.id && <span className="text-amber-500">✓</span>}
-                  </div>
-                </button>
+                <option key={inv.id} value={inv.id}>
+                  {inv.brand} {inv.model} ({inv.size}kW · {inv.type === 'hybrid' ? 'Hybrid' : inv.type === 'ongrid' ? 'On-grid' : 'Off-grid'})
+                </option>
               ))}
-            </div>
+            </select>
           </div>
           
           {/* Panel selector */}
           <div>
-            <div className="text-xs font-medium text-stone-600 mb-1">☀️ แผงโซล่าเซลล์</div>
-            <div className="grid grid-cols-1 gap-2 mb-2">
+            <label className="text-xs font-medium text-stone-600 mb-1 block">☀️ แผงโซล่าเซลล์</label>
+            <select
+              value={curPanel?.id || ''}
+              onChange={e => {
+                const p = panels.find(x => x.id === e.target.value);
+                if (p) setCurPanel(p);
+              }}
+              className="w-full px-3 py-3 border-2 border-stone-200 rounded-xl text-sm font-medium bg-white focus:border-amber-500 focus:outline-none mb-2">
               {panels.map(p => (
-                <button key={p.id} onClick={() => setCurPanel(p)}
-                  className={`p-2.5 rounded-xl border-2 text-left text-sm transition-all ${
-                    curPanel?.id === p.id ? 'border-amber-500 bg-amber-50' : 'border-stone-200 hover:border-stone-300'
-                  }`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-medium">{p.brand} {p.model}</div>
-                      <div className="text-xs text-stone-500">{p.watt}W ต่อแผ่น</div>
-                    </div>
-                    {curPanel?.id === p.id && <span className="text-amber-500">✓</span>}
-                  </div>
-                </button>
+                <option key={p.id} value={p.id}>
+                  {p.brand} {p.model} ({p.watt}W)
+                </option>
               ))}
-            </div>
+            </select>
             {/* Panel count */}
             <div className="bg-stone-50 rounded-xl p-3">
               <div className="flex items-center justify-between">
@@ -4922,35 +4938,27 @@ ${battery ? `- ${battery.brand} ${battery.model} × 1 ลูก` : ''}
           
           {/* Battery selector */}
           <div>
-            <div className="text-xs font-medium text-stone-600 mb-1">🔋 แบตเตอรี่</div>
-            <div className="grid grid-cols-1 gap-2">
-              <button onClick={() => setCurBattery(null)}
-                className={`p-2.5 rounded-xl border-2 text-left text-sm transition-all ${
-                  curBattery === null ? 'border-amber-500 bg-amber-50' : 'border-stone-200 hover:border-stone-300'
-                }`}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-medium">❌ ไม่ใช้แบตเตอรี่</div>
-                    <div className="text-xs text-stone-500">เหมาะกับ on-grid / ใช้กลางวันเยอะ</div>
-                  </div>
-                  {curBattery === null && <span className="text-amber-500">✓</span>}
-                </div>
-              </button>
-              {batteries.map(bat => (
-                <button key={bat.id} onClick={() => setCurBattery(bat)}
-                  className={`p-2.5 rounded-xl border-2 text-left text-sm transition-all ${
-                    curBattery?.id === bat.id ? 'border-amber-500 bg-amber-50' : 'border-stone-200 hover:border-stone-300'
-                  }`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-medium">{bat.brand} {bat.model}</div>
-                      <div className="text-xs text-stone-500">ความจุ {bat.capacity}kWh</div>
-                    </div>
-                    {curBattery?.id === bat.id && <span className="text-amber-500">✓</span>}
-                  </div>
-                </button>
+            <label className="text-xs font-medium text-stone-600 mb-1 block">🔋 แบตเตอรี่</label>
+            <select
+              value={curBattery?.id || 'none'}
+              onChange={e => {
+                if (e.target.value === 'none') setCurBattery(null);
+                else {
+                  const b = batteries.find(x => x.id === e.target.value);
+                  if (b) setCurBattery(b);
+                }
+              }}
+              className="w-full px-3 py-3 border-2 border-stone-200 rounded-xl text-sm font-medium bg-white focus:border-amber-500 focus:outline-none">
+              <option value="none">❌ ไม่ใช้แบตเตอรี่</option>
+              {batteries.map(b => (
+                <option key={b.id} value={b.id}>
+                  🔋 {b.brand} {b.model} ({b.capacity}kWh)
+                </option>
               ))}
-            </div>
+            </select>
+            {curBattery === null && (
+              <p className="text-xs text-stone-500 mt-1 ml-1">เหมาะกับ on-grid / ใช้กลางวันเยอะ</p>
+            )}
           </div>
         </div>
       </div>
