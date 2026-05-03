@@ -732,6 +732,20 @@ function applyMargin(cost, marginPct) {
   return Math.round(cost * (1 + marginPct / 100));
 }
 
+// ปัดราคาขึ้นให้ลงท้าย 999 (Psychological Pricing)
+// ใช้กับราคาขายทุกที่ (Closer, Custom, ใบเสนอราคา)
+// 213,123 → 213,999 (+876)  
+// 199,500 → 199,999 (+499)
+// 100,000 → 100,999 (+999)
+// 99,999  → 99,999  (ลงท้าย 999 แล้วไม่ปัด)
+function roundUpTo999(price) {
+  if (price < 1000) return 999;
+  const thousands = Math.floor(price / 1000);
+  const remainder = price % 1000;
+  if (remainder === 999) return price;
+  return thousands * 1000 + 999;
+}
+
 // คำนวณ ROI พร้อม 2 mode
 // mode='dream' ขายฝัน: ใช้ PSH ทฤษฎี ไม่หัก degradation
 // mode='honest' จริงใจ: ใช้ PSH × PR (จริง) + หัก degradation 0.6%/ปี (NREL)
@@ -849,7 +863,8 @@ function recommendPackages({ monthlyBill, hasBattery, region, meterType = 'norma
     const installCost = sumHiddenCosts(companyInfo, inverter.size);
     const grandCost = equipmentCost + installCost;
     const margin = getMargin(inverter.size, companyInfo);
-    const sellPrice = applyMargin(grandCost, margin);
+    const sellPriceRaw = applyMargin(grandCost, margin);
+    const sellPrice = roundUpTo999(sellPriceRaw); // 🎯 ปัดขึ้น 999
     
     const totalKW = (panel.watt * panelCount) / 1000;
     // ใช้ mode 'dream' + meterType + touRates ตามลูกค้าเลือก
@@ -3511,13 +3526,18 @@ function Modal({ title, children, onClose, wide }) {
       <div
         className={`bg-white w-full ${wide ? 'md:max-w-2xl' : 'md:max-w-lg'} md:rounded-2xl rounded-t-2xl shadow-xl max-h-[95vh] md:max-h-[90vh] overflow-hidden flex flex-col animate-slide-up`}
         onClick={(e) => e.stopPropagation()}
+        style={{
+          paddingTop: 'env(safe-area-inset-top)',
+          paddingBottom: 'env(safe-area-inset-bottom)',
+        }}
       >
         {/* Sticky Header */}
         <div className="sticky top-0 bg-white flex items-center justify-between p-4 border-b border-stone-200 z-10 flex-shrink-0">
           <h3 className="display-font text-xl text-stone-800">{title}</h3>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+            className="p-3 hover:bg-stone-100 active:bg-stone-200 rounded-lg transition-colors"
+            style={{ minWidth: '44px', minHeight: '44px' }}
             title="ปิด (Esc)"
             aria-label="ปิด"
           >
@@ -5191,7 +5211,8 @@ function SalesPresentation({ customers, stock, catalog, companyInfo, onCreateQuo
       const installCost = sumHiddenCosts(companyInfo, inv.size); // ต้นทุนแฝงต่องาน (ตามขนาด)
       const grandCost = equipmentCost + installCost;
       const margin = getMargin(inv.size, companyInfo);
-      const sellPrice = applyMargin(grandCost, margin);
+      const sellPriceRaw = applyMargin(grandCost, margin);
+      const sellPrice = roundUpTo999(sellPriceRaw); // 🎯 ปัดขึ้น 999
       const totalKW = (pan.watt * cnt) / 1000;
       const roi = calculateROI({ kW: Math.min(totalKW, inv.size), ...calcOpts, mode: 'dream' });
       const breakEven = sellPrice / roi.yearlySavings;
@@ -5804,6 +5825,7 @@ function SalesPresentationCloser({ active: initialActive, customerName, customer
   const [proPinInput, setProPinInput] = useState('');
   const [proPinError, setProPinError] = useState(false);
   const [proModeOpen, setProModeOpen] = useState(false);
+  const [editFreebies, setEditFreebies] = useState(false);
   
   // Pro Mode factors (toggle ได้)
   const [proFactors, setProFactors] = useState({
@@ -5853,7 +5875,8 @@ function SalesPresentationCloser({ active: initialActive, customerName, customer
     const installCost = sumHiddenCosts(companyInfo, curInverter.size); // ต้นทุนแฝงต่องาน (ตามขนาด)
     const grandCost = equipmentCost + installCost;
     const margin = getMargin(curInverter.size, companyInfo);
-    const autoSellPrice = applyMargin(grandCost, margin);
+    const autoSellPriceRaw = applyMargin(grandCost, margin);
+    const autoSellPrice = roundUpTo999(autoSellPriceRaw); // 🎯 ปัดขึ้น 999
     const sellPrice = customSellPrice != null ? customSellPrice : autoSellPrice;
     const totalKW = (curPanel.watt * curPanelCount) / 1000;
     
@@ -6453,17 +6476,21 @@ ${battery ? `- ${battery.brand} ${battery.model} × 1 ลูก` : ''}
       )}
 
       {/* === 🎁 ของแถม === */}
-      {(companyInfo?.freebies?.length > 0 || proModeOpen) && (
+      {(companyInfo?.freebies?.length > 0) && (
         <div className={`bg-gradient-to-br from-rose-50 to-amber-50 rounded-2xl shadow-sm border-2 border-rose-200 overflow-hidden transition-all duration-700 delay-200 ${animateStep >= 4 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
           <div className="bg-gradient-to-r from-rose-500 to-pink-500 px-4 py-2 text-white flex items-center justify-between">
             <h3 className="font-bold text-sm">🎁 ของแถมพิเศษ! ฟรี!</h3>
-            {proModeOpen && (
-              <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded">🔧 Pro Mode</span>
-            )}
+            <button
+              onClick={() => setEditFreebies(!editFreebies)}
+              className="text-[10px] bg-white/20 hover:bg-white/30 px-2 py-0.5 rounded transition-colors"
+              title="แก้ไขของแถม"
+            >
+              {editFreebies ? '✓ เสร็จ' : '✏️ แก้ไข'}
+            </button>
           </div>
           <div className="p-3 grid grid-cols-1 gap-1.5">
-            {/* Pro Mode: แสดงทุกตัว + edit ได้ */}
-            {proModeOpen ? (
+            {/* Edit Mode: แสดงทุกตัว + edit ได้ */}
+            {editFreebies ? (
               <>
                 {(companyInfo?.freebies || []).map((f, idx) => (
                   <div key={f.id} className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs ${f.active !== false ? 'bg-white/80' : 'bg-stone-100/60 opacity-60'}`}>
@@ -6477,7 +6504,7 @@ ${battery ? `- ${battery.brand} ${battery.model} × 1 ลูก` : ''}
                           onSaveCompany({...companyInfo, freebies: newFreebies}, 'edit', `${e.target.checked ? 'เปิด' : 'ปิด'} ของแถม: ${f.label}`);
                         }
                       }}
-                      className="w-4 h-4 accent-rose-500"
+                      className="w-4 h-4 accent-rose-500 cursor-pointer"
                     />
                     <span className="text-base">{f.icon}</span>
                     <input
@@ -6961,7 +6988,13 @@ function DocumentPreview({ doc, companyInfo, fmt, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-start justify-center overflow-y-auto p-4 print:bg-white print:p-0 print:overflow-visible">
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-start justify-center overflow-y-auto print:bg-white print:p-0 print:overflow-visible"
+         style={{ 
+           paddingTop: 'calc(70px + env(safe-area-inset-top))',
+           paddingBottom: 'max(20px, env(safe-area-inset-bottom))',
+           paddingLeft: '12px',
+           paddingRight: '12px',
+         }}>
       {/* Print styles */}
       <style>{`
         @media print {
@@ -6998,23 +7031,45 @@ function DocumentPreview({ doc, companyInfo, fmt, onClose }) {
         }
       `}</style>
 
-      {/* Top Action Bar */}
-      <div className="fixed top-0 left-0 right-0 bg-stone-900 text-white p-3 z-10 flex items-center justify-between gap-2 no-print print:hidden">
-        <div className="text-sm">
-          <span className="opacity-60">ดูตัวอย่าง:</span> <span className="font-medium">{doc.docNumber}</span>
+      {/* Top Action Bar - safe-area for iPhone notch */}
+      <div className="fixed top-0 left-0 right-0 bg-stone-900 text-white z-50 flex items-center justify-between gap-2 no-print print:hidden shadow-lg"
+           style={{ 
+             paddingTop: 'max(12px, env(safe-area-inset-top))',
+             paddingBottom: '12px',
+             paddingLeft: 'max(12px, env(safe-area-inset-left))',
+             paddingRight: 'max(12px, env(safe-area-inset-right))',
+           }}>
+        <button onClick={onClose} 
+          className="bg-stone-700 hover:bg-stone-600 active:bg-stone-500 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5 flex-shrink-0"
+          style={{ minHeight: '44px' }} 
+          title="ปิด">
+          ← กลับ
+        </button>
+        <div className="text-xs sm:text-sm flex-1 min-w-0 truncate">
+          <span className="opacity-60">ตัวอย่าง:</span> <span className="font-medium">{doc.docNumber}</span>
         </div>
-        <div className="flex gap-2">
-          <button onClick={handlePrint} className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-1.5 rounded-lg text-sm flex items-center gap-1.5 font-medium">
-            🖨️ พิมพ์ / บันทึก PDF
-          </button>
-          <button onClick={onClose} className="bg-stone-700 hover:bg-stone-600 text-white px-3 py-1.5 rounded-lg text-sm">
-            ✕ ปิด
-          </button>
-        </div>
+        <button onClick={handlePrint} 
+          className="bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-1.5 font-medium flex-shrink-0"
+          style={{ minHeight: '44px' }}>
+          🖨️ <span className="hidden sm:inline">พิมพ์ / </span>PDF
+        </button>
       </div>
 
+      {/* Floating Back Button (มุมล่างขวา - กันกรณี scroll ลึก) */}
+      <button onClick={onClose}
+        className="fixed bg-stone-800 hover:bg-stone-700 active:bg-stone-900 text-white rounded-full shadow-2xl flex items-center justify-center z-50 no-print print:hidden transition-transform active:scale-95"
+        style={{ 
+          bottom: 'max(20px, env(safe-area-inset-bottom))',
+          right: 'max(20px, env(safe-area-inset-right))',
+          width: '56px',
+          height: '56px',
+        }}
+        title="ปิด">
+        <span className="text-2xl">✕</span>
+      </button>
+
       {/* Document */}
-      <div className="bg-white shadow-xl mt-16 mb-8 print:mt-0 print:shadow-none print-area max-w-full" 
+      <div className="bg-white shadow-xl mb-8 print:mt-0 print:shadow-none print-area max-w-full" 
            style={{ 
              width: '210mm', 
              maxWidth: '100%',
