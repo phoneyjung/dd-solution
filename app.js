@@ -426,8 +426,8 @@ const DEFAULT_COMPANY_INFO = {
   ],
   // === สเปคที่ใช้ (ใส่ใจรายละเอียด) ===
   specs: [
-    { id: 's-dc',     label: 'สาย DC (PV)',         value: 'PV1-F 6mm² ทนแดด UV' },
-    { id: 's-ac',     label: 'สาย AC',              value: 'Yasaki 10mm² (เครื่อง 10kW ขึ้นไปใช้ 16mm²)' },
+    { id: 's-dc',     label: 'สาย PV (DC)',         value: 'PV1-F 6mm² ดำ+แดง ทนแดด UV' },
+    { id: 's-ac',     label: 'สาย AC + Ground',     value: 'Yasaki THW 10mm² (≤5kW) / 16mm² (>5kW) + เขียวเหลือง' },
     { id: 's-comb',   label: 'ตู้ Combiner',        value: 'พร้อม Surge Protection' },
     { id: 's-rail',   label: 'รางอลูมิเนียม',       value: 'หนา 1.6mm + Stainless' },
     { id: 's-test',   label: 'ทดสอบหลังติดตั้ง',   value: 'Megger Test + ขนานไฟ' },
@@ -461,7 +461,9 @@ const DEFAULT_COMPANY_INFO = {
   // ค่าเริ่มต้น: ประมาณการจากข้อมูลงาน 1, 2 (ระบบ ~5kW)
   hiddenCosts: [
     { id: 'hc-mounting',  label: 'วัสดุติดตั้ง (Rail/Clamp/Hook/etc.)', amount: 13500, perJob: true },
-    { id: 'hc-wiring',    label: 'ค่าสายไฟ (PV + เมน)',                  amount: 12300, perJob: true },
+    { id: 'hc-wire-pv',    label: 'สาย PV (PV1-F 6mm² ดำ+แดง) ~30m',   amount: 1650,  perJob: true },
+    { id: 'hc-wire-ac-5k', label: 'สาย AC 10mm² (ระบบ ≤5kW) ~45m',     amount: 4275,  perJob: true, applyIfInvSize: '<=5' },
+    { id: 'hc-wire-ac-10k',label: 'สาย AC 16mm² (ระบบ >5kW) ~45m',     amount: 6300,  perJob: true, applyIfInvSize: '>5' },
     { id: 'hc-combiner',  label: 'ตู้ Combiner + เบรคเกอร์',            amount: 3000,  perJob: true },
     { id: 'hc-labor',     label: 'ค่าแรงช่าง',                           amount: 8000,  perJob: true },
     { id: 'hc-travel',    label: 'ค่าเดินทาง + ค่าน้ำมัน',              amount: 1500,  perJob: true },
@@ -639,6 +641,15 @@ const DEFAULT_SALES_CATALOG = [
   
   // ============ BATTERIES ============
   { id: 'sc-bat-deye-16', category: 'battery', brand: 'Deye', model: '16kWh', capacity: 16, marketPrice: 67303, tier: 'standard', active: true },
+  
+  // ============ WIRES (สายไฟ) — ขายแยก/เสริม ============
+  // หมายเหตุ: ราคาเป็น ฿/เมตร — ต้องคูณความยาวที่ลูกค้าใช้
+  { id: 'sc-wire-pv-bk',     category: 'wire', brand: 'Yasaki', model: 'PV1-F 6mm² สีดำ',          watt: 6, marketPrice: 55,  tier: 'standard', active: true, unit: 'm', wireType: 'pv' },
+  { id: 'sc-wire-pv-rd',     category: 'wire', brand: 'Yasaki', model: 'PV1-F 6mm² สีแดง',         watt: 6, marketPrice: 55,  tier: 'standard', active: true, unit: 'm', wireType: 'pv' },
+  { id: 'sc-wire-ac-10-bk',  category: 'wire', brand: 'Yasaki', model: 'THW 10mm² สีดำ (5kW)',     watt: 10, marketPrice: 95, tier: 'standard', active: true, unit: 'm', wireType: 'ac', forInvSize: '<=5' },
+  { id: 'sc-wire-ac-10-gy',  category: 'wire', brand: 'Yasaki', model: 'THW 10mm² เขียวเหลือง (5kW)', watt: 10, marketPrice: 95, tier: 'standard', active: true, unit: 'm', wireType: 'ac', forInvSize: '<=5' },
+  { id: 'sc-wire-ac-16-bk',  category: 'wire', brand: 'Yasaki', model: 'THW 16mm² สีดำ (10kW+)',   watt: 16, marketPrice: 140, tier: 'standard', active: true, unit: 'm', wireType: 'ac', forInvSize: '>5' },
+  { id: 'sc-wire-ac-16-gy',  category: 'wire', brand: 'Yasaki', model: 'THW 16mm² เขียวเหลือง (10kW+)', watt: 16, marketPrice: 140, tier: 'standard', active: true, unit: 'm', wireType: 'ac', forInvSize: '>5' },
 ];
 
 // Legacy fallback (เผื่อ catalog ว่าง)
@@ -689,9 +700,32 @@ function getMargin(inverterKW, companyInfo = null) {
 }
 
 // ผลรวมต้นทุนแฝง (เปิดอยู่ทั้งหมด)
-function sumHiddenCosts(companyInfo) {
+function sumHiddenCosts(companyInfo, inverterSize = null) {
   const items = companyInfo?.hiddenCosts || [];
-  return items.filter(i => i.perJob !== false).reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
+  return items.filter(i => {
+    if (i.perJob === false) return false;
+    // เช็ค applyIfInvSize - applied conditionally
+    if (i.applyIfInvSize && inverterSize !== null) {
+      const cond = i.applyIfInvSize.trim();
+      if (cond.startsWith('<=')) {
+        const max = parseFloat(cond.slice(2));
+        return inverterSize <= max;
+      }
+      if (cond.startsWith('>=')) {
+        const min = parseFloat(cond.slice(2));
+        return inverterSize >= min;
+      }
+      if (cond.startsWith('<')) {
+        const max = parseFloat(cond.slice(1));
+        return inverterSize < max;
+      }
+      if (cond.startsWith('>')) {
+        const min = parseFloat(cond.slice(1));
+        return inverterSize > min;
+      }
+    }
+    return true;
+  }).reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
 }
 
 function applyMargin(cost, marginPct) {
@@ -811,7 +845,8 @@ function recommendPackages({ monthlyBill, hasBattery, region, meterType = 'norma
     const batCost = battery ? calcSmartCost(battery, 1, stock) : { cost: 0, fromStock: 0, fromMarket: 0, breakdown: [], total: 0 };
     
     const equipmentCost = invCost.cost + panCost.cost + batCost.cost;
-    const installCost = hiddenCostsTotal;
+    // คิดต้นทุนแฝงตามขนาด inverter (สาย 5kW vs 10kW ต่างกัน)
+    const installCost = sumHiddenCosts(companyInfo, inverter.size);
     const grandCost = equipmentCost + installCost;
     const margin = getMargin(inverter.size, companyInfo);
     const sellPrice = applyMargin(grandCost, margin);
@@ -1241,11 +1276,13 @@ function DDSolutionManager({ currentUser, onLogout }) {
           ciData.specs = DEFAULT_COMPANY_INFO.specs;
           needsCiSave = true;
         }
-        // Force migrate specs (V2): ลบ IP65, MDB, สาย 16mm² เก่า
+        // Force migrate specs (V3): อัพเดทรายละเอียดสายไฟ (ดำ+แดง / เขียวเหลือง)
         else if (ciData.specs.some(s => 
           (s.id === 's-mdb') || 
           (s.value && s.value.includes('IP65') && !s.value.includes('Surge Protection พร้อม')) ||
-          (s.id === 's-ac' && s.value === 'Yasaki THW 16mm²')
+          (s.id === 's-ac' && s.value === 'Yasaki THW 16mm²') ||
+          (s.id === 's-dc' && s.value === 'PV1-F 6mm² ทนแดด UV') ||
+          (s.id === 's-ac' && s.value && s.value.includes('Yasaki 10mm²') && !s.value.includes('เขียวเหลือง'))
         )) {
           ciData.specs = DEFAULT_COMPANY_INFO.specs;
           needsCiSave = true;
@@ -4369,6 +4406,7 @@ function SalesCatalogManager({ catalog, stock, companyInfo, onSaveCatalog, onSav
           { id: 'inverter', label: '🔌 Inverter' },
           { id: 'panel', label: '☀️ แผง' },
           { id: 'battery', label: '🔋 แบต' },
+          { id: 'wire', label: '🪢 สายไฟ' },
         ].map(f => (
           <button key={f.id} onClick={() => setFilterCat(f.id)}
             className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap ${filterCat === f.id ? 'bg-amber-500 text-white' : 'bg-stone-200 text-stone-600'}`}>
@@ -4387,7 +4425,7 @@ function SalesCatalogManager({ catalog, stock, companyInfo, onSaveCatalog, onSav
           const stockMatch = getStockMatch(item);
           const stockTotal = stockMatch.reduce((sum, s) => sum + s.qty, 0);
           const stockUnitCost = stockMatch.length > 0 ? stockMatch[0].unitCost : null;
-          const catIcon = item.category === 'inverter' ? '🔌' : item.category === 'panel' ? '☀️' : '🔋';
+          const catIcon = item.category === 'inverter' ? '🔌' : item.category === 'panel' ? '☀️' : item.category === 'battery' ? '🔋' : '🪢';
           
           return (
             <div key={item.id} className={`bg-white rounded-2xl p-3 shadow-sm border-2 ${item.active === false ? 'border-stone-200 opacity-60' : 'border-amber-200'}`}>
@@ -4402,10 +4440,11 @@ function SalesCatalogManager({ catalog, stock, companyInfo, onSaveCatalog, onSav
                     {item.category === 'inverter' && `${item.size}kW · ${item.type}`}
                     {item.category === 'panel' && `${item.watt}W ต่อแผ่น`}
                     {item.category === 'battery' && `${item.capacity}kWh`}
+                    {item.category === 'wire' && `${item.watt}mm² · ${item.wireType === 'pv' ? 'PV (DC)' : 'AC (เมน)'} · ${item.unit || 'm'}${item.forInvSize ? ` · ใช้กับ ${item.forInvSize}kW` : ''}`}
                   </div>
                   <div className="grid grid-cols-2 gap-2 mt-2">
                     <div className="bg-amber-50 rounded-lg p-2">
-                      <div className="text-xs text-stone-500">ราคาตลาด</div>
+                      <div className="text-xs text-stone-500">ราคาตลาด {item.category === 'wire' ? `/${item.unit || 'm'}` : ''}</div>
                       <div className="font-bold text-amber-700">{item.marketPrice.toLocaleString()} ฿</div>
                     </div>
                     <div className={`rounded-lg p-2 ${stockTotal > 0 ? 'bg-emerald-50' : 'bg-stone-50'}`}>
@@ -4451,14 +4490,19 @@ function CatalogItemModal({ item, onClose, onSave }) {
     category: 'panel', brand: '', model: '', marketPrice: 0,
     tier: 'standard', active: true,
     watt: 0, size: 0, capacity: 0, type: 'hybrid',
+    unit: 'piece', wireType: 'ac', forInvSize: '',
   });
   const update = (f, v) => setForm({...form, [f]: v});
   const isInverter = form.category === 'inverter';
   const isPanel = form.category === 'panel';
   const isBattery = form.category === 'battery';
+  const isWire = form.category === 'wire';
   
   const canSave = form.brand && form.model && form.marketPrice > 0 && 
-    ((isInverter && form.size > 0) || (isPanel && form.watt > 0) || (isBattery && form.capacity > 0));
+    ((isInverter && form.size > 0) || 
+     (isPanel && form.watt > 0) || 
+     (isBattery && form.capacity > 0) ||
+     (isWire && form.watt > 0));
   
   return (
     <Modal title={item ? 'แก้ไขสินค้า' : 'เพิ่มสินค้า'} onClose={onClose}>
@@ -4467,11 +4511,12 @@ function CatalogItemModal({ item, onClose, onSave }) {
           <option value="inverter">🔌 Inverter</option>
           <option value="panel">☀️ แผงโซล่าเซลล์</option>
           <option value="battery">🔋 แบตเตอรี่</option>
+          <option value="wire">🪢 สายไฟ</option>
         </select>
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="แบรนด์"><input value={form.brand} onChange={e => update('brand', e.target.value)} placeholder="Deye / Jinko / Longi" className={inputCls} /></Field>
-        <Field label="รุ่น/Model"><input value={form.model} onChange={e => update('model', e.target.value)} placeholder="Hybrid 5kW / 640W" className={inputCls} /></Field>
+        <Field label="แบรนด์"><input value={form.brand} onChange={e => update('brand', e.target.value)} placeholder="Deye / Jinko / Yasaki" className={inputCls} /></Field>
+        <Field label="รุ่น/Model"><input value={form.model} onChange={e => update('model', e.target.value)} placeholder="Hybrid 5kW / THW 10mm² ดำ" className={inputCls} /></Field>
       </div>
       
       {isInverter && (
@@ -4492,8 +4537,33 @@ function CatalogItemModal({ item, onClose, onSave }) {
       {isBattery && (
         <Field label="ความจุ (kWh)"><input type="number" step="0.1" value={form.capacity || ''} onChange={e => update('capacity', Number(e.target.value))} placeholder="16" className={inputCls} /></Field>
       )}
+      {isWire && (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="ขนาด (mm²)" hint="6=PV, 10=AC 5kW, 16=AC 10kW">
+              <input type="number" value={form.watt || ''} onChange={e => update('watt', Number(e.target.value))} placeholder="6 / 10 / 16" className={inputCls} />
+            </Field>
+            <Field label="ประเภทสาย">
+              <select value={form.wireType || 'ac'} onChange={e => update('wireType', e.target.value)} className={inputCls}>
+                <option value="pv">PV (DC)</option>
+                <option value="ac">AC (เมน)</option>
+              </select>
+            </Field>
+          </div>
+          <Field label="ใช้กับ Inverter ขนาด" hint="ว่างเปล่า=ทุกขนาด, '<=5'=≤5kW, '>5'=>5kW">
+            <input value={form.forInvSize || ''} onChange={e => update('forInvSize', e.target.value)} placeholder="<=5  หรือ  >5" className={inputCls} />
+          </Field>
+          <Field label="หน่วย">
+            <select value={form.unit || 'm'} onChange={e => update('unit', e.target.value)} className={inputCls}>
+              <option value="m">เมตร (m)</option>
+              <option value="roll">ม้วน (roll)</option>
+              <option value="piece">เส้น (piece)</option>
+            </select>
+          </Field>
+        </>
+      )}
       
-      <Field label="ราคาตลาด (฿)" hint="ราคาที่ซื้อจากตลาดวันนี้ — ใช้เมื่อสต็อกหมด">
+      <Field label={isWire ? `ราคาต่อ${form.unit === 'm' ? 'เมตร' : form.unit === 'roll' ? 'ม้วน' : 'เส้น'} (฿)` : 'ราคาตลาด (฿)'} hint="ราคาที่ซื้อจากตลาดวันนี้ — ใช้เมื่อสต็อกหมด">
         <input type="number" value={form.marketPrice || ''} onChange={e => update('marketPrice', Number(e.target.value))} className={inputCls} />
       </Field>
       
@@ -4577,7 +4647,7 @@ function SalesPresentation({ customers, stock, catalog, companyInfo, onCreateQuo
       const panCost = calcSmartCost(pan, cnt, stock);
       const batCost = bat ? calcSmartCost(bat, 1, stock) : { cost: 0, fromStock: 0, fromMarket: 0, breakdown: [], total: 0 };
       const equipmentCost = invCost.cost + panCost.cost + batCost.cost;
-      const installCost = sumHiddenCosts(companyInfo); // ต้นทุนแฝงต่องาน
+      const installCost = sumHiddenCosts(companyInfo, inv.size); // ต้นทุนแฝงต่องาน (ตามขนาด)
       const grandCost = equipmentCost + installCost;
       const margin = getMargin(inv.size, companyInfo);
       const sellPrice = applyMargin(grandCost, margin);
@@ -5238,7 +5308,7 @@ function SalesPresentationCloser({ active: initialActive, customerName, customer
     const panCost = calcSmartCost(curPanel, curPanelCount, stock || []);
     const batCost = curBattery ? calcSmartCost(curBattery, 1, stock || []) : { cost: 0, fromStock: 0, fromMarket: 0, breakdown: [], total: 0 };
     const equipmentCost = invCost.cost + panCost.cost + batCost.cost;
-    const installCost = sumHiddenCosts(companyInfo); // ต้นทุนแฝงต่องาน
+    const installCost = sumHiddenCosts(companyInfo, curInverter.size); // ต้นทุนแฝงต่องาน (ตามขนาด)
     const grandCost = equipmentCost + installCost;
     const margin = getMargin(curInverter.size, companyInfo);
     const autoSellPrice = applyMargin(grandCost, margin);
