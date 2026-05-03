@@ -485,6 +485,83 @@ const SOLAR_REGIONS = {
 // เขตร้อน + Rooftop จะสูงกว่าค่ากลาง — ใช้ 0.6% เพื่อความ realistic
 const PANEL_DEGRADATION_RATE = 0.006; // 0.6%/ปี (อิง NREL + tropical adjustment)
 
+// ============== ปัจจัยที่ส่งผลต่อการผลิตไฟ (โหมดคำนวณตามจริง) ==============
+
+// ทิศการติดตั้งแผง (8 ทิศ) + factor ที่ส่งผลต่อการผลิตในประเทศไทย
+// อิง: ประเทศไทยอยู่ในซีกโลกเหนือ → หันใต้ดีที่สุด
+// ค่าตัวคูณเทียบกับการหันใต้ที่มุม optimal
+const PANEL_DIRECTIONS = {
+  S:  { label: 'ใต้',           icon: '⬇️', factor: 1.00 },  // ดีที่สุด
+  SE: { label: 'ตะวันออกเฉียงใต้', icon: '↙️', factor: 0.96 },
+  SW: { label: 'ตะวันตกเฉียงใต้',  icon: '↘️', factor: 0.96 },
+  E:  { label: 'ตะวันออก',       icon: '⬅️', factor: 0.88 },
+  W:  { label: 'ตะวันตก',        icon: '➡️', factor: 0.88 },
+  NE: { label: 'ตะวันออกเฉียงเหนือ', icon: '↖️', factor: 0.78 },
+  NW: { label: 'ตะวันตกเฉียงเหนือ',  icon: '↗️', factor: 0.78 },
+  N:  { label: 'เหนือ',          icon: '⬆️', factor: 0.68 },  // แย่ที่สุด
+};
+
+// คำนวณ factor จากมุมแผง (tilt angle) สำหรับประเทศไทย
+// optimal tilt ≈ 10-15° (ใกล้ละติจูดของไทย)
+// 0° = แบนราบ (loss น้อย), 30°+ = เสีย efficiency มากขึ้น
+function getTiltFactor(angleDeg) {
+  // optimal range: 10-20° ได้เต็ม 100%
+  // ฐาน: cos function จากมุมที่ดีที่สุด ~15°
+  const optimal = 15;
+  const diff = Math.abs(angleDeg - optimal);
+  // ทุกๆ 10° ที่ห่างจาก optimal → ลด ~3%
+  const factor = 1 - (diff / 10) * 0.03;
+  return Math.max(0.5, Math.min(1.0, factor));
+}
+
+// ฤดูกาลในประเทศไทย (factor การผลิตไฟ)
+// อิง: ฝน พ.ค.-ต.ค. ลด 20-30%, ฤดูร้อน มี.ค.-เม.ย. peak
+function getSeasonFactor(month) {
+  // month: 1-12
+  const factors = {
+    1: 1.05,  // ม.ค. (อากาศเย็น แผงทำงานดี)
+    2: 1.05,  // ก.พ.
+    3: 1.10,  // มี.ค. (ฤดูร้อน peak)
+    4: 1.10,  // เม.ย. (ฤดูร้อน peak สูงสุด)
+    5: 0.90,  // พ.ค. (เริ่มฝน)
+    6: 0.80,  // มิ.ย. (ฝน)
+    7: 0.78,  // ก.ค. (ฝนหนัก)
+    8: 0.78,  // ส.ค. (ฝนหนัก)
+    9: 0.80,  // ก.ย. (ฝน)
+    10: 0.85, // ต.ค. (ฝนปลาย)
+    11: 0.95, // พ.ย. (เย็น)
+    12: 1.00, // ธ.ค. (เย็น)
+  };
+  return factors[month] || 0.95;
+}
+
+// คำนวณกำลังผลิต ณ เวลาปัจจุบัน (kW ที่ผลิตได้ ณ ขณะนั้น)
+// ใช้ check กับค่าที่ inverter วัดจริง
+function calculateCurrentProduction({ kW, hour, month, direction = 'S', tilt = 15, factors = {} }) {
+  // สร้าง bell curve ของแสงแดดในวันนั้น (peak ที่เที่ยง)
+  // sun rises ~6:00, sets ~18:00, peak ~12:00
+  let hourFactor = 0;
+  if (hour >= 6 && hour <= 18) {
+    // sin curve: 6:00 = 0, 12:00 = 1, 18:00 = 0
+    hourFactor = Math.sin(((hour - 6) / 12) * Math.PI);
+  }
+  
+  const dirFactor = PANEL_DIRECTIONS[direction]?.factor || 1.0;
+  const tiltFactor = getTiltFactor(tilt);
+  const seasonFactor = getSeasonFactor(month);
+  
+  // ปัจจัยลบเพิ่มเติม (toggle ได้)
+  const dustFactor = factors.dust ? 0.95 : 1.0;          // ฝุ่น
+  const shadeFactor = factors.shade ? 0.85 : 1.0;        // เงา
+  const tempFactor = factors.heatLoss ? 0.92 : 1.0;      // อุณหภูมิสูง
+  const cableFactor = factors.cableLoss ? 0.97 : 1.0;    // loss ในสาย
+  const inverterFactor = factors.inverterEff ? 0.96 : 1.0; // ประสิทธิภาพ inverter
+  
+  // ผลิตได้ ณ ขณะนั้น = kW × factors ทั้งหมด
+  return kW * hourFactor * dirFactor * tiltFactor * seasonFactor 
+       * dustFactor * shadeFactor * tempFactor * cableFactor * inverterFactor;
+}
+
 const PRICING_CONFIG = {
   // ค่าไฟปัจจุบัน (งวด พ.ค.-ส.ค. 2569 + VAT 7%)
   electricityRate: 4.23,           // ฿/kWh (3.95 × 1.07)
@@ -492,7 +569,7 @@ const PRICING_CONFIG = {
   touOffPeak: 2.79,                 // ฿/kWh (2.6037 × 1.07) ช่วงอื่น
   electricityInflation: 0,          // ไม่คิดเงินเฟ้อ (ตัวเลขที่นิ่ง)
   marginByCategory: { small: 25, medium: 20, large: 15 },
-  comparisonRates: { bank: 1.5, stock: 8, gold: 5 },
+  comparisonRates: { bank: 1.5, stock: 7, gold: 6 },
   daysPerMonth: 30,
 };
 
@@ -656,7 +733,10 @@ function calculateCO2(yearlyKwh, years) {
 
 // Smart Package Recommender — ใช้ catalog + smart pricing
 function recommendPackages({ monthlyBill, hasBattery, region, stock = [], catalog = [], companyInfo = null }) {
-  const peakHours = SOLAR_REGIONS[region]?.hours || 4.0;
+  // ใช้ dream peakHours (PSH ทฤษฎี) สำหรับ filter
+  // เพื่อให้ filter สอดคล้องกับการแสดงผล (Closer แสดงด้วย dream by default)
+  const regionData = SOLAR_REGIONS[region] || SOLAR_REGIONS.central;
+  const peakHours = regionData.theoreticalPSH || regionData.hours || 5.0;
   const electricityRate = PRICING_CONFIG.electricityRate;
   
   const monthlyKwhUsage = monthlyBill / electricityRate;
@@ -708,7 +788,9 @@ function recommendPackages({ monthlyBill, hasBattery, region, stock = [], catalo
     const sellPrice = applyMargin(grandCost, margin);
     
     const totalKW = (panel.watt * panelCount) / 1000;
-    const roi = calculateROI({ kW: Math.min(totalKW, inverter.size), region });
+    // ใช้ mode 'dream' (PSH ทฤษฎี) ตอน filter — ถ้า dream ยังไม่เกิน cap
+    // honest mode (3.7) ก็จะไม่เกินแน่นอน (เพราะน้อยกว่า)
+    const roi = calculateROI({ kW: Math.min(totalKW, inverter.size), region, mode: 'dream' });
     const breakEven = sellPrice / roi.yearlySavings;
     
     return {
@@ -761,7 +843,7 @@ function recommendPackages({ monthlyBill, hasBattery, region, stock = [], catalo
     const count = Math.max(1, panelCountForRatio(smallestInv, cheapestPan, 1.0));
     cheapPackage = buildPackage(smallestInv, cheapestPan, count, null);
   }
-  cheapPackage.label = 'ถูกสุด';
+  cheapPackage.label = 'ถูกสุด (ลงทุนน้อย แต่ก็ประหยัดนะ)';
   cheapPackage.badge = '💰';
   
   // ============ Package 2: คุ้มสุด (คืนทุนเร็วสุด) ============
@@ -791,7 +873,7 @@ function recommendPackages({ monthlyBill, hasBattery, region, stock = [], catalo
   if (!bestPackage) {
     bestPackage = cheapPackage;
   }
-  bestPackage.label = 'คุ้มสุด';
+  bestPackage.label = 'คุ้มสุด (คืนทุนเร็วสุด)';
   bestPackage.badge = '🌟';
   
   // ============ Package 3: Premium (เพื่ออนาคต) ============
@@ -839,7 +921,7 @@ function recommendPackages({ monthlyBill, hasBattery, region, stock = [], catalo
     const bat = batteries.length > 0 ? batteries[0] : null;
     premiumPackage = buildPackage(biggestInv, bestPan, count, bat);
   }
-  premiumPackage.label = 'Premium';
+  premiumPackage.label = 'Premium (เพื่ออนาคต)';
   premiumPackage.badge = '👑';
   
   return {
@@ -4847,10 +4929,226 @@ function SalesPresentation({ customers, stock, catalog, companyInfo, onCreateQuo
 }
 
 // ============== SALES CLOSING INFOGRAPHIC ==============
+// ============== Pro Mode Panel — โหมดเทคนิค (ซ่อน, ใส่ PIN เข้า) ==============
+function ProModePanel({ active, totalKW, region, curMeterType, proFactors, setProFactors, proTilt, setProTilt, proDirection, setProDirection }) {
+  // ========== ตั้งเวลา/วันที่สำหรับ Real-time check ==========
+  const [now, setNow] = useState(new Date());
+  const [customTime, setCustomTime] = useState(false);
+  
+  useEffect(() => {
+    if (customTime) return;
+    const t = setInterval(() => setNow(new Date()), 60000); // อัพเดททุกนาที
+    return () => clearInterval(t);
+  }, [customTime]);
+  
+  const hour = now.getHours() + now.getMinutes() / 60;
+  const month = now.getMonth() + 1;
+  
+  // คำนวณกำลังผลิต ณ ขณะนั้น (kW)
+  const currentProd = calculateCurrentProduction({
+    kW: Math.min(totalKW, active.inverter.size),
+    hour, month,
+    direction: proDirection,
+    tilt: proTilt,
+    factors: proFactors,
+  });
+  
+  const seasonFactor = getSeasonFactor(month);
+  const dirFactor = PANEL_DIRECTIONS[proDirection]?.factor || 1.0;
+  const tiltFactor = getTiltFactor(proTilt);
+  
+  // List ของ factors ที่กดเปิด/ปิดได้
+  const factorList = [
+    { key: 'pr', label: 'Performance Ratio', desc: 'ประสิทธิภาพระบบ', impact: '-27%', color: 'rose' },
+    { key: 'degradation', label: 'Degradation', desc: 'การเสื่อมของแผง 0.6%/ปี', impact: '-0.6%/ปี', color: 'rose' },
+    { key: 'dust', label: 'ฝุ่น/สิ่งสกปรก', desc: 'แผงไม่สะอาด', impact: '-5%', color: 'amber' },
+    { key: 'shade', label: 'เงาบัง', desc: 'ต้นไม้/อาคาร/สิ่งกีดขวาง', impact: '-15%', color: 'amber' },
+    { key: 'heatLoss', label: 'อุณหภูมิสูง', desc: 'แผงร้อนทำงานแย่ลง', impact: '-8%', color: 'amber' },
+    { key: 'cableLoss', label: 'Loss ในสาย', desc: 'การสูญเสียในสายไฟ', impact: '-3%', color: 'amber' },
+    { key: 'inverterEff', label: 'ประสิทธิภาพ Inverter', desc: 'แปลง DC→AC ไม่ 100%', impact: '-4%', color: 'amber' },
+  ];
+  
+  return (
+    <div className="bg-blue-50 border-2 border-blue-300 rounded-2xl p-4 space-y-3 animate-fade-in">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-bold text-blue-800 text-base">🔧 โหมดเทคนิค</h3>
+          <p className="text-xs text-blue-600">ปรับปัจจัยต่างๆ ดูผลแบบจริง</p>
+        </div>
+      </div>
+      
+      {/* === Real-time Production === */}
+      <div className="bg-white rounded-xl p-3">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-sm font-medium text-stone-700">⚡ กำลังผลิต ณ ตอนนี้</div>
+          <button onClick={() => setCustomTime(!customTime)} 
+            className="text-xs text-blue-600 hover:underline">
+            {customTime ? '🕐 ใช้เวลาปัจจุบัน' : '⏱️ ตั้งเวลาเอง'}
+          </button>
+        </div>
+        
+        {/* แสดงเวลาที่ใช้คำนวณ */}
+        {customTime ? (
+          <div className="flex gap-2 mb-2">
+            <input type="time" 
+              value={`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`}
+              onChange={e => {
+                const [h, m] = e.target.value.split(':').map(Number);
+                const d = new Date(now);
+                d.setHours(h, m);
+                setNow(d);
+              }}
+              className="flex-1 px-2 py-1 border rounded-lg text-sm" />
+            <select 
+              value={month}
+              onChange={e => {
+                const d = new Date(now);
+                d.setMonth(parseInt(e.target.value) - 1);
+                setNow(d);
+              }}
+              className="px-2 py-1 border rounded-lg text-sm">
+              {['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'].map((m, i) => (
+                <option key={i+1} value={i+1}>{m}</option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div className="text-xs text-stone-500 mb-2">
+            🕐 {now.toLocaleString('th-TH', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}
+          </div>
+        )}
+        
+        <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-lg p-3 text-center border border-amber-200">
+          <div className="text-3xl font-bold text-amber-700">
+            {currentProd.toFixed(2)} <span className="text-lg">kW</span>
+          </div>
+          <div className="text-xs text-stone-600 mt-1">
+            ({((currentProd / active.inverter.size) * 100).toFixed(0)}% ของ Inverter {active.inverter.size}kW)
+          </div>
+        </div>
+        
+        <div className="text-xs text-stone-600 mt-2 grid grid-cols-2 gap-x-2 gap-y-1">
+          <div>🌅 ช่วงเวลา: <strong>{hour.toFixed(1)} น.</strong></div>
+          <div>📅 ฤดู: <strong>{(seasonFactor * 100).toFixed(0)}%</strong></div>
+          <div>🧭 ทิศ: <strong>{(dirFactor * 100).toFixed(0)}%</strong></div>
+          <div>📐 มุม: <strong>{(tiltFactor * 100).toFixed(0)}%</strong></div>
+        </div>
+        
+        <p className="text-xs text-blue-600 italic mt-2">
+          💡 เทียบกับค่าใน inverter จริง — ถ้าน้อยกว่ามาก อาจมีปัญหา
+        </p>
+      </div>
+      
+      {/* === ทิศการติดตั้ง === */}
+      <div className="bg-white rounded-xl p-3">
+        <div className="text-sm font-medium text-stone-700 mb-2">🧭 ทิศที่แผงหันไป</div>
+        <div className="grid grid-cols-4 gap-1">
+          {Object.entries(PANEL_DIRECTIONS).map(([key, dir]) => (
+            <button key={key} onClick={() => setProDirection(key)}
+              className={`p-2 rounded-lg border text-xs transition-all ${
+                proDirection === key 
+                  ? 'border-blue-500 bg-blue-100 font-bold' 
+                  : 'border-stone-200 hover:border-stone-400'
+              }`}>
+              <div className="text-base">{dir.icon}</div>
+              <div className="text-[10px]">{dir.label}</div>
+              <div className="text-[10px] text-stone-500">{(dir.factor * 100).toFixed(0)}%</div>
+            </button>
+          ))}
+        </div>
+      </div>
+      
+      {/* === มุมแผง === */}
+      <div className="bg-white rounded-xl p-3">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-sm font-medium text-stone-700">📐 มุมเอียงแผง</div>
+          <div className="text-sm font-bold text-blue-700">{proTilt}° ({(tiltFactor * 100).toFixed(0)}%)</div>
+        </div>
+        <input type="range" min={0} max={90} value={proTilt}
+          onChange={e => setProTilt(parseInt(e.target.value))}
+          className="w-full" />
+        <div className="flex justify-between text-[10px] text-stone-500 mt-1">
+          <span>0°</span>
+          <span className="text-emerald-600 font-medium">10-15° (ดีที่สุด)</span>
+          <span>90°</span>
+        </div>
+      </div>
+      
+      {/* === ปัจจัยลบ Toggle === */}
+      <div className="bg-white rounded-xl p-3">
+        <div className="text-sm font-medium text-stone-700 mb-2">⚙️ ปัจจัยที่ส่งผลต่อการผลิต</div>
+        <div className="space-y-1.5">
+          {factorList.map(f => (
+            <label key={f.key} 
+              className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-all ${
+                proFactors[f.key] ? 'bg-rose-50 border border-rose-200' : 'bg-stone-50 hover:bg-stone-100'
+              }`}>
+              <div className="flex items-center gap-2 flex-1">
+                <input type="checkbox" 
+                  checked={proFactors[f.key]}
+                  onChange={e => setProFactors({...proFactors, [f.key]: e.target.checked})}
+                  className="w-4 h-4 accent-rose-500" />
+                <div>
+                  <div className="text-xs font-medium">{f.label}</div>
+                  <div className="text-[10px] text-stone-500">{f.desc}</div>
+                </div>
+              </div>
+              <div className={`text-xs font-bold ${proFactors[f.key] ? 'text-rose-600' : 'text-stone-400'}`}>
+                {f.impact}
+              </div>
+            </label>
+          ))}
+        </div>
+      </div>
+      
+      {/* === References === */}
+      <div className="bg-white rounded-xl p-3 text-[10px] text-stone-500 space-y-1">
+        <p className="font-bold text-stone-700 text-xs">📚 ที่มา (อ้างอิงงานวิจัย):</p>
+        <p>• PSH ทฤษฎี: World Bank/SolarGIS — เฉลี่ยไทย 5.06 kWh/m²/วัน</p>
+        <p>• Performance Ratio 71-85%: RMUTSB Academic Journal 2021</p>
+        <p>• Degradation 0.5%/ปี: NREL (ปรับ 0.6% สำหรับเขตร้อน)</p>
+        <p>• ทิศ/มุม: ประเทศไทยอยู่ใต้เส้นศูนย์สูตร → optimal มุม 10-15° หันใต้</p>
+      </div>
+    </div>
+  );
+}
+
 function SalesPresentationCloser({ active: initialActive, customerName, customerPhone, customerAddress, customerMode, selectedCustomerId, region, meterType, monthlyBill, electricityRate, inflationRate, companyInfo, stock, catalog, calcOpts, onBack, onCreateQuotation, onSaveCustomer, onEdit }) {
   const [animateStep, setAnimateStep] = useState(0);
-  // Presentation mode: 'dream' = ขายฝัน (PSH ทฤษฎี), 'honest' = จริงใจ (PSH × PR + degradation)
-  const [presentationMode, setPresentationMode] = useState('dream');
+  // ลูกค้าเปลี่ยนมิเตอร์ได้ในหน้านี้ (เริ่มจากที่เซลส์เลือก)
+  const [curMeterType, setCurMeterType] = useState(meterType || 'normal');
+  const [showMeterCompare, setShowMeterCompare] = useState(false);
+  
+  // Pro Mode (ซ่อน) - ใส่ PIN 1234 เพื่อเปิด
+  const [showProModal, setShowProModal] = useState(false);
+  const [proPinInput, setProPinInput] = useState('');
+  const [proPinError, setProPinError] = useState(false);
+  const [proModeOpen, setProModeOpen] = useState(false);
+  
+  // Pro Mode factors (toggle ได้)
+  const [proFactors, setProFactors] = useState({
+    pr: false,           // ใช้ Performance Ratio 73%
+    degradation: false,  // หัก degradation 0.6%/ปี
+    dust: false,         // ฝุ่น -5%
+    shade: false,        // เงา -15%
+    heatLoss: false,     // อุณหภูมิสูง -8%
+    cableLoss: false,    // loss ในสาย -3%
+    inverterEff: false,  // ประสิทธิภาพ inverter -4%
+  });
+  const [proTilt, setProTilt] = useState(15);          // มุมแผง (องศา)
+  const [proDirection, setProDirection] = useState('S'); // ทิศ
+  
+  const handleProPinSubmit = () => {
+    if (proPinInput === '1234') {
+      setProModeOpen(true);
+      setShowProModal(false);
+      setProPinInput('');
+      setProPinError(false);
+    } else {
+      setProPinError(true);
+      setTimeout(() => setProPinError(false), 1500);
+    }
+  };
   
   // Equipment state — ลูกค้าเล่นเปลี่ยนได้ในหน้านี้
   const [curInverter, setCurInverter] = useState(initialActive.inverter);
@@ -4878,7 +5176,70 @@ function SalesPresentationCloser({ active: initialActive, customerName, customer
     const autoSellPrice = applyMargin(grandCost, margin);
     const sellPrice = customSellPrice != null ? customSellPrice : autoSellPrice;
     const totalKW = (curPanel.watt * curPanelCount) / 1000;
-    const roi = calculateROI({ kW: Math.min(totalKW, curInverter.size), ...(calcOpts || {}), mode: presentationMode });
+    
+    // Pro Mode: คำนวณตามจริง ใช้ factors ที่เลือกไว้
+    let roi;
+    if (proModeOpen) {
+      // base PSH (theoretical)
+      const regionData = SOLAR_REGIONS[region] || SOLAR_REGIONS.central;
+      let effectivePSH = regionData.theoreticalPSH || regionData.hours || 5.0;
+      
+      // คูณ factor ทีละตัวที่ toggle ไว้
+      if (proFactors.pr) effectivePSH *= regionData.pr || 0.73;       // -27%
+      if (proFactors.dust) effectivePSH *= 0.95;                       // -5%
+      if (proFactors.shade) effectivePSH *= 0.85;                      // -15%
+      if (proFactors.heatLoss) effectivePSH *= 0.92;                   // -8%
+      if (proFactors.cableLoss) effectivePSH *= 0.97;                  // -3%
+      if (proFactors.inverterEff) effectivePSH *= 0.96;                // -4%
+      
+      // ทิศและมุม
+      const dirFactor = PANEL_DIRECTIONS[proDirection]?.factor || 1.0;
+      const tiltFactor = getTiltFactor(proTilt);
+      effectivePSH *= dirFactor * tiltFactor;
+      
+      // คำนวณ ROI ด้วย effective PSH
+      const effKW = Math.min(totalKW, curInverter.size);
+      const monthlyKwh = effKW * effectivePSH * 30;
+      const yearlyKwh = monthlyKwh * 12;
+      
+      // อัตราค่าไฟ
+      let effectiveRate;
+      if (curMeterType === 'tou') {
+        const onPeakPct = 0.95;
+        effectiveRate = (PRICING_CONFIG.touOnPeak * onPeakPct) + (PRICING_CONFIG.touOffPeak * (1 - onPeakPct));
+      } else {
+        effectiveRate = PRICING_CONFIG.electricityRate;
+      }
+      
+      const degradation = proFactors.degradation ? PANEL_DEGRADATION_RATE : 0;
+      const cumProfit = (years) => {
+        let total = 0;
+        for (let y = 1; y <= years; y++) {
+          const yearProd = yearlyKwh * Math.pow(1 - degradation, y - 1);
+          total += yearProd * effectiveRate;
+        }
+        return Math.round(total);
+      };
+      
+      roi = {
+        monthlyKwh: Math.round(monthlyKwh),
+        yearlyKwh: Math.round(yearlyKwh),
+        monthlySavings: Math.round(monthlyKwh * effectiveRate),
+        yearlySavings: Math.round(yearlyKwh * effectiveRate),
+        effectiveRate,
+        peakHours: effectivePSH,
+        pr: regionData.pr,
+        degradation,
+        profit5: cumProfit(5),
+        profit10: cumProfit(10),
+        profit20: cumProfit(20),
+        profit30: cumProfit(30),
+      };
+    } else {
+      // โหมดปกติ (แสดงตัวเลขแบบ dream เหมือนเดิม)
+      roi = calculateROI({ kW: Math.min(totalKW, curInverter.size), ...(calcOpts || {}), meterType: curMeterType, mode: 'dream' });
+    }
+    
     const breakEven = sellPrice / roi.yearlySavings;
     const actualMargin = Math.round(((sellPrice / grandCost) - 1) * 100);
     
@@ -4896,7 +5257,7 @@ function SalesPresentationCloser({ active: initialActive, customerName, customer
       roi,
       breakEven: Math.round(breakEven * 10) / 10,
     };
-  }, [curInverter, curPanel, curPanelCount, curBattery, customSellPrice, companyInfo, calcOpts, initialActive, stock, presentationMode]);
+  }, [curInverter, curPanel, curPanelCount, curBattery, customSellPrice, companyInfo, calcOpts, initialActive, stock, curMeterType, proModeOpen, proFactors, proTilt, proDirection, region]);
   
   useEffect(() => {
     const timers = [];
@@ -4964,40 +5325,145 @@ ${battery ? `- ${battery.brand} ${battery.model} × 1 ลูก` : ''}
           <h2 className="display-font text-3xl text-stone-800">🎯 ข้อเสนอพิเศษ</h2>
           <p className="text-sm text-stone-500">สำหรับ {customerName}</p>
         </div>
-        <button onClick={onBack} className="text-sm text-stone-600 hover:text-stone-800">← กลับ</button>
-      </div>
-
-      {/* Presentation Mode Toggle — เซลส์เลือก mode ก่อนคุยกับลูกค้า */}
-      <div className="bg-white rounded-2xl p-2 shadow-sm border border-stone-200">
-        <div className="grid grid-cols-2 gap-1">
-          <button onClick={() => setPresentationMode('dream')}
-            className={`px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-              presentationMode === 'dream' 
-                ? 'bg-gradient-to-r from-amber-400 to-orange-400 text-white shadow-md' 
-                : 'text-stone-600 hover:bg-stone-50'
-            }`}>
-            <div className="flex items-center justify-center gap-1">
-              <span>✨</span>
-              <span>โหมดขายฝัน</span>
-            </div>
-            <div className="text-xs opacity-80 mt-0.5">เลขสวย คืนทุนเร็ว</div>
-          </button>
-          <button onClick={() => setPresentationMode('honest')}
-            className={`px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-              presentationMode === 'honest' 
-                ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-md' 
-                : 'text-stone-600 hover:bg-stone-50'
-            }`}>
-            <div className="flex items-center justify-center gap-1">
-              <span>💎</span>
-              <span>โหมดจริงใจ</span>
-            </div>
-            <div className="text-xs opacity-80 mt-0.5">ตรงไปตรงมา ตามจริง</div>
-          </button>
+        <div className="flex items-center gap-2">
+          {/* ปุ่มลับ Pro Mode */}
+          {!proModeOpen ? (
+            <button onClick={() => setShowProModal(true)} 
+              className="text-stone-300 hover:text-stone-500 text-xs"
+              title="โหมดเทคนิค">
+              🔧
+            </button>
+          ) : (
+            <button onClick={() => { setProModeOpen(false); }} 
+              className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
+              title="ปิดโหมดเทคนิค">
+              🔧 Pro
+            </button>
+          )}
+          <button onClick={onBack} className="text-sm text-stone-600 hover:text-stone-800">← กลับ</button>
         </div>
       </div>
 
-      {/* Big Price Card — Sticky on scroll */}
+      {/* Meter Type Toggle — ลูกค้าเลือก Normal vs TOU ได้ */}
+      <div className="bg-white rounded-2xl p-3 shadow-sm border border-stone-200">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-sm font-medium text-stone-700">⚡ ประเภทมิเตอร์ไฟ</div>
+          <button onClick={() => setShowMeterCompare(!showMeterCompare)}
+            className="text-xs text-blue-600 hover:underline">
+            {showMeterCompare ? 'ซ่อน' : '🤔 เปรียบเทียบ'}
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={() => setCurMeterType('normal')}
+            className={`p-2.5 rounded-xl border-2 text-left transition-all ${
+              curMeterType === 'normal' ? 'border-amber-500 bg-amber-50' : 'border-stone-200 hover:border-stone-300'
+            }`}>
+            <div className="font-medium text-sm">🏠 มิเตอร์ปกติ</div>
+            <div className="text-xs text-stone-500 mt-0.5">{PRICING_CONFIG.electricityRate} ฿/หน่วย ทั้งวัน</div>
+          </button>
+          <button onClick={() => setCurMeterType('tou')}
+            className={`p-2.5 rounded-xl border-2 text-left transition-all ${
+              curMeterType === 'tou' ? 'border-amber-500 bg-amber-50' : 'border-stone-200 hover:border-stone-300'
+            }`}>
+            <div className="font-medium text-sm">⏰ มิเตอร์ TOU</div>
+            <div className="text-xs text-stone-500 mt-0.5">{PRICING_CONFIG.touOnPeak}/{PRICING_CONFIG.touOffPeak} ฿</div>
+          </button>
+        </div>
+        
+        {/* Comparison panel */}
+        {showMeterCompare && (
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+            <div className="bg-stone-50 rounded-lg p-2.5 space-y-1">
+              <div className="font-bold text-stone-700">🏠 มิเตอร์ปกติ</div>
+              <div className="text-emerald-700">
+                ✅ <strong>ข้อดี</strong>
+                <ul className="ml-3 mt-0.5 space-y-0.5 text-stone-600">
+                  <li>• คิดอัตราเดียวทั้งวัน ง่าย</li>
+                  <li>• ไม่ต้องปรับพฤติกรรม</li>
+                  <li>• ไม่มีค่าใช้จ่ายเปลี่ยนมิเตอร์</li>
+                </ul>
+              </div>
+              <div className="text-rose-700 mt-1.5">
+                ❌ <strong>ข้อเสีย</strong>
+                <ul className="ml-3 mt-0.5 space-y-0.5 text-stone-600">
+                  <li>• ใช้ไฟมาก = แพงขึ้นแบบขั้นบันได</li>
+                  <li>• ไม่ได้ส่วนลดช่วง off-peak</li>
+                </ul>
+              </div>
+              <div className="bg-amber-100 text-amber-800 rounded p-1.5 mt-1.5">
+                <strong>👤 เหมาะกับ:</strong> บ้านที่ใช้ไฟกลางวันเยอะ (WFH, แม่บ้าน, มีคนอยู่บ้านตลอด)
+              </div>
+            </div>
+            
+            <div className="bg-blue-50 rounded-lg p-2.5 space-y-1">
+              <div className="font-bold text-blue-700">⏰ มิเตอร์ TOU</div>
+              <div className="text-emerald-700">
+                ✅ <strong>ข้อดี</strong>
+                <ul className="ml-3 mt-0.5 space-y-0.5 text-stone-600">
+                  <li>• Off-peak ถูกกว่า {(PRICING_CONFIG.electricityRate - PRICING_CONFIG.touOffPeak).toFixed(2)} ฿/หน่วย</li>
+                  <li>• เหมาะมากกับ Solar (ผลิตช่วง peak)</li>
+                  <li>• คุ้มถ้าบริหารการใช้ไฟได้</li>
+                </ul>
+              </div>
+              <div className="text-rose-700 mt-1.5">
+                ❌ <strong>ข้อเสีย</strong>
+                <ul className="ml-3 mt-0.5 space-y-0.5 text-stone-600">
+                  <li>• On-peak (จ-ศ 9-22น.) แพงกว่า {(PRICING_CONFIG.touOnPeak - PRICING_CONFIG.electricityRate).toFixed(2)} ฿/หน่วย</li>
+                  <li>• ค่าเปลี่ยนมิเตอร์ ~6,700 ฿</li>
+                  <li>• ค่าบริการรายเดือน ~312 ฿</li>
+                </ul>
+              </div>
+              <div className="bg-blue-100 text-blue-800 rounded p-1.5 mt-1.5">
+                <strong>👤 เหมาะกับ:</strong> บ้านที่ทำงานนอกบ้าน + มีโซล่า + ใช้ไฟกลางคืน/เสาร์อาทิตย์เยอะ + ชาร์จรถ EV
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {curMeterType === 'tou' && (
+          <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg p-2 text-xs">
+            <strong className="text-amber-700">💡 Solar + TOU = คู่หูสุดคุ้ม!</strong>
+            <span className="text-stone-600 ml-1">Solar ผลิตช่วง on-peak (กลางวัน) = ลดอัตราที่แพงสุด</span>
+          </div>
+        )}
+      </div>
+      
+      {/* PIN Modal */}
+      {showProModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowProModal(false)}>
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full" onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold text-lg mb-1">🔧 โหมดเทคนิค (Pro)</h3>
+            <p className="text-xs text-stone-500 mb-3">ใส่รหัสผ่านเพื่อเข้าโหมดคำนวณตามจริง</p>
+            <input type="password" value={proPinInput} 
+              onChange={e => setProPinInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleProPinSubmit()}
+              placeholder="••••" maxLength={4}
+              autoFocus
+              className={`w-full px-4 py-3 text-center text-2xl tracking-widest border-2 rounded-xl outline-none ${
+                proPinError ? 'border-rose-500 bg-rose-50 animate-pulse' : 'border-stone-300 focus:border-blue-500'
+              }`} />
+            {proPinError && <p className="text-xs text-rose-600 mt-2 text-center">รหัสผ่านไม่ถูกต้อง</p>}
+            <div className="flex gap-2 mt-3">
+              <button onClick={() => setShowProModal(false)} className="flex-1 py-2 text-stone-600 rounded-xl hover:bg-stone-100">ยกเลิก</button>
+              <button onClick={handleProPinSubmit} className="flex-1 py-2 bg-blue-500 text-white rounded-xl hover:bg-blue-600">เข้าโหมด</button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Pro Mode Panel — แสดงเมื่อปลดล็อค */}
+      {proModeOpen && (
+        <ProModePanel 
+          active={active}
+          totalKW={totalKW}
+          region={region}
+          curMeterType={curMeterType}
+          proFactors={proFactors} setProFactors={setProFactors}
+          proTilt={proTilt} setProTilt={setProTilt}
+          proDirection={proDirection} setProDirection={setProDirection}
+        />
+      )}
+      
       <div className={`sticky top-2 z-20 bg-gradient-to-br from-amber-400 via-orange-400 to-orange-500 rounded-3xl p-5 text-white shadow-2xl text-center transition-all duration-700 ${animateStep >= 1 ? 'scale-100 opacity-100' : 'scale-90 opacity-0'}`}
         key="price-card-sticky">
         <div className="text-4xl mb-1">{active.badge}</div>
@@ -5205,8 +5671,8 @@ ${battery ? `- ${battery.brand} ${battery.model} × 1 ลูก` : ''}
           const max = Math.max(solarProfit, compareBank, compareStock, compareGold);
           const items = [
             { icon: '💰', label: 'เงินฝาก', rate: '1.5%', value: compareBank, color: 'stone' },
-            { icon: '🥇', label: 'ทอง',     rate: '5%',   value: compareGold, color: 'yellow' },
-            { icon: '📈', label: 'หุ้น',    rate: '8%',   value: compareStock, color: 'blue' },
+            { icon: '🥇', label: 'ทอง',     rate: '6%',   value: compareGold, color: 'yellow' },
+            { icon: '📈', label: 'หุ้น',    rate: '7%',   value: compareStock, color: 'blue' },
             { icon: '☀️', label: 'Solar (this)', rate: '', value: solarProfit, color: 'emerald', winner: true },
           ];
           return (
@@ -5235,61 +5701,15 @@ ${battery ? `- ${battery.brand} ${battery.model} × 1 ลูก` : ''}
         })()}
       </div>
 
-      {/* Disclaimer + ที่มาของตัวเลข */}
-      {presentationMode === 'dream' ? (
-        <div className="bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs text-stone-500">
-          <p>⚠️ <strong>หมายเหตุ:</strong> ตัวเลขประมาณการจาก:</p>
-          <ul className="ml-4 mt-1 space-y-0.5">
-            <li>• ค่าไฟ: {electricityRate}</li>
-            <li>• ผลิตไฟ {SOLAR_REGIONS[region]?.theoreticalPSH || SOLAR_REGIONS[region]?.hours} ชม./วัน ({SOLAR_REGIONS[region]?.label})</li>
-            <li>• ค่าจริงอาจแตกต่างตามสภาพอากาศและการใช้งาน</li>
-          </ul>
-        </div>
-      ) : (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-stone-600">
-          <p className="font-bold text-blue-800 mb-2">💎 ที่มาของตัวเลข — โหมดจริงใจ</p>
-          
-          <div className="space-y-2">
-            <div className="bg-white rounded-lg p-2.5">
-              <div className="font-medium text-stone-700 mb-1">☀️ ค่าแสงแดด (Peak Sun Hours)</div>
-              <div>• PSH ทฤษฎี: <strong>{SOLAR_REGIONS[region]?.theoreticalPSH} ชม./วัน</strong></div>
-              <div>• Performance Ratio: <strong>{(SOLAR_REGIONS[region]?.pr * 100).toFixed(0)}%</strong> (ประสิทธิภาพระบบ)</div>
-              <div>• <strong className="text-blue-700">PSH จริง = {active.roi.peakHours.toFixed(2)} ชม./วัน</strong></div>
-              <div className="text-stone-500 mt-1 italic">
-                อ้างอิง: World Bank/SolarGIS, งานวิจัย "Performance Analysis of Solar PV in Thailand" (RMUTSB Academic Journal 2021), งานวิจัยของ ม.ขอนแก่น
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-lg p-2.5">
-              <div className="font-medium text-stone-700 mb-1">📉 การเสื่อมของแผง (Degradation)</div>
-              <div>• แผงเสื่อมประมาณ <strong>{(active.roi.degradation * 100).toFixed(1)}% ต่อปี</strong></div>
-              <div>• ปีที่ 25 แผงจะเหลือประสิทธิภาพ ~{Math.round(Math.pow(1 - active.roi.degradation, 25) * 100)}%</div>
-              <div className="text-stone-500 mt-1 italic">
-                อ้างอิง: NREL (National Renewable Energy Laboratory) — median 0.5%/ปี, ปรับเป็น 0.6% สำหรับเขตร้อนชื้น
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-lg p-2.5">
-              <div className="font-medium text-stone-700 mb-1">⚡ อัตราค่าไฟ</div>
-              <div>• {electricityRate}</div>
-              <div className="text-stone-500 mt-1 italic">
-                อ้างอิง: ประกาศ กกพ. งวด พ.ค.-ส.ค. 2569 (รวม VAT 7%)
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-lg p-2.5">
-              <div className="font-medium text-stone-700 mb-1">⚠️ ปัจจัยที่อาจส่งผล</div>
-              <ul className="ml-3 space-y-0.5">
-                <li>• ทิศและมุมหลังคา (optimal: หันใต้, มุม 10-15°)</li>
-                <li>• เงาบัง (ต้นไม้, ตึก, ฝุ่น)</li>
-                <li>• ฤดูฝน ผลผลิตอาจลด 20-30%</li>
-                <li>• อุณหภูมิ (แผงร้อน → ประสิทธิภาพลด)</li>
-                <li>• คุณภาพการติดตั้ง + การบำรุงรักษา</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Disclaimer (ดูเป็นมืออาชีพ) */}
+      <div className="bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs text-stone-500">
+        <p>⚠️ <strong>หมายเหตุ:</strong> ตัวเลขประมาณการจาก:</p>
+        <ul className="ml-4 mt-1 space-y-0.5">
+          <li>• ค่าไฟ: {electricityRate}</li>
+          <li>• ผลิตไฟ {SOLAR_REGIONS[region]?.theoreticalPSH || SOLAR_REGIONS[region]?.hours} ชม./วัน ({SOLAR_REGIONS[region]?.label})</li>
+          <li>• ค่าจริงอาจแตกต่างตามสภาพอากาศและการใช้งาน</li>
+        </ul>
+      </div>
 
       {/* Action Buttons */}
       <div className="sticky bottom-2 bg-white p-2 rounded-2xl shadow-lg border border-stone-200">
