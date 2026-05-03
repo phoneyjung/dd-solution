@@ -442,8 +442,11 @@ const SOLAR_REGIONS = {
 };
 
 const PRICING_CONFIG = {
-  electricityRate: 4.5,
-  electricityInflation: 3,
+  // ค่าไฟปัจจุบัน (งวด พ.ค.-ส.ค. 2569 + VAT 7%)
+  electricityRate: 4.23,           // ฿/kWh (3.95 × 1.07)
+  touOnPeak: 6.20,                  // ฿/kWh (5.7982 × 1.07) ช่วงจ-ศ 9:00-22:00
+  touOffPeak: 2.79,                 // ฿/kWh (2.6037 × 1.07) ช่วงอื่น
+  electricityInflation: 0,          // ไม่คิดเงินเฟ้อ (ตัวเลขที่นิ่ง)
   marginByCategory: { small: 25, medium: 20, large: 15 },
   comparisonRates: { bank: 1.5, stock: 8, gold: 5 },
   daysPerMonth: 30,
@@ -3799,10 +3802,10 @@ function SalesPresentation({ customers, stock, companyInfo, onCreateQuotation, o
   
   // Electricity meter
   const [meterType, setMeterType] = useState('normal'); // 'normal' | 'tou'
-  const [normalRate, setNormalRate] = useState(4.5);
-  const [touOnPeak, setTouOnPeak] = useState(5.8);
-  const [touOffPeak, setTouOffPeak] = useState(2.6);
-  const [inflationRate, setInflationRate] = useState(3);
+  const normalRate = PRICING_CONFIG.electricityRate;
+  const touOnPeak = PRICING_CONFIG.touOnPeak;
+  const touOffPeak = PRICING_CONFIG.touOffPeak;
+  const inflationRate = PRICING_CONFIG.electricityInflation;
   
   // Selection
   const [selectedPackage, setSelectedPackage] = useState(null);
@@ -3981,12 +3984,14 @@ function SalesPresentation({ customers, stock, companyInfo, onCreateQuotation, o
           </div>
 
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
-            <label className="flex items-center gap-2 cursor-pointer">
+            <label className="flex items-start gap-2 cursor-pointer">
               <input type="checkbox" checked={hasBattery} onChange={e => setHasBattery(e.target.checked)}
-                className="w-5 h-5 rounded text-amber-500" />
+                className="w-5 h-5 rounded text-amber-500 mt-0.5 flex-shrink-0" />
               <span className="text-sm">
                 <strong>🔋 อยากมีแบตเตอรี่</strong>
-                <span className="text-xs text-stone-500 ml-1">(ไฟดับใช้ได้ + ใช้กลางคืนได้)</span>
+                <span className="block text-xs text-stone-500 mt-0.5">
+                  เก็บประจุจากกลางวัน มาใช้งานกลางคืน เหมาะกับคนใช้งานกลางคืนเป็นหลัก, ไม่ปล่อยไฟย้อน
+                </span>
               </span>
             </label>
           </div>
@@ -3999,53 +4004,25 @@ function SalesPresentation({ customers, stock, companyInfo, onCreateQuotation, o
             <button onClick={() => setMeterType('normal')}
               className={`p-3 rounded-xl border-2 text-left ${meterType === 'normal' ? 'border-amber-500 bg-amber-50' : 'border-stone-200'}`}>
               <div className="font-medium text-sm">🏠 มิเตอร์ปกติ</div>
-              <div className="text-xs text-stone-500">อัตราเดียวทั้งวัน</div>
+              <div className="text-xs text-stone-500">{normalRate} ฿/หน่วย</div>
             </button>
             <button onClick={() => setMeterType('tou')}
               className={`p-3 rounded-xl border-2 text-left ${meterType === 'tou' ? 'border-amber-500 bg-amber-50' : 'border-stone-200'}`}>
               <div className="font-medium text-sm">⏰ TOU</div>
-              <div className="text-xs text-stone-500">แยก peak/off-peak</div>
+              <div className="text-xs text-stone-500">{touOnPeak}/{touOffPeak} ฿</div>
             </button>
           </div>
           
-          {meterType === 'normal' ? (
-            <div className="bg-stone-50 rounded-xl p-3">
-              <label className="block text-xs text-stone-600 mb-1">อัตราค่าไฟ (฿/หน่วย)</label>
-              <input type="number" step="0.01" value={normalRate}
-                onChange={e => setNormalRate(Number(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-right font-bold" />
-              <div className="text-xs text-stone-500 mt-1">ค่าเฉลี่ยปัจจุบัน ~4.5 ฿/หน่วย</div>
-            </div>
-          ) : (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
-              <div className="text-xs text-amber-700 font-medium">⏰ Solar เหมาะกับ TOU มาก! ผลิตช่วง on-peak = ประหยัดเยอะกว่า</div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs text-stone-600 mb-1">On-peak (9-22น.)</label>
-                  <input type="number" step="0.01" value={touOnPeak}
-                    onChange={e => setTouOnPeak(Number(e.target.value) || 0)}
-                    className="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-right text-sm" />
-                </div>
-                <div>
-                  <label className="block text-xs text-stone-600 mb-1">Off-peak</label>
-                  <input type="number" step="0.01" value={touOffPeak}
-                    onChange={e => setTouOffPeak(Number(e.target.value) || 0)}
-                    className="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-right text-sm" />
-                </div>
+          {meterType === 'tou' && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+              <div className="text-xs text-amber-700 font-medium mb-1">⏰ Solar เหมาะกับ TOU มาก!</div>
+              <div className="text-xs text-stone-600">
+                • On-peak (จ-ศ 9:00-22:00): <strong>{touOnPeak} ฿/หน่วย</strong><br/>
+                • Off-peak (อื่นๆ + ส-อา): <strong>{touOffPeak} ฿/หน่วย</strong><br/>
+                • Solar ผลิตช่วงกลางวัน → ประหยัดอัตราแพง!
               </div>
             </div>
           )}
-          
-          <div className="bg-stone-50 rounded-xl p-3">
-            <label className="block text-xs text-stone-600 mb-1">📈 อัตราค่าไฟเพิ่มขึ้น/ปี (เงินเฟ้อ)</label>
-            <div className="flex items-center gap-2">
-              <input type="number" step="0.5" value={inflationRate}
-                onChange={e => setInflationRate(Number(e.target.value) || 0)}
-                className="flex-1 px-3 py-2 border border-stone-300 rounded-lg text-right" />
-              <span className="text-stone-700">%</span>
-            </div>
-            <div className="text-xs text-stone-500 mt-1">ปกติ 3-5% ต่อปี</div>
-          </div>
         </div>
 
         <button onClick={() => setStep(2)}
@@ -4277,10 +4254,11 @@ function SalesPresentation({ customers, stock, companyInfo, onCreateQuotation, o
         electricityRate={meterType === 'tou' ? `On-peak ${touOnPeak} / Off-peak ${touOffPeak}` : `${normalRate} ฿/หน่วย`}
         inflationRate={inflationRate}
         companyInfo={companyInfo}
-        onBack={() => setStep(isCustom ? 3 : 2)}
+        stock={stock}
+        calcOpts={calcOpts}
+        onBack={() => setStep(2)}
         onCreateQuotation={onCreateQuotation}
         onSaveCustomer={onSaveCustomer}
-        onEdit={() => { setIsCustom(true); setCustomInverter(active.inverter); setCustomPanel(active.panel); setCustomPanelCount(active.panelCount); setCustomBattery(active.battery); setStep(3); }}
       />
     );
   }
@@ -4289,20 +4267,60 @@ function SalesPresentation({ customers, stock, companyInfo, onCreateQuotation, o
 }
 
 // ============== SALES CLOSING INFOGRAPHIC ==============
-function SalesPresentationCloser({ active: initialActive, customerName, customerPhone, customerAddress, customerMode, selectedCustomerId, region, meterType, monthlyBill, electricityRate, inflationRate, companyInfo, onBack, onCreateQuotation, onSaveCustomer, onEdit }) {
+function SalesPresentationCloser({ active: initialActive, customerName, customerPhone, customerAddress, customerMode, selectedCustomerId, region, meterType, monthlyBill, electricityRate, inflationRate, companyInfo, stock, calcOpts, onBack, onCreateQuotation, onSaveCustomer, onEdit }) {
   const [animateStep, setAnimateStep] = useState(0);
-  const [showProfit, setShowProfit] = useState(false);
-  const [editPrice, setEditPrice] = useState(false);
-  const [customSellPrice, setCustomSellPrice] = useState(initialActive.sellPrice);
   
-  // Recalculate active with custom price
-  const active = customSellPrice !== initialActive.sellPrice ? {
-    ...initialActive,
-    sellPrice: customSellPrice,
-    profit: customSellPrice - initialActive.totalCost,
-    margin: Math.round(((customSellPrice / initialActive.totalCost) - 1) * 100),
-    breakEven: Math.round((customSellPrice / initialActive.roi.yearlySavings) * 10) / 10,
-  } : initialActive;
+  // Equipment state — ลูกค้าเล่นเปลี่ยนได้ในหน้านี้
+  const [curInverter, setCurInverter] = useState(initialActive.inverter);
+  const [curPanel, setCurPanel] = useState(initialActive.panel);
+  const [curPanelCount, setCurPanelCount] = useState(initialActive.panelCount);
+  const [curBattery, setCurBattery] = useState(initialActive.battery);
+  const [customSellPrice, setCustomSellPrice] = useState(null); // null = ใช้ราคา auto
+  
+  // ดึง catalog จาก stock (อุปกรณ์ที่ติ๊ก inSalesCatalog)
+  const stockInverters = (stock || []).filter(s => s.inSalesCatalog && s.category === 'inverter' && s.salesSpecs);
+  const stockPanels = (stock || []).filter(s => s.inSalesCatalog && s.category === 'panel' && s.salesSpecs);
+  const stockBatteries = (stock || []).filter(s => s.inSalesCatalog && s.category === 'battery' && s.salesSpecs);
+  
+  const inverters = stockInverters.length > 0 
+    ? stockInverters.map(s => ({ id: s.id, brand: s.salesSpecs.brand, model: s.salesSpecs.model, size: s.salesSpecs.size, type: s.salesSpecs.type || 'hybrid', cost: s.unitCost, tier: s.salesSpecs.tier || 'standard' }))
+    : EQUIPMENT_CATALOG.inverters;
+  const panels = stockPanels.length > 0
+    ? stockPanels.map(s => ({ id: s.id, brand: s.salesSpecs.brand, model: s.salesSpecs.model, watt: s.salesSpecs.watt, cost: s.unitCost, tier: s.salesSpecs.tier || 'standard' }))
+    : EQUIPMENT_CATALOG.panels;
+  const batteries = stockBatteries.length > 0
+    ? stockBatteries.map(s => ({ id: s.id, brand: s.salesSpecs.brand, model: s.salesSpecs.model, capacity: s.salesSpecs.capacity, cost: s.unitCost, tier: s.salesSpecs.tier || 'standard' }))
+    : EQUIPMENT_CATALOG.batteries;
+  
+  // คำนวณ active ใหม่ทุกครั้งที่เปลี่ยน equipment
+  const active = useMemo(() => {
+    if (!curInverter || !curPanel || curPanelCount < 1) return initialActive;
+    const installPct = (companyInfo?.installCostPct || 10) / 100;
+    const equipmentCost = curInverter.cost + (curPanel.cost * curPanelCount) + (curBattery?.cost || 0);
+    const installCost = Math.round(equipmentCost * installPct);
+    const grandCost = equipmentCost + installCost;
+    const margin = getMargin(curInverter.size, companyInfo);
+    const autoSellPrice = applyMargin(grandCost, margin);
+    const sellPrice = customSellPrice != null ? customSellPrice : autoSellPrice;
+    const totalKW = (curPanel.watt * curPanelCount) / 1000;
+    const roi = calculateROI({ kW: Math.min(totalKW, curInverter.size), ...(calcOpts || {}) });
+    const breakEven = sellPrice / roi.yearlySavings;
+    const actualMargin = Math.round(((sellPrice / grandCost) - 1) * 100);
+    
+    return {
+      label: initialActive.label,
+      badge: initialActive.badge,
+      inverter: curInverter, panel: curPanel, panelCount: curPanelCount, battery: curBattery,
+      equipmentCost, installCost,
+      totalCost: grandCost,
+      sellPrice,
+      margin: actualMargin,
+      profit: sellPrice - grandCost,
+      totalKW: Math.round(totalKW * 100) / 100,
+      roi,
+      breakEven: Math.round(breakEven * 10) / 10,
+    };
+  }, [curInverter, curPanel, curPanelCount, curBattery, customSellPrice, companyInfo, calcOpts, initialActive]);
   
   useEffect(() => {
     const timers = [];
@@ -4317,8 +4335,6 @@ function SalesPresentationCloser({ active: initialActive, customerName, customer
   const compareBank = calculateInvestmentComparison(sellPrice, 30, PRICING_CONFIG.comparisonRates.bank);
   const compareStock = calculateInvestmentComparison(sellPrice, 30, PRICING_CONFIG.comparisonRates.stock);
   const compareGold = calculateInvestmentComparison(sellPrice, 30, PRICING_CONFIG.comparisonRates.gold);
-  const co2Saved = calculateCO2(roi.yearlyKwh, 30);
-  const treeEquivalent = Math.round(co2Saved * 50);
   
   const handleCreateQuotation = () => {
     const itemDescription = `ระบบโซล่าเซลล์ ${totalKW} kW
@@ -4340,20 +4356,28 @@ ${battery ? `- ${battery.brand} ${battery.model} × 1 ลูก` : ''}
     });
   };
 
-  const AnimatedNumber = ({ value, suffix = '', show, duration = 800 }) => {
-    const [display, setDisplay] = useState(0);
+  const AnimatedNumber = ({ value, suffix = '', show, duration = 600 }) => {
+    const [display, setDisplay] = useState(show ? 0 : value);
+    const prevValueRef = useRef(0);
+    
     useEffect(() => {
       if (!show) return;
+      const startValue = prevValueRef.current;
+      const targetValue = value;
       const startTime = Date.now();
+      
       const tick = () => {
         const elapsed = Date.now() - startTime;
         const progress = Math.min(elapsed / duration, 1);
         const eased = 1 - Math.pow(1 - progress, 3);
-        setDisplay(Math.round(value * eased));
+        const current = Math.round(startValue + (targetValue - startValue) * eased);
+        setDisplay(current);
         if (progress < 1) requestAnimationFrame(tick);
+        else prevValueRef.current = targetValue;
       };
       tick();
-    }, [show, value]);
+    }, [show, value, duration]);
+    
     return <>{display.toLocaleString()}{suffix}</>;
   };
 
@@ -4367,54 +4391,131 @@ ${battery ? `- ${battery.brand} ${battery.model} × 1 ลูก` : ''}
         <button onClick={onBack} className="text-sm text-stone-600 hover:text-stone-800">← กลับ</button>
       </div>
 
-      {/* Big Price Card */}
-      <div className={`bg-gradient-to-br from-amber-400 via-orange-400 to-orange-500 rounded-3xl p-6 text-white shadow-xl text-center transition-all duration-700 ${animateStep >= 1 ? 'scale-100 opacity-100' : 'scale-90 opacity-0'}`}>
-        <div className="text-6xl mb-2">{active.badge}</div>
-        <div className="text-xs opacity-90 mb-1">ระบบที่เลือก</div>
-        <div className="text-xl font-bold mb-3">{active.label}</div>
-        <div className="bg-white/20 rounded-2xl p-4 backdrop-blur">
+      {/* Big Price Card — Sticky on scroll */}
+      <div className={`sticky top-2 z-20 bg-gradient-to-br from-amber-400 via-orange-400 to-orange-500 rounded-3xl p-5 text-white shadow-2xl text-center transition-all duration-700 ${animateStep >= 1 ? 'scale-100 opacity-100' : 'scale-90 opacity-0'}`}
+        key="price-card-sticky">
+        <div className="text-4xl mb-1">{active.badge}</div>
+        <div className="text-xs opacity-90">{active.label}</div>
+        <div className="bg-white/20 rounded-2xl p-3 backdrop-blur mt-2">
           <div className="text-xs opacity-90">ราคาทั้งหมด</div>
-          {editPrice ? (
-            <div className="flex items-center gap-2 my-2">
-              <input type="number" value={customSellPrice}
-                onChange={e => setCustomSellPrice(Number(e.target.value) || 0)}
-                className="flex-1 px-3 py-2 rounded-xl text-stone-800 text-2xl font-bold text-right" />
-              <button onClick={() => setEditPrice(false)}
-                className="px-3 py-2 bg-white text-amber-600 rounded-xl font-bold text-sm">✓</button>
-            </div>
-          ) : (
-            <div className="text-5xl font-bold mt-1 cursor-pointer" onClick={() => setEditPrice(true)}>
-              <AnimatedNumber value={sellPrice} show={animateStep >= 1} />
-            </div>
-          )}
+          <div className="text-5xl font-bold mt-1 tabular-nums tracking-tight">
+            <AnimatedNumber value={sellPrice} show={animateStep >= 1} duration={600} />
+            <span className="text-2xl ml-1 opacity-80">฿</span>
+          </div>
           <div className="text-xs opacity-90 mt-1">
-            ≈ {Math.round(sellPrice / totalKW).toLocaleString()} ฿/kW
-            {!editPrice && <button onClick={() => setEditPrice(true)} className="ml-2 underline opacity-80">✏️ ปรับราคา</button>}
+            ≈ <AnimatedNumber value={Math.round(sellPrice / Math.max(totalKW, 0.1))} show={animateStep >= 1} duration={600} /> ฿/kW
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-2 mt-4 text-xs">
-          <div>🔌 {inverter.size}kW</div>
-          <div>☀️ {panelCount} แผ่น</div>
-          <div>{battery ? `🔋 ${battery.capacity}kWh` : '❌ ไม่มีแบต'}</div>
+        <div className="grid grid-cols-3 gap-1 mt-3 text-xs">
+          <div className="bg-white/10 rounded-lg py-1">🔌 {inverter.size}kW</div>
+          <div className="bg-white/10 rounded-lg py-1">☀️ {panelCount} แผ่น</div>
+          <div className="bg-white/10 rounded-lg py-1">{battery ? `🔋 ${battery.capacity}kWh` : '❌ ไม่มีแบต'}</div>
         </div>
       </div>
 
-      {/* Profit (เซลส์เห็น — ซ่อนปกติ) */}
-      <div className="bg-white rounded-2xl p-3 border-2 border-dashed border-stone-300">
-        <button onClick={() => setShowProfit(!showProfit)}
-          className="w-full flex items-center justify-between text-sm">
-          <span className="font-medium text-stone-700">🔒 ข้อมูลภายใน (เซลส์)</span>
-          <span className="text-stone-500">{showProfit ? '▼' : '▶'}</span>
-        </button>
-        {showProfit && (
-          <div className="mt-3 space-y-1.5 text-sm">
-            <div className="flex justify-between"><span className="text-stone-600">ต้นทุนอุปกรณ์:</span><span>{equipmentCost?.toLocaleString() || 0} ฿</span></div>
-            <div className="flex justify-between"><span className="text-stone-600">ค่าติดตั้ง ({companyInfo?.installCostPct || 10}%):</span><span>{installCost?.toLocaleString() || 0} ฿</span></div>
-            <div className="flex justify-between border-t pt-1.5"><span className="font-medium">ต้นทุนรวม:</span><span className="font-medium">{totalCost.toLocaleString()} ฿</span></div>
-            <div className="flex justify-between"><span className="text-stone-600">Margin:</span><span>{margin}%</span></div>
-            <div className="flex justify-between bg-emerald-50 rounded-lg p-2"><span className="font-bold text-emerald-700">💰 กำไร:</span><span className="font-bold text-emerald-700">{(profit || 0).toLocaleString()} ฿</span></div>
+      {/* Equipment Builder — ลูกค้าปรับเองได้ */}
+      <div className="bg-gradient-to-br from-white to-amber-50 rounded-2xl p-4 shadow-sm border-2 border-amber-300">
+        <div className="text-center mb-3">
+          <div className="text-3xl mb-1">👇</div>
+          <h3 className="font-bold text-stone-800 text-lg">ลองเล่นปรับดูได้เลย!</h3>
+          <p className="text-xs text-stone-500 mt-1">ตัวเลขด้านบนจะอัพเดททันที — ดูว่าแบบไหนเหมาะกับคุณ</p>
+        </div>
+        
+        <div className="space-y-3">
+          {/* Inverter selector */}
+          <div>
+            <div className="text-xs font-medium text-stone-600 mb-1">🔌 Inverter</div>
+            <div className="grid grid-cols-1 gap-2">
+              {inverters.map(inv => (
+                <button key={inv.id} onClick={() => setCurInverter(inv)}
+                  className={`p-2.5 rounded-xl border-2 text-left text-sm transition-all ${
+                    curInverter?.id === inv.id ? 'border-amber-500 bg-amber-50' : 'border-stone-200 hover:border-stone-300'
+                  }`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">{inv.brand} {inv.model}</div>
+                      <div className="text-xs text-stone-500">{inv.size}kW · {inv.type === 'hybrid' ? 'Hybrid' : inv.type === 'ongrid' ? 'On-grid' : 'Off-grid'}</div>
+                    </div>
+                    {curInverter?.id === inv.id && <span className="text-amber-500">✓</span>}
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
-        )}
+          
+          {/* Panel selector */}
+          <div>
+            <div className="text-xs font-medium text-stone-600 mb-1">☀️ แผงโซล่าเซลล์</div>
+            <div className="grid grid-cols-1 gap-2 mb-2">
+              {panels.map(p => (
+                <button key={p.id} onClick={() => setCurPanel(p)}
+                  className={`p-2.5 rounded-xl border-2 text-left text-sm transition-all ${
+                    curPanel?.id === p.id ? 'border-amber-500 bg-amber-50' : 'border-stone-200 hover:border-stone-300'
+                  }`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">{p.brand} {p.model}</div>
+                      <div className="text-xs text-stone-500">{p.watt}W ต่อแผ่น</div>
+                    </div>
+                    {curPanel?.id === p.id && <span className="text-amber-500">✓</span>}
+                  </div>
+                </button>
+              ))}
+            </div>
+            {/* Panel count */}
+            <div className="bg-stone-50 rounded-xl p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-stone-600">จำนวนแผ่น</span>
+                <span className="text-xs text-stone-500">= {((curPanel?.watt || 0) * curPanelCount / 1000).toFixed(2)} kW</span>
+              </div>
+              <div className="flex items-center justify-center gap-3 mt-2">
+                <button onClick={() => setCurPanelCount(Math.max(1, curPanelCount - 1))}
+                  className="w-10 h-10 bg-stone-200 hover:bg-stone-300 rounded-full font-bold text-xl">−</button>
+                <div className="text-3xl font-bold text-amber-600 min-w-[60px] text-center">{curPanelCount}</div>
+                <button onClick={() => setCurPanelCount(curPanelCount + 1)}
+                  className="w-10 h-10 bg-stone-200 hover:bg-stone-300 rounded-full font-bold text-xl">+</button>
+              </div>
+              {curInverter && curPanel && (
+                <div className="text-xs text-center text-stone-500 mt-1">
+                  💡 แนะนำ {Math.ceil(curInverter.size * 1100 / curPanel.watt)} แผ่น สำหรับ {curInverter.size}kW
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* Battery selector */}
+          <div>
+            <div className="text-xs font-medium text-stone-600 mb-1">🔋 แบตเตอรี่</div>
+            <div className="grid grid-cols-1 gap-2">
+              <button onClick={() => setCurBattery(null)}
+                className={`p-2.5 rounded-xl border-2 text-left text-sm transition-all ${
+                  curBattery === null ? 'border-amber-500 bg-amber-50' : 'border-stone-200 hover:border-stone-300'
+                }`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-medium">❌ ไม่ใช้แบตเตอรี่</div>
+                    <div className="text-xs text-stone-500">เหมาะกับ on-grid / ใช้กลางวันเยอะ</div>
+                  </div>
+                  {curBattery === null && <span className="text-amber-500">✓</span>}
+                </div>
+              </button>
+              {batteries.map(bat => (
+                <button key={bat.id} onClick={() => setCurBattery(bat)}
+                  className={`p-2.5 rounded-xl border-2 text-left text-sm transition-all ${
+                    curBattery?.id === bat.id ? 'border-amber-500 bg-amber-50' : 'border-stone-200 hover:border-stone-300'
+                  }`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">{bat.brand} {bat.model}</div>
+                      <div className="text-xs text-stone-500">ความจุ {bat.capacity}kWh</div>
+                    </div>
+                    {curBattery?.id === bat.id && <span className="text-amber-500">✓</span>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Energy Production */}
@@ -4441,7 +4542,7 @@ ${battery ? `- ${battery.brand} ${battery.model} × 1 ลูก` : ''}
           </div>
         </div>
         <div className="text-center text-sm text-stone-600 mt-2">
-          = <strong className="text-amber-700">{roi.yearlySavings.toLocaleString()} ฿/ปี</strong>
+          = <strong className="text-amber-700"><AnimatedNumber value={roi.yearlySavings} show={animateStep >= 2} duration={600} /> ฿/ปี</strong>
         </div>
       </div>
 
@@ -4452,11 +4553,11 @@ ${battery ? `- ${battery.brand} ${battery.model} × 1 ลูก` : ''}
           <h3 className="font-bold text-stone-800">จุดคุ้มทุน</h3>
         </div>
         <div className="text-center">
-          <div className="text-4xl font-bold text-blue-600">{breakEven} ปี</div>
+          <div className="text-4xl font-bold text-blue-600 tabular-nums tracking-tight transition-all duration-300">{breakEven} ปี</div>
           <div className="text-xs text-stone-500 mt-1">หลังจากนั้น = กำไรล้วน!</div>
         </div>
         <div className="mt-3 bg-stone-100 rounded-full h-3 overflow-hidden">
-          <div className="h-full bg-gradient-to-r from-amber-400 to-emerald-500 rounded-full transition-all duration-1500" 
+          <div className="h-full bg-gradient-to-r from-amber-400 to-emerald-500 rounded-full transition-all duration-700" 
                style={{ width: animateStep >= 3 ? `${Math.min(100, (breakEven/30)*100)}%` : '0%' }} />
         </div>
         <div className="flex justify-between text-xs text-stone-500 mt-1">
@@ -4484,13 +4585,13 @@ ${battery ? `- ${battery.brand} ${battery.model} × 1 ลูก` : ''}
               <div key={d.years}>
                 <div className="flex items-center justify-between text-xs mb-1">
                   <span className="font-medium text-stone-700">{d.years} ปี</span>
-                  <span className={`font-bold text-${d.color}-700`}>
-                    {d.value > 0 ? '+' : ''}{d.value.toLocaleString()} ฿
+                  <span className={`font-bold text-${d.color}-700 tabular-nums`}>
+                    {d.value > 0 ? '+' : ''}<AnimatedNumber value={d.value} show={animateStep >= 4} duration={600} /> ฿
                   </span>
                 </div>
                 <div className="h-6 bg-stone-100 rounded-lg overflow-hidden">
-                  <div className={`h-full bg-${d.color}-400 rounded-lg transition-all duration-1000 flex items-center justify-end px-2`}
-                       style={{ width: animateStep >= 4 ? `${Math.max(0, pct)}%` : '0%', transitionDelay: `${idx * 200}ms` }}>
+                  <div className={`h-full bg-${d.color}-400 rounded-lg transition-all duration-700 flex items-center justify-end px-2`}
+                       style={{ width: animateStep >= 4 ? `${Math.max(0, pct)}%` : '0%', transitionDelay: animateStep >= 4 ? `${idx * 100}ms` : '0ms' }}>
                   </div>
                 </div>
               </div>
@@ -4505,7 +4606,7 @@ ${battery ? `- ${battery.brand} ${battery.model} × 1 ลูก` : ''}
           <span className="text-2xl">🏆</span>
           <h3 className="font-bold text-stone-800">เทียบกับการลงทุนอื่น (30 ปี)</h3>
         </div>
-        <p className="text-xs text-stone-500 mb-3">หากนำเงิน {sellPrice.toLocaleString()} ฿ ไปลงทุนแบบอื่น</p>
+        <p className="text-xs text-stone-500 mb-3">หากนำเงิน <AnimatedNumber value={sellPrice} show={animateStep >= 5} duration={600} /> ฿ ไปลงทุนแบบอื่น</p>
         
         {(() => {
           const solarProfit = roi.profit30 - sellPrice;
@@ -4526,13 +4627,13 @@ ${battery ? `- ${battery.brand} ${battery.model} × 1 ลูก` : ''}
                       <span className={`font-medium ${it.winner ? 'text-emerald-700' : 'text-stone-700'}`}>
                         {it.icon} {it.label} {it.rate}
                       </span>
-                      <span className={`font-bold ${it.winner ? 'text-emerald-700 text-base' : 'text-stone-600'}`}>
-                        +{it.value.toLocaleString()} ฿ {it.winner && '🏆'}
+                      <span className={`font-bold tabular-nums ${it.winner ? 'text-emerald-700 text-base' : 'text-stone-600'}`}>
+                        +<AnimatedNumber value={it.value} show={animateStep >= 5} duration={600} /> ฿ {it.winner && '🏆'}
                       </span>
                     </div>
                     <div className="h-5 bg-stone-100 rounded-lg overflow-hidden">
-                      <div className={`h-full ${it.winner ? 'bg-gradient-to-r from-amber-400 to-emerald-500' : `bg-${it.color}-300`} transition-all duration-1500`}
-                           style={{ width: animateStep >= 5 ? `${Math.max(2, pct)}%` : '0%', transitionDelay: `${idx * 200}ms` }} />
+                      <div className={`h-full ${it.winner ? 'bg-gradient-to-r from-amber-400 to-emerald-500' : `bg-${it.color}-300`} transition-all duration-700`}
+                           style={{ width: animateStep >= 5 ? `${Math.max(2, pct)}%` : '0%', transitionDelay: animateStep >= 5 ? `${idx * 100}ms` : '0ms' }} />
                     </div>
                   </div>
                 );
@@ -4540,28 +4641,6 @@ ${battery ? `- ${battery.brand} ${battery.model} × 1 ลูก` : ''}
             </div>
           );
         })()}
-      </div>
-
-      {/* CO2 */}
-      <div className={`bg-gradient-to-br from-emerald-400 to-teal-500 rounded-2xl p-4 text-white shadow-md transition-all duration-700 ${animateStep >= 6 ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-2xl">🌍</span>
-          <h3 className="font-bold">ผลกระทบต่อสิ่งแวดล้อม</h3>
-        </div>
-        <div className="grid grid-cols-2 gap-3 text-center">
-          <div className="bg-white/20 rounded-xl p-3 backdrop-blur">
-            <div className="text-3xl font-bold">
-              <AnimatedNumber value={co2Saved} show={animateStep >= 6} />
-            </div>
-            <div className="text-xs">ตัน CO₂ ที่ลดได้</div>
-          </div>
-          <div className="bg-white/20 rounded-xl p-3 backdrop-blur">
-            <div className="text-3xl font-bold">
-              🌳 <AnimatedNumber value={treeEquivalent} show={animateStep >= 6} />
-            </div>
-            <div className="text-xs">ต้น (เทียบเท่า)</div>
-          </div>
-        </div>
       </div>
 
       {/* Disclaimer */}
@@ -4575,13 +4654,9 @@ ${battery ? `- ${battery.brand} ${battery.model} × 1 ลูก` : ''}
       </div>
 
       {/* Action Buttons */}
-      <div className="flex gap-2 sticky bottom-2 bg-white p-2 rounded-2xl shadow-lg border border-stone-200">
-        <button onClick={onEdit}
-          className="flex-1 px-4 py-3 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl font-medium">
-          ⚙️ ปรับแต่ง
-        </button>
+      <div className="sticky bottom-2 bg-white p-2 rounded-2xl shadow-lg border border-stone-200">
         <button onClick={handleCreateQuotation}
-          className="flex-[2] px-4 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-medium">
+          className="w-full px-4 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-medium">
           📄 สร้างใบเสนอราคา
         </button>
       </div>
