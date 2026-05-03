@@ -642,28 +642,10 @@ function recommendPackages({ monthlyBill, hasBattery, region, stock = [], catalo
     })[0];
   };
   
-  // === Package 1: ถูกสุด — เน้น on-grid ราคาถูก ไม่มีแบต ===
-  const cheapInverter = findInverter(targetKW, 'ongrid', null) || findInverter(targetKW, null, null);
-  const cheapPanel = [...panels].sort((a, b) => a.marketPrice - b.marketPrice)[0];
-  const cheapPanelCount = Math.ceil(cheapInverter.size * 1100 / cheapPanel.watt);
-  
-  // === Package 3: Premium — Hybrid kW ใกล้เคียง + แบต + แผงดี ===
-  const premiumInverter = findInverter(targetKW, 'hybrid', 'premium')
-    || findInverter(targetKW, 'hybrid', null)
-    || findInverter(targetKW, null, null);
-  let finalPremium = premiumInverter;
-  if (premiumInverter && cheapInverter && premiumInverter.id === cheapInverter.id) {
-    const bigger = inverters
-      .filter(i => i.size > targetKW && i.type === 'hybrid')
-      .sort((a, b) => a.size - b.size)[0];
-    if (bigger) finalPremium = bigger;
-  }
-  const premiumPanel = [...panels].sort((a, b) => b.watt - a.watt)[0];
-  const premiumPanelCount = Math.ceil(finalPremium.size * 1100 / premiumPanel.watt);
-  const premiumBattery = batteries.length > 0 ? batteries[0] : null;
-  
   const hiddenCostsTotal = sumHiddenCosts(companyInfo);
   
+  // === Build a package with capped savings ===
+  // capRatio: 1.0 = ไม่เกินค่าไฟปัจจุบัน, 2.0 = ไม่เกิน 2 เท่า
   const buildPackage = (inverter, panel, panelCount, battery, label, badge) => {
     // Smart cost: ใช้ stock ก่อน → ที่ขาด ใช้ market
     const invCost = calcSmartCost(inverter, 1, stock);
@@ -671,7 +653,7 @@ function recommendPackages({ monthlyBill, hasBattery, region, stock = [], catalo
     const batCost = battery ? calcSmartCost(battery, 1, stock) : { cost: 0, fromStock: 0, fromMarket: 0, breakdown: [], total: 0 };
     
     const equipmentCost = invCost.cost + panCost.cost + batCost.cost;
-    const installCost = hiddenCostsTotal; // ต้นทุนแฝง (รวมจาก hiddenCosts)
+    const installCost = hiddenCostsTotal;
     const grandCost = equipmentCost + installCost;
     const margin = getMargin(inverter.size, companyInfo);
     const sellPrice = applyMargin(grandCost, margin);
@@ -696,41 +678,95 @@ function recommendPackages({ monthlyBill, hasBattery, region, stock = [], catalo
     };
   };
   
-  // === Package 2: คุ้มสุด — เลือกชุดที่ "คืนทุนเร็วที่สุด" ===
-  // ลองทุก combination ของ inverter × panel (+/- battery ตามที่ลูกค้าเลือก)
-  // เลือกชุดที่ breakEven ต่ำสุด แต่ kW ต้องไม่ต่ำกว่า requirement มาก
-  let bestPackage = null;
-  let bestBreakEven = Infinity;
-  for (const inv of inverters) {
-    // ข้าม inverter ที่เล็กกว่าความต้องการมาก (น้อยกว่า 60% ของ targetKW)
-    if (inv.size < targetKW * 0.6) continue;
-    // ข้าม inverter ที่ใหญ่เกินไป (มากกว่า 2x ของ targetKW)
-    if (inv.size > targetKW * 2) continue;
+  // === Brute force: ลองทุกชุด แล้วเลือกที่ดีที่สุด (ภายใต้เงื่อนไข) ===
+  // เพดานผลิตไฟ: ค่าไฟต่อปี × capRatio (ไม่ผลิตเกินที่ลูกค้าใช้จริง)
+  const yearlyBill = monthlyBill * 12;
+  
+  const findBestPackage = (capRatio, options = {}) => {
+    const { preferType = null, requirePremiumTier = false, includeBattery = hasBattery } = options;
+    let bestPkg = null;
+    let bestBreakEven = Infinity;
     
-    for (const pan of panels) {
-      const panelCount = Math.ceil(inv.size * 1100 / pan.watt);
-      const bat = hasBattery && batteries.length > 0 ? batteries[0] : null;
-      const pkg = buildPackage(inv, pan, panelCount, bat, 'คุ้มสุด', '🌟');
-      if (pkg.breakEven < bestBreakEven && pkg.breakEven > 0) {
-        bestBreakEven = pkg.breakEven;
-        bestPackage = pkg;
+    for (const inv of inverters) {
+      // กรองตามประเภทถ้าระบุ
+      if (preferType && inv.type !== preferType) continue;
+      // ขนาดต้องไม่เล็กเกินไป (≥60% ของ target)
+      if (inv.size < targetKW * 0.6) continue;
+      // ขนาดต้องไม่ใหญ่เกินไป (≤ targetKW × capRatio + buffer)
+      if (inv.size > targetKW * capRatio * 1.3) continue;
+      
+      for (const pan of panels) {
+        const panelCount = Math.ceil(inv.size * 1100 / pan.watt);
+        const bat = includeBattery && batteries.length > 0 ? batteries[0] : null;
+        const pkg = buildPackage(inv, pan, panelCount, bat);
+        
+        // ⛔ กรอง: ผลิตเกินเพดาน
+        if (pkg.roi.yearlySavings > yearlyBill * capRatio) continue;
+        
+        // เลือกตาม tier ถ้าต้องการ
+        if (requirePremiumTier && inv.tier !== 'premium') continue;
+        
+        if (pkg.breakEven < bestBreakEven && pkg.breakEven > 0) {
+          bestBreakEven = pkg.breakEven;
+          bestPkg = pkg;
+        }
       }
     }
-  }
+    return bestPkg;
+  };
   
-  // ถ้าไม่เจอ (เช่น catalog ไม่ครบ) ใช้ fallback แบบเดิม
-  if (!bestPackage) {
-    const fallbackInv = findInverter(targetKW, 'hybrid', 'standard') || findInverter(targetKW, 'hybrid', null) || findInverter(targetKW, null, null);
-    const fallbackPan = panels.find(p => p.watt === 640) || panels[0];
-    const fallbackCount = Math.ceil(fallbackInv.size * 1100 / fallbackPan.watt);
-    const fallbackBat = hasBattery && batteries.length > 0 ? batteries[0] : null;
-    bestPackage = buildPackage(fallbackInv, fallbackPan, fallbackCount, fallbackBat, 'คุ้มสุด', '🌟');
+  // === Package 1: ถูกสุด — On-grid, ไม่มีแบต, ผลิตไม่เกิน 100% ของค่าไฟ ===
+  let cheapPackage = findBestPackage(1.0, { preferType: 'ongrid', includeBattery: false });
+  // Fallback: ถ้าไม่มี on-grid → ใช้ hybrid
+  if (!cheapPackage) cheapPackage = findBestPackage(1.0, { includeBattery: false });
+  // Fallback ขั้นสุด: ใช้ตัวเล็กสุดที่ผลิตได้ในงบ
+  if (!cheapPackage) {
+    const smallestInv = [...inverters].sort((a, b) => a.size - b.size)[0];
+    const cheapestPan = [...panels].sort((a, b) => a.marketPrice - b.marketPrice)[0];
+    const count = Math.max(1, Math.ceil(smallestInv.size * 1100 / cheapestPan.watt));
+    cheapPackage = buildPackage(smallestInv, cheapestPan, count, null);
   }
+  cheapPackage.label = 'ถูกสุด';
+  cheapPackage.badge = '💰';
+  
+  // === Package 2: คุ้มสุด — Hybrid, ผลิตไม่เกิน 100% ของค่าไฟ (คืนทุนเร็วสุด) ===
+  let bestPackage = findBestPackage(1.0, { preferType: 'hybrid' });
+  if (!bestPackage) bestPackage = findBestPackage(1.0); // fallback ไม่ระบุ type
+  // ถ้ายังไม่ได้ — ใช้ตัวเล็กสุดที่ผลิตได้
+  if (!bestPackage) {
+    const smallestInv = [...inverters].sort((a, b) => a.size - b.size)[0];
+    const longi = panels.find(p => p.watt === 640) || panels[0];
+    const count = Math.max(1, Math.ceil(smallestInv.size * 1100 / longi.watt));
+    const bat = hasBattery && batteries.length > 0 ? batteries[0] : null;
+    bestPackage = buildPackage(smallestInv, longi, count, bat);
+  }
+  bestPackage.label = 'คุ้มสุด';
+  bestPackage.badge = '🌟';
+  
+  // === Package 3: Premium — Hybrid + แบต, ผลิตไม่เกิน 200% (เพื่ออนาคต) ===
+  let premiumPackage = findBestPackage(2.0, { preferType: 'hybrid', includeBattery: true });
+  if (!premiumPackage) premiumPackage = findBestPackage(2.0, { includeBattery: true });
+  if (!premiumPackage) {
+    // Fallback: ใช้ตัวใหญ่กว่า best
+    const biggerInv = inverters
+      .filter(i => i.size > (bestPackage?.inverter.size || targetKW))
+      .sort((a, b) => a.size - b.size)[0] || bestPackage?.inverter;
+    if (biggerInv) {
+      const bestPan = [...panels].sort((a, b) => b.watt - a.watt)[0];
+      const count = Math.ceil(biggerInv.size * 1100 / bestPan.watt);
+      const bat = batteries.length > 0 ? batteries[0] : null;
+      premiumPackage = buildPackage(biggerInv, bestPan, count, bat);
+    } else {
+      premiumPackage = bestPackage;
+    }
+  }
+  premiumPackage.label = 'Premium';
+  premiumPackage.badge = '👑';
   
   return {
-    cheap: buildPackage(cheapInverter, cheapPanel, cheapPanelCount, null,        'ถูกสุด',   '💰'),
-    best:  bestPackage,
-    premium: buildPackage(finalPremium, premiumPanel, premiumPanelCount, premiumBattery, 'Premium', '👑'),
+    cheap:   cheapPackage,
+    best:    bestPackage,
+    premium: premiumPackage,
   };
 }
 
