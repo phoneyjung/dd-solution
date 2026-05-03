@@ -1227,6 +1227,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
   const [companyInfo, setCompanyInfo] = useState(DEFAULT_COMPANY_INFO);
   const [salesCatalog, setSalesCatalog] = useState([]);
   const [showJobModal, setShowJobModal] = useState(false);
+  const [showPickQuotation, setShowPickQuotation] = useState(false);
   const [showStockModal, setShowStockModal] = useState(false);
   const [showPartnerModal, setShowPartnerModal] = useState(false);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
@@ -1276,13 +1277,14 @@ function DDSolutionManager({ currentUser, onLogout }) {
           ciData.specs = DEFAULT_COMPANY_INFO.specs;
           needsCiSave = true;
         }
-        // Force migrate specs (V3): อัพเดทรายละเอียดสายไฟ (ดำ+แดง / เขียวเหลือง)
+        // Force migrate specs (V4): reset ถ้ามี IP65/MDB/สาย 16mm²เก่า/spec ที่ไม่ตรง
         else if (ciData.specs.some(s => 
-          (s.id === 's-mdb') || 
-          (s.value && s.value.includes('IP65') && !s.value.includes('Surge Protection พร้อม')) ||
-          (s.id === 's-ac' && s.value === 'Yasaki THW 16mm²') ||
-          (s.id === 's-dc' && s.value === 'PV1-F 6mm² ทนแดด UV') ||
-          (s.id === 's-ac' && s.value && s.value.includes('Yasaki 10mm²') && !s.value.includes('เขียวเหลือง'))
+          (s.id === 's-mdb') ||                                  // มี ตู้ MDB เก่า
+          (s.value && s.value.includes('IP65')) ||               // มี IP65 ที่ไหนก็ตาม
+          (s.id === 's-ac' && s.value === 'Yasaki THW 16mm²') || // สาย AC default เก่า
+          (s.id === 's-dc' && s.value === 'PV1-F 6mm² ทนแดด UV') || // สาย DC ไม่บอกสี
+          (s.id === 's-ac' && s.value && s.value.includes('Yasaki 10mm²') && !s.value.includes('เขียวเหลือง')) ||
+          (s.id === 's-dc' && s.value && !s.value.includes('ดำ+แดง'))  // DC ไม่บอก ดำ+แดง
         )) {
           ciData.specs = DEFAULT_COMPANY_INFO.specs;
           needsCiSave = true;
@@ -2067,13 +2069,15 @@ function DDSolutionManager({ currentUser, onLogout }) {
                 paymentTerms: '',
                 depositPercent: 50,
                 depositAmount: Math.round(data.totalAmount * 0.5),
-                warrantyText: companyInfo?.defaultWarranty?.join('\n') || '',
-                notes: 'สร้างจากการเสนอขาย',
-                jobId: '',
+                warrantyText: '', // ไม่ใส่ default - มี table รับประกันแล้ว
+                notes: '',
+                jobId: '', // ผูกกับงาน (ตอนสร้างงานจะ update ที่นี่)
                 jobChainId: `doc-${Date.now()}`, // เป็น chain master
                 jobStatus: 'active',
                 status: 'active',
                 linkedDocId: '',
+                // === Snapshot จากการเสนอขาย (สำหรับสร้างงาน) ===
+                equipmentSnapshot: data.equipmentSnapshot || null, // ข้อมูล inv/panel/bat ครบถ้วน
                 createdAt: new Date().toISOString(),
               };
               newDoc.jobChainId = newDoc.id; // ตัวเองเป็น chain master
@@ -2104,11 +2108,30 @@ function DDSolutionManager({ currentUser, onLogout }) {
 
         {activeTab === 'jobs' && (
           <div className="space-y-4 animate-fade-in">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <div><h2 className="display-font text-3xl text-stone-800">รายการงาน</h2><p className="text-sm text-stone-500">{jobs.length} งาน</p></div>
-              <button onClick={() => { setEditingItem(null); setShowJobModal(true); }} className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl font-medium shadow-sm">
-                <Plus className="w-4 h-4" /> เพิ่มงาน
-              </button>
+              <div className="flex gap-2 flex-wrap">
+                {(() => {
+                  // หาใบเสนอราคา active ที่ยังไม่มี job
+                  const availableQuotations = documents.filter(d => 
+                    d.type === 'quotation' && 
+                    d.jobStatus === 'active' &&
+                    !d.jobId  // ยังไม่ผูกกับงาน
+                  );
+                  if (availableQuotations.length === 0) return null;
+                  return (
+                    <button onClick={() => setShowPickQuotation(true)}
+                      className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-xl font-medium shadow-sm">
+                      🚀 จากใบเสนอราคา
+                      <span className="bg-white/20 text-xs px-1.5 py-0.5 rounded-full">{availableQuotations.length}</span>
+                    </button>
+                  );
+                })()}
+                <button onClick={() => { setEditingItem(null); setShowJobModal(true); }} 
+                  className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl font-medium shadow-sm">
+                  <Plus className="w-4 h-4" /> เพิ่มงาน
+                </button>
+              </div>
             </div>
             <div className="space-y-3">
               {jobs.map(job => (
@@ -2492,8 +2515,10 @@ function DDSolutionManager({ currentUser, onLogout }) {
           const cloneFromDoc = (sourceDoc, newType) => {
             const chainId = getChainId(sourceDoc);
             const isReceiptDeposit = newType === 'receipt-deposit';
+            const isReceiptFinal = newType === 'receipt-final';
             
             // ถ้าเป็น RC มัดจำ: เอาเงินมัดจำจาก quotation มาเป็นยอด
+            // ถ้าเป็น RC เต็ม: เอายอด "ค้างจ่าย" = ยอดเต็ม - มัดจำที่จ่ายไปแล้ว
             let totalAmount = sourceDoc.totalAmount;
             let items = sourceDoc.items.map(it => ({ ...it, id: `item-${Date.now()}-${Math.random().toString(36).slice(2,5)}` }));
             
@@ -2506,6 +2531,30 @@ function DDSolutionManager({ currentUser, onLogout }) {
                 unitPrice: totalAmount,
                 amount: totalAmount,
               }];
+            }
+            
+            // RC เต็ม: หักมัดจำที่จ่ายไปแล้วในงานนี้
+            if (isReceiptFinal) {
+              const chainDocs = getChainDocs(chainId);
+              const depositPaid = chainDocs
+                .filter(d => d.type === 'receipt-deposit')
+                .reduce((sum, d) => sum + Number(d.totalAmount || 0), 0);
+              
+              const totalBill = Number(sourceDoc.totalAmount || 0);
+              const remaining = totalBill - depositPaid;
+              
+              if (depositPaid > 0 && remaining > 0) {
+                // มีจ่ายมัดจำมาแล้ว → RC เต็ม คิดเฉพาะส่วนค้าง
+                totalAmount = remaining;
+                items = [{
+                  id: `item-${Date.now()}`,
+                  name: `ชำระส่วนที่เหลือ (ยอดรวม ${totalBill.toLocaleString()} ฿ - มัดจำ ${depositPaid.toLocaleString()} ฿)`,
+                  qty: 1, unit: 'รายการ',
+                  unitPrice: totalAmount,
+                  amount: totalAmount,
+                }];
+              }
+              // ถ้าไม่เคยจ่ายมัดจำ → ใช้ยอดเต็มตามเดิม (ลูกค้าจ่ายครั้งเดียว)
             }
             
             const newDoc = {
@@ -2541,6 +2590,50 @@ function DDSolutionManager({ currentUser, onLogout }) {
             setEditingItem(newDoc);
             setDefaultDocType(newType);
             setTimeout(() => setShowDocumentModal(true), 100);
+          };
+
+          // === สร้างงานจากใบเสนอราคา ===
+          const createJobFromQuotation = (quotation) => {
+            // ตรวจสอบไม่ให้สร้างซ้ำ
+            if (quotation.jobId) {
+              const existJob = jobs.find(j => j.id === quotation.jobId);
+              if (existJob) {
+                if (window.confirm(`ใบเสนอราคานี้มีงานอยู่แล้ว: ${existJob.customer || existJob.customerName}\n\nไปที่งานเลย?`)) {
+                  setActiveTab('jobs');
+                }
+                return;
+              }
+            }
+            
+            const snap = quotation.equipmentSnapshot || {};
+            const items = quotation.items || [];
+            const itemDesc = items[0]?.name || '';
+            
+            // สร้าง job draft (format เดียวกับ PickQuotation)
+            const draftJob = {
+              date: new Date().toISOString().split('T')[0],
+              customer: quotation.customerName || '',
+              location: quotation.customerAddress || '',
+              type: snap.jobType || quotation.jobType || itemDesc.split('\n')[0] || '',
+              salePrice: Number(quotation.totalAmount || 0),
+              originalPrice: Number(quotation.totalAmount || 0),
+              discount: 0,
+              discountNote: '',
+              status: 'pending',
+              investments: {},
+              costsByCategory: {},
+              totalCost: snap.totalCost || quotation.expectedCost || 0,
+              profit: snap.expectedProfit || quotation.expectedProfit || 0,
+              note: `สร้างจากใบเสนอราคา ${quotation.docNumber}`,
+              quotationId: quotation.id,  // ✨ เชื่อมกลับ
+              docNumber: quotation.docNumber,
+              expectedProfit: snap.expectedProfit || quotation.expectedProfit || 0,
+              expectedCost: snap.totalCost || quotation.expectedCost || 0,
+            };
+            
+            setEditingItem(draftJob);
+            setActiveTab('jobs');
+            setTimeout(() => setShowJobModal(true), 200);
           };
 
           // จบงาน — กระทำที่ chain → ทุกใบเข้า archive
@@ -2753,6 +2846,16 @@ function DDSolutionManager({ currentUser, onLogout }) {
                   const chainDocs = [...chain.docs].sort((a, b) => 
                     (a.createdAt || '') < (b.createdAt || '') ? -1 : 1
                   );
+                  
+                  // ถ้า filter เป็นประเภทเอกสาร → highlight เอกสารประเภทนั้น
+                  const docTypeFilters = ['quotation', 'invoice', 'receipt-deposit', 'receipt-final'];
+                  const isDocTypeFilter = docTypeFilters.includes(docFilter);
+                  const isHighlighted = (doc) => {
+                    if (!isDocTypeFilter) return false;
+                    if (docFilter === 'receipt-final') return doc.type === 'receipt-final' || doc.type === 'receipt';
+                    return doc.type === docFilter;
+                  };
+                  
                   const total = Number(master.totalAmount || 0);
                   const paid = getChainPaid(chain.chainId);
                   const unpaid = total - paid;
@@ -2810,8 +2913,13 @@ function DDSolutionManager({ currentUser, onLogout }) {
                       <div className="divide-y divide-stone-100">
                         {chainDocs.map(doc => {
                           const typeInfo = getDocTypeInfo(doc.type);
+                          const highlight = isHighlighted(doc);
                           return (
-                            <div key={doc.id} className="p-3 flex items-center gap-3 hover:bg-stone-50">
+                            <div key={doc.id} className={`p-3 flex items-center gap-3 transition-colors ${
+                              highlight 
+                                ? 'bg-amber-100 hover:bg-amber-200 border-l-4 border-amber-500' 
+                                : 'hover:bg-stone-50'
+                            }`}>
                               <div className="text-2xl flex-shrink-0">{typeInfo.icon}</div>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
@@ -2819,6 +2927,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
                                     {typeInfo.shortLabel}
                                   </span>
                                   <span className="font-mono text-xs text-stone-600">{doc.docNumber}</span>
+                                  {highlight && <span className="text-[10px] text-amber-700 font-bold">⭐ ค้นพบ</span>}
                                 </div>
                                 <div className="text-xs text-stone-500 mt-0.5">
                                   {doc.docDate} · {fmt(doc.totalAmount || 0)} ฿
@@ -2851,6 +2960,19 @@ function DDSolutionManager({ currentUser, onLogout }) {
                       {/* Job Actions */}
                       {isActive && (
                         <div className="p-3 bg-stone-50 border-t border-stone-100 flex gap-1.5 flex-wrap">
+                          {/* ปุ่มสร้างงาน — ถ้ายังไม่มี jobId */}
+                          {!master.jobId && master.type === 'quotation' && (
+                            <button onClick={() => createJobFromQuotation(master)}
+                              className="text-xs bg-violet-500 hover:bg-violet-600 text-white border border-violet-600 px-3 py-1.5 rounded-lg font-medium">
+                              🚀 สร้างงาน
+                            </button>
+                          )}
+                          {master.jobId && (
+                            <button onClick={() => { setActiveTab('jobs'); }}
+                              className="text-xs bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200 px-3 py-1.5 rounded-lg font-medium">
+                              📋 ดูงาน
+                            </button>
+                          )}
                           {!hasReceiptDeposit && Number(master.depositAmount || 0) > 0 && (
                             <button onClick={() => cloneFromDoc(master, 'receipt-deposit')}
                               className="text-xs bg-cyan-50 hover:bg-cyan-100 text-cyan-700 border border-cyan-200 px-3 py-1.5 rounded-lg font-medium">
@@ -2975,9 +3097,56 @@ function DDSolutionManager({ currentUser, onLogout }) {
             if (editingItem) {
               saveJobs(jobs.map(j => j.id === editingItem.id ? data : j), 'edit', `แก้ไข: ${data.customer}`);
             } else {
-              saveJobs([...jobs, { ...data, id: `job-${Date.now()}` }], 'add', `เพิ่ม: ${data.customer} (${data.salePrice} ฿)`);
+              const newJobId = `job-${Date.now()}`;
+              saveJobs([...jobs, { ...data, id: newJobId }], 'add', `เพิ่ม: ${data.customer} (${data.salePrice} ฿)`);
+              // ถ้ามี quotationId → ผูก doc ↔ job (อัพเดทกลับ)
+              if (data.quotationId) {
+                saveDocuments(
+                  documents.map(d => d.id === data.quotationId ? { ...d, jobId: newJobId } : d),
+                  'edit',
+                  `เชื่อมงาน ${data.customer} กับใบเสนอราคา`
+                );
+              }
             }
             setShowJobModal(false); setEditingItem(null);
+          }}
+        />
+      )}
+      {showPickQuotation && (
+        <PickQuotationModal
+          documents={documents}
+          fmt={fmt0}
+          onClose={() => setShowPickQuotation(false)}
+          onSelect={(quotation) => {
+            // สร้าง job draft จาก quotation
+            const snap = quotation.equipmentSnapshot || {};
+            const items = quotation.items || [];
+            const itemDesc = items[0]?.name || '';
+            
+            // คำนวณต้นทุนแยกหมวดเบื้องต้น (ถ้ามี snapshot)
+            const draftJob = {
+              date: new Date().toISOString().split('T')[0],
+              customer: quotation.customerName || '',
+              location: quotation.customerAddress || '',
+              type: snap.jobType || itemDesc.split('\n')[0] || '',
+              salePrice: Number(quotation.totalAmount || 0),
+              originalPrice: Number(quotation.totalAmount || 0),
+              discount: 0,
+              discountNote: '',
+              status: 'pending',
+              investments: {},
+              costsByCategory: {},
+              totalCost: snap.totalCost || 0,
+              profit: snap.expectedProfit || 0,
+              note: `สร้างจากใบเสนอราคา ${quotation.docNumber}`,
+              quotationId: quotation.id,  // ✨ เชื่อมกลับ
+              docNumber: quotation.docNumber,
+              expectedProfit: snap.expectedProfit || 0,
+              expectedCost: snap.totalCost || 0,
+            };
+            setEditingItem(draftJob);
+            setShowPickQuotation(false);
+            setShowJobModal(true);
           }}
         />
       )}
@@ -3284,6 +3453,67 @@ function Field({ label, children, hint }) {
 
 const inputCls = "w-full px-3 py-2 border border-stone-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent";
 
+function PickQuotationModal({ documents, fmt, onClose, onSelect }) {
+  // หาใบเสนอราคา active ที่ยังไม่ผูก job
+  const availableQuotations = documents
+    .filter(d => d.type === 'quotation' && d.jobStatus === 'active' && !d.jobId)
+    .sort((a, b) => (b.createdAt || '') > (a.createdAt || '') ? 1 : -1);
+  
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center md:p-4 animate-fade-in" onClick={onClose}>
+      <div className="bg-white w-full md:max-w-2xl md:rounded-2xl rounded-t-2xl shadow-xl max-h-[90vh] flex flex-col animate-slide-up" onClick={e => e.stopPropagation()}>
+        <div className="px-4 py-3 border-b border-stone-200 flex items-center justify-between">
+          <h3 className="font-bold text-stone-800">🚀 เลือกใบเสนอราคา</h3>
+          <button onClick={onClose} className="p-1 hover:bg-stone-100 rounded">
+            <X className="w-5 h-5 text-stone-500" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-3">
+          {availableQuotations.length === 0 ? (
+            <div className="text-center py-8 text-stone-500">
+              <div className="text-4xl mb-2">📭</div>
+              <p>ไม่มีใบเสนอราคาที่ยังไม่ได้สร้างงาน</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {availableQuotations.map(q => {
+                const snap = q.equipmentSnapshot || {};
+                return (
+                  <button key={q.id} onClick={() => onSelect(q)}
+                    className="w-full text-left bg-white border-2 border-stone-200 hover:border-emerald-400 hover:bg-emerald-50 rounded-xl p-3 transition-all">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <span className="font-mono text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{q.docNumber}</span>
+                          <span className="text-xs text-stone-500">{q.docDate}</span>
+                        </div>
+                        <h4 className="font-bold text-stone-800">{q.customerName || '-'}</h4>
+                        {q.customerPhone && <p className="text-xs text-stone-500">📞 {q.customerPhone}</p>}
+                        {snap.jobType && <p className="text-xs text-emerald-700 mt-1">⚡ {snap.jobType}</p>}
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <div className="text-lg font-bold text-amber-600">{fmt(q.totalAmount || 0)} ฿</div>
+                        {snap.expectedProfit > 0 && (
+                          <div className="text-xs text-emerald-600 font-medium">
+                            กำไร ~{fmt(snap.expectedProfit)} ฿
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <div className="px-4 py-3 border-t border-stone-200 bg-stone-50 text-xs text-stone-600">
+          💡 เลือกใบเสนอราคา → ระบบจะ auto-fill ฟอร์มเพิ่มงานให้คุณ
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function JobModal({ job, partners, stock = [], onUpdateStock, onClose, onSave }) {
   const [form, setForm] = useState(job || {
     date: new Date().toISOString().split('T')[0],
@@ -3379,37 +3609,36 @@ function JobModal({ job, partners, stock = [], onUpdateStock, onClose, onSave })
 
   return (
     <Modal title={job ? 'แก้ไขงาน' : 'เพิ่มงานใหม่'} onClose={onClose} wide>
+      {/* === Quotation Link Badge === */}
+      {form.quotationId && (
+        <div className="mb-3 bg-emerald-50 border-2 border-emerald-300 rounded-xl p-3">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-lg">🔗</span>
+            <span className="font-bold text-emerald-800 text-sm">สร้างจากใบเสนอราคา</span>
+            {form.docNumber && (
+              <span className="font-mono text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{form.docNumber}</span>
+            )}
+          </div>
+          <div className="text-xs text-emerald-700">
+            ✓ ข้อมูลลูกค้า, ที่อยู่, ราคาขาย กรอกอัตโนมัติแล้ว
+          </div>
+        </div>
+      )}
+      
       <Field label="วันที่"><input type="date" value={form.date} onChange={e => update('date', e.target.value)} className={inputCls} /></Field>
       <Field label="ลูกค้า"><input value={form.customer} onChange={e => update('customer', e.target.value)} className={inputCls} placeholder="ชื่อลูกค้า" /></Field>
       <Field label="สถานที่"><input value={form.location} onChange={e => update('location', e.target.value)} className={inputCls} /></Field>
       <Field label="ประเภทงาน"><input value={form.type} onChange={e => update('type', e.target.value)} className={inputCls} placeholder="เช่น 5kW Hybrid" /></Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="ราคาขาย (฿)"><input type="number" value={form.salePrice} onChange={e => update('salePrice', Number(e.target.value))} className={inputCls} /></Field>
+        <Field label="ราคาขาย (฿)" hint={form.expectedProfit > 0 ? `💡 คาดกำไร: ~${(form.expectedProfit).toLocaleString()} ฿ (จากใบเสนอ)` : null}>
+          <input type="number" value={form.salePrice} onChange={e => update('salePrice', Number(e.target.value))} className={inputCls} />
+        </Field>
         <Field label="สถานะ">
           <select value={form.status} onChange={e => update('status', e.target.value)} className={inputCls}>
             <option value="pending">กำลังดำเนินการ</option>
             <option value="completed">เสร็จแล้ว</option>
           </select>
         </Field>
-      </div>
-
-      <div className="mt-4 mb-2 bg-blue-50 border border-blue-200 rounded-xl p-3">
-        <label className="text-sm font-bold text-blue-800 mb-2 block">💰 ใครออกเงินทุนเท่าไหร่</label>
-        <div className="space-y-2">
-          {partners.map(p => (
-            <div key={p.id} className="flex items-center gap-2">
-              <span className="text-sm w-24 text-stone-700">{p.name}</span>
-              <input type="number" step="0.01" value={investments[p.id] || ''} onChange={e => setInvestments({...investments, [p.id]: e.target.value})} className={inputCls + " flex-1"} placeholder="0" />
-              <span className="text-xs text-stone-500">฿</span>
-            </div>
-          ))}
-        </div>
-        <div className="mt-2 pt-2 border-t border-blue-200 flex justify-between text-sm">
-          <span>รวม: <span className="font-bold">{new Intl.NumberFormat('th-TH', {maximumFractionDigits: 2}).format(totalInvestment)} ฿</span></span>
-          <span className={Math.abs(investmentBalance) < 0.01 ? 'text-emerald-600 font-medium' : 'text-orange-600'}>
-            {Math.abs(investmentBalance) < 0.01 ? '✓ ตรงกับต้นทุน' : `ส่วนต่าง ${investmentBalance.toFixed(2)} ฿`}
-          </span>
-        </div>
       </div>
 
       <div className="mt-4 mb-2">
@@ -5418,6 +5647,21 @@ function SalesPresentationCloser({ active: initialActive, customerName, customer
 ${battery ? `- ${battery.brand} ${battery.model} × 1 ลูก` : ''}
 - พร้อมติดตั้งและรับประกัน`;
     
+    // === Snapshot สำหรับสร้างงานทีหลัง ===
+    const equipmentSnapshot = {
+      inverter: { id: inverter.id, brand: inverter.brand, model: inverter.model, size: inverter.size, cost: inverter.marketPrice },
+      panel: { id: panel.id, brand: panel.brand, model: panel.model, watt: panel.watt, qty: panelCount, costEach: panel.marketPrice, total: panel.marketPrice * panelCount },
+      battery: battery ? { id: battery.id, brand: battery.brand, model: battery.model, capacity: battery.capacity, cost: battery.marketPrice } : null,
+      totalKW,
+      jobType: `${totalKW}kW ${inverter.type === 'hybrid' ? 'Hybrid' : inverter.type === 'ongrid' ? 'On-grid' : 'Off-grid'}${battery ? ` + แบต ${battery.capacity}kWh` : ''}`,
+      equipmentCost,
+      installCost,
+      totalCost,
+      expectedProfit: profit,
+      margin,
+      meterType: curMeterType,
+    };
+    
     onCreateQuotation({
       customerName, customerPhone, customerAddress,
       customerMode, selectedCustomerId,
@@ -5428,6 +5672,10 @@ ${battery ? `- ${battery.brand} ${battery.model} × 1 ลูก` : ''}
         unitPrice: sellPrice, amount: sellPrice,
       }],
       totalAmount: sellPrice,
+      equipmentSnapshot,
+      expectedProfit: profit,
+      expectedCost: totalCost,
+      jobType: equipmentSnapshot.jobType,
     });
   };
 
@@ -5950,7 +6198,7 @@ function DocumentModal({ doc, defaultType = 'quotation', documents, customers, j
     paymentTerms: '',
     depositPercent: 0,
     depositAmount: 0,
-    warrantyText: companyInfo?.defaultWarranty?.join('\n') || '',
+    warrantyText: '', // ไม่ใส่ default - มี table รับประกันแล้ว
     notes: '',
     jobId: '',
     status: 'active',
@@ -6384,7 +6632,13 @@ function DocumentPreview({ doc, companyInfo, fmt, onClose }) {
       </div>
 
       {/* Document */}
-      <div className="bg-white shadow-xl mt-16 mb-8 print:mt-0 print:shadow-none print-area" style={{ width: '210mm', minHeight: '297mm', fontFamily: "'Sarabun', sans-serif" }}>
+      <div className="bg-white shadow-xl mt-16 mb-8 print:mt-0 print:shadow-none print-area max-w-full" 
+           style={{ 
+             width: '210mm', 
+             maxWidth: '100%',
+             minHeight: '297mm', 
+             fontFamily: "'Sarabun', sans-serif" 
+           }}>
         <div className="p-6 print:p-5">
           {/* Header */}
           <div className="flex items-start justify-between pb-3 border-b-4 border-amber-500 mb-4">
@@ -6544,14 +6798,6 @@ function DocumentPreview({ doc, companyInfo, fmt, onClose }) {
                   </div>
                 </div>
               )}
-            </div>
-          )}
-
-          {/* Warranty (legacy text - แสดงเฉพาะถ้ามี) */}
-          {doc.type === 'quotation' && doc.warrantyText && doc.warrantyText.trim() && (
-            <div className="border-l-2 border-emerald-500 bg-emerald-50 px-2 py-1.5 mb-3 text-[10px]">
-              <p className="font-bold text-emerald-700">📝 เงื่อนไขรับประกันเพิ่มเติม</p>
-              <pre className="text-emerald-800 whitespace-pre-wrap font-sans">{doc.warrantyText}</pre>
             </div>
           )}
 
