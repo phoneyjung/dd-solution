@@ -1231,18 +1231,37 @@ function DDSolutionManager({ currentUser, onLogout }) {
         setDocuments(d ? migrateDocuments(JSON.parse(d.value)) : DEFAULT_DOCUMENTS);
         // Migration: ถ้า companyInfo เก่าไม่มี fields ใหม่ ใส่ default ให้
         const ciData = ci ? JSON.parse(ci.value) : DEFAULT_COMPANY_INFO;
-        if (!ciData.warranty) ciData.warranty = DEFAULT_COMPANY_INFO.warranty;
-        if (!ciData.specs) ciData.specs = DEFAULT_COMPANY_INFO.specs;
-        // Force migrate specs: ถ้ามี IP65, MDB หรือสาย 16mm² (เก่า) → reset
+        let needsCiSave = false;
+        
+        if (!ciData.warranty) {
+          ciData.warranty = DEFAULT_COMPANY_INFO.warranty;
+          needsCiSave = true;
+        }
+        if (!ciData.specs) {
+          ciData.specs = DEFAULT_COMPANY_INFO.specs;
+          needsCiSave = true;
+        }
+        // Force migrate specs (V2): ลบ IP65, MDB, สาย 16mm² เก่า
         else if (ciData.specs.some(s => 
           (s.id === 's-mdb') || 
-          (s.value && s.value.includes('IP65')) ||
-          (s.id === 's-ac' && s.value && s.value.includes('16mm²') && !s.value.includes('10mm²'))
+          (s.value && s.value.includes('IP65') && !s.value.includes('Surge Protection พร้อม')) ||
+          (s.id === 's-ac' && s.value === 'Yasaki THW 16mm²')
         )) {
           ciData.specs = DEFAULT_COMPANY_INFO.specs;
+          needsCiSave = true;
         }
-        if (!ciData.freebies) ciData.freebies = DEFAULT_COMPANY_INFO.freebies;
-        if (!ciData.saleSlogan) ciData.saleSlogan = DEFAULT_COMPANY_INFO.saleSlogan;
+        if (!ciData.freebies) {
+          ciData.freebies = DEFAULT_COMPANY_INFO.freebies;
+          needsCiSave = true;
+        }
+        if (!ciData.saleSlogan) {
+          ciData.saleSlogan = DEFAULT_COMPANY_INFO.saleSlogan;
+          needsCiSave = true;
+        }
+        // บังคับ save กลับถ้ามีการเปลี่ยน
+        if (needsCiSave) {
+          await window.storage.set('dd5:company', JSON.stringify(ciData), true);
+        }
         setCompanyInfo(ciData);
         // Migrate catalog: ถ้าเป็น version เก่า (มีไม่ถึง 10 รายการ) → reset เป็น default ใหม่
         let catalogToUse = sc ? JSON.parse(sc.value) : DEFAULT_SALES_CATALOG;
@@ -6248,9 +6267,34 @@ function DocumentPreview({ doc, companyInfo, fmt, onClose }) {
         @media print {
           body * { visibility: hidden; }
           .print-area, .print-area * { visibility: visible; }
-          .print-area { position: absolute; left: 0; top: 0; width: 100%; }
+          .print-area { 
+            position: absolute; 
+            left: 0; 
+            top: 0; 
+            width: 100%; 
+            font-size: 11px;
+            line-height: 1.3;
+          }
+          .print-area h1 { font-size: 22px !important; }
+          .print-area h2 { font-size: 16px !important; }
+          .print-area h3 { font-size: 13px !important; }
+          .print-area .mb-4 { margin-bottom: 8px !important; }
+          .print-area .mb-3 { margin-bottom: 6px !important; }
+          .print-area .p-4 { padding: 8px !important; }
+          .print-area .p-3 { padding: 6px !important; }
+          .print-area .py-3 { padding-top: 6px !important; padding-bottom: 6px !important; }
           .no-print { display: none !important; }
-          @page { size: A4; margin: 1cm; }
+          @page { 
+            size: A4 portrait; 
+            margin: 0.7cm; 
+          }
+          /* ป้องกันแบ่งหน้ากลาง section */
+          .print-area > div { page-break-inside: avoid; }
+          /* ใช้ background colors ตอนพิมพ์ */
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
         }
       `}</style>
 
@@ -6271,11 +6315,11 @@ function DocumentPreview({ doc, companyInfo, fmt, onClose }) {
 
       {/* Document */}
       <div className="bg-white shadow-xl mt-16 mb-8 print:mt-0 print:shadow-none print-area" style={{ width: '210mm', minHeight: '297mm', fontFamily: "'Sarabun', sans-serif" }}>
-        <div className="p-10 print:p-8">
+        <div className="p-6 print:p-5">
           {/* Header */}
-          <div className="flex items-start justify-between pb-4 border-b-4 border-amber-500 mb-6">
+          <div className="flex items-start justify-between pb-3 border-b-4 border-amber-500 mb-4">
             <div className="flex items-center gap-3">
-              <img src="icons/icon-192.png" alt="DD" className="w-20 h-20" />
+              <img src="icons/icon-192.png" alt="DD" className="w-16 h-16" />
               <div>
                 <h1 className="text-3xl font-bold text-stone-800" style={{ letterSpacing: '0.02em' }}>
                   {companyInfo.name || 'D.D. Solution'}
@@ -6329,27 +6373,27 @@ function DocumentPreview({ doc, companyInfo, fmt, onClose }) {
           </div>
 
           {/* Items Table */}
-          <table className="w-full mb-4 border-collapse">
+          <table className="w-full mb-3 border-collapse">
             <thead>
               <tr className="bg-stone-800 text-white">
-                <th className="text-left p-2 text-xs font-medium" style={{ width: '40px' }}>ลำดับ</th>
-                <th className="text-left p-2 text-xs font-medium">รายการ</th>
-                <th className="text-center p-2 text-xs font-medium" style={{ width: '90px' }}>จำนวน (ชุด)</th>
-                <th className="text-right p-2 text-xs font-medium" style={{ width: '130px' }}>ราคา (บาท)</th>
+                <th className="text-left px-2 py-1.5 text-xs font-medium" style={{ width: '36px' }}>ลำดับ</th>
+                <th className="text-left px-2 py-1.5 text-xs font-medium">รายการ</th>
+                <th className="text-center px-2 py-1.5 text-xs font-medium" style={{ width: '70px' }}>จำนวน</th>
+                <th className="text-right px-2 py-1.5 text-xs font-medium" style={{ width: '110px' }}>ราคา (บาท)</th>
               </tr>
             </thead>
             <tbody>
               {doc.items.map((item, idx) => (
                 <tr key={item.id} className="border-b border-stone-200">
-                  <td className="p-2 text-sm text-center">{idx + 1}</td>
-                  <td className="p-2 text-sm">{item.name}</td>
-                  <td className="p-2 text-sm text-center">{item.qty}</td>
-                  <td className="p-2 text-sm text-right font-mono font-medium">{Number(item.amount || 0).toLocaleString()}</td>
+                  <td className="px-2 py-1.5 text-xs text-center">{idx + 1}</td>
+                  <td className="px-2 py-1.5 text-xs">{item.name}</td>
+                  <td className="px-2 py-1.5 text-xs text-center">{item.qty}</td>
+                  <td className="px-2 py-1.5 text-xs text-right font-mono font-medium">{Number(item.amount || 0).toLocaleString()}</td>
                 </tr>
               ))}
-              {/* Empty rows for visual */}
-              {[...Array(Math.max(0, 5 - doc.items.length))].map((_, i) => (
-                <tr key={`empty-${i}`} className="border-b border-stone-100"><td colSpan={4} className="p-2">&nbsp;</td></tr>
+              {/* Empty rows minimal */}
+              {[...Array(Math.max(0, 2 - doc.items.length))].map((_, i) => (
+                <tr key={`empty-${i}`} className="border-b border-stone-100"><td colSpan={4} className="px-2 py-1.5 text-xs">&nbsp;</td></tr>
               ))}
             </tbody>
           </table>
@@ -6378,72 +6422,66 @@ function DocumentPreview({ doc, companyInfo, fmt, onClose }) {
             </table>
           </div>
 
-          {/* === 🛡️ ตารางรับประกัน (จาก companyInfo.warranty) === */}
-          {doc.type === 'quotation' && companyInfo?.warranty?.length > 0 && (
-            <div className="mb-4 border border-emerald-300 rounded-lg overflow-hidden">
-              <div className="bg-emerald-500 text-white px-3 py-2">
-                <p className="text-xs font-bold">🛡️ รับประกันคุณภาพทุกชิ้นส่วน</p>
-              </div>
-              <div className="grid grid-cols-2 gap-0 text-xs">
-                {companyInfo.warranty.map((w, i) => (
-                  <div key={w.id} className={`flex items-center justify-between px-3 py-2 ${
-                    i % 2 === 0 ? 'bg-emerald-50/50' : 'bg-white'
-                  } ${i < companyInfo.warranty.length - 2 ? 'border-b border-emerald-100' : ''}`}>
-                    <div className="flex items-center gap-1.5">
-                      <span>{w.icon}</span>
-                      <span className="text-stone-700">{w.label}</span>
-                    </div>
-                    <span className="font-bold text-emerald-700 whitespace-nowrap">
-                      {w.years >= 99 ? 'ตลอด' : `${w.years} ปี`}
-                    </span>
+          {/* === 🛡️ รับประกัน + 🔧 สเปค + 🎁 ของแถม (Compact 3-column for A4) === */}
+          {doc.type === 'quotation' && (companyInfo?.warranty?.length > 0 || companyInfo?.specs?.length > 0 || companyInfo?.freebies?.filter(f => f.active !== false).length > 0) && (
+            <div className="mb-3 grid grid-cols-3 gap-2 text-[10px] leading-tight">
+              {/* รับประกัน */}
+              {companyInfo?.warranty?.length > 0 && (
+                <div className="border border-emerald-300 rounded overflow-hidden">
+                  <div className="bg-emerald-500 text-white px-2 py-1 text-[10px] font-bold">🛡️ รับประกัน</div>
+                  <div className="p-1.5 space-y-0.5">
+                    {companyInfo.warranty.map(w => (
+                      <div key={w.id} className="flex items-center justify-between gap-1">
+                        <span className="text-stone-700 truncate">{w.icon} {w.label}</span>
+                        <span className="font-bold text-emerald-700 whitespace-nowrap">
+                          {w.years >= 99 ? 'ตลอด' : `${w.years} ปี`}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
+              
+              {/* สเปค */}
+              {companyInfo?.specs?.length > 0 && (
+                <div className="border border-stone-300 rounded overflow-hidden">
+                  <div className="bg-stone-700 text-white px-2 py-1 text-[10px] font-bold">🔧 สเปค</div>
+                  <div className="p-1.5 space-y-0.5">
+                    {companyInfo.specs.map(s => (
+                      <div key={s.id} className="flex items-start gap-1">
+                        <span className="text-emerald-600 font-bold">✓</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-stone-700 truncate">{s.label}</div>
+                          <div className="text-stone-500 text-[9px] leading-tight">{s.value}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* ของแถม */}
+              {companyInfo?.freebies?.filter(f => f.active !== false).length > 0 && (
+                <div className="border-2 border-rose-300 rounded overflow-hidden bg-gradient-to-br from-rose-50 to-amber-50">
+                  <div className="bg-gradient-to-r from-rose-500 to-pink-500 text-white px-2 py-1 text-[10px] font-bold">🎁 ของแถมฟรี!</div>
+                  <div className="p-1.5 space-y-0.5">
+                    {companyInfo.freebies.filter(f => f.active !== false).map(f => (
+                      <div key={f.id} className="flex items-center gap-1">
+                        <span>{f.icon}</span>
+                        <span className="text-stone-700 flex-1 truncate">{f.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* === 🔧 สเปคที่ใส่ใจ === */}
-          {doc.type === 'quotation' && companyInfo?.specs?.length > 0 && (
-            <div className="mb-4 border border-stone-300 rounded-lg overflow-hidden">
-              <div className="bg-stone-700 text-white px-3 py-2">
-                <p className="text-xs font-bold">🔧 สเปคที่ใส่ใจ - คุณภาพระดับมืออาชีพ</p>
-              </div>
-              <div className="p-3 grid grid-cols-1 gap-1 text-xs">
-                {companyInfo.specs.map(s => (
-                  <div key={s.id} className="flex items-start gap-2">
-                    <span className="text-emerald-600 mt-0.5 font-bold">✓</span>
-                    <div>
-                      <span className="text-stone-700 font-medium">{s.label}: </span>
-                      <span className="text-stone-600">{s.value}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* === 🎁 ของแถม === */}
-          {doc.type === 'quotation' && companyInfo?.freebies?.filter(f => f.active !== false).length > 0 && (
-            <div className="mb-4 border-2 border-rose-300 rounded-lg overflow-hidden bg-gradient-to-br from-rose-50 to-amber-50">
-              <div className="bg-gradient-to-r from-rose-500 to-pink-500 text-white px-3 py-2">
-                <p className="text-xs font-bold">🎁 ของแถมพิเศษ! (ฟรี!)</p>
-              </div>
-              <div className="p-3 grid grid-cols-2 gap-1.5 text-xs">
-                {companyInfo.freebies.filter(f => f.active !== false).map(f => (
-                  <div key={f.id} className="flex items-center gap-1.5 bg-white/70 rounded px-2 py-1.5">
-                    <span>{f.icon}</span>
-                    <span className="text-stone-700 flex-1">{f.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Warranty (legacy text) */}
-          {doc.type === 'quotation' && doc.warrantyText && (
-            <div className="border-l-4 border-emerald-500 bg-emerald-50 p-3 mb-4">
-              <p className="text-xs font-bold text-emerald-700 mb-1">📝 เงื่อนไขรับประกันเพิ่มเติม</p>
-              <pre className="text-xs text-emerald-800 whitespace-pre-wrap font-sans">{doc.warrantyText}</pre>
+          {/* Warranty (legacy text - แสดงเฉพาะถ้ามี) */}
+          {doc.type === 'quotation' && doc.warrantyText && doc.warrantyText.trim() && (
+            <div className="border-l-2 border-emerald-500 bg-emerald-50 px-2 py-1.5 mb-3 text-[10px]">
+              <p className="font-bold text-emerald-700">📝 เงื่อนไขรับประกันเพิ่มเติม</p>
+              <pre className="text-emerald-800 whitespace-pre-wrap font-sans">{doc.warrantyText}</pre>
             </div>
           )}
 
