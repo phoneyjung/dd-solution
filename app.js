@@ -173,6 +173,84 @@ const STOCK_CATEGORIES = [
   { id: 'panel_box', label: 'ตู้คอนโทรล' },
 ];
 
+// ============== IMGBB CONFIG ==============
+const IMGBB_API_KEY = 'a1fd3c5abb27a3efc0683a282c97860a';
+const MAX_PHOTOS_PER_CUSTOMER = 10;
+const MAX_PHOTO_LONG_EDGE = 1440;
+const PHOTO_QUALITY = 0.9;
+
+// Compress รูปก่อนอัพโหลด
+async function compressImage(file, maxLongEdge = MAX_PHOTO_LONG_EDGE, quality = PHOTO_QUALITY) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        // คำนวณขนาดใหม่
+        let { width, height } = img;
+        if (width > height) {
+          if (width > maxLongEdge) {
+            height = Math.round((height * maxLongEdge) / width);
+            width = maxLongEdge;
+          }
+        } else {
+          if (height > maxLongEdge) {
+            width = Math.round((width * maxLongEdge) / height);
+            height = maxLongEdge;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error('Failed to compress image'));
+          },
+          'image/jpeg',
+          quality
+        );
+      };
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+}
+
+// อัพโหลดรูปไป ImgBB
+async function uploadToImgBB(blob) {
+  const formData = new FormData();
+  formData.append('image', blob);
+
+  const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Upload failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  if (!data.success) {
+    throw new Error(data.error?.message || 'Upload failed');
+  }
+
+  return {
+    url: data.data.url,                    // รูปเต็มขนาด
+    thumb: data.data.thumb?.url || data.data.url,  // thumbnail
+    medium: data.data.medium?.url || data.data.url, // medium size
+    deleteUrl: data.data.delete_url,       // ลิงก์สำหรับลบ
+    id: data.data.id,
+  };
+}
+
 const COST_CATEGORIES = [
   { id: 'panel', label: 'แผงโซล่า', icon: Sun },
   { id: 'inverter', label: 'อินเวอร์เตอร์', icon: Box },
@@ -318,6 +396,47 @@ const DEFAULT_CUSTOMERS = [
     jobId: 'job-2', note: '',
   },
 ];
+
+// ============== COMPANY INFO (สำหรับใบเสนอราคา/บิล) ==============
+const DEFAULT_COMPANY_INFO = {
+  name: 'D.D. Solution',
+  subName: 'Daddy Solution',
+  tagline: 'ติดตั้งโซล่าเซลล์ครบวงจร',
+  address: '',
+  phone: '',
+  lineId: '',
+  email: '',
+  taxId: '',
+  bankAccounts: [
+    { bank: 'ธ.กสิกรไทย', number: '868-2-17752-8', name: 'ศิรินทร์ ริวัฒนา' },
+  ],
+  defaultWarranty: [
+    'แผงโซล่าเซลล์: 25 ปี',
+    'Inverter: 10 ปี',
+    'แบตเตอรี่: 10 ปี',
+    'งานติดตั้ง: 5 ปี',
+  ],
+  defaultPaymentTerms: 'มัดจำ 50% ตอนยืนยันสั่งซื้อ\nชำระส่วนที่เหลือหลังติดตั้งเสร็จ',
+};
+
+const DEFAULT_DOCUMENTS = [];  // เอกสารเริ่มต้น (เสนอราคา/แจ้งหนี้/ใบเสร็จ)
+
+// ============== DOCUMENT NUMBER GENERATOR ==============
+// QT2026/04-001 = ใบเสนอราคา ปี 2026 เดือน 04 ลำดับที่ 001
+function generateDocNumber(type, existingDocs = []) {
+  const prefix = { quotation: 'QT', invoice: 'INV', receipt: 'RC' }[type] || 'DOC';
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const yearMonth = `${year}/${month}`;
+  
+  // หาเลขลำดับล่าสุดของเดือนนี้
+  const sameMonthDocs = existingDocs.filter(d => 
+    d.type === type && d.docNumber && d.docNumber.includes(`${prefix}${yearMonth}`)
+  );
+  const seq = sameMonthDocs.length + 1;
+  return `${prefix}${yearMonth}-${String(seq).padStart(3, '0')}`;
+}
 
 // ============== APP WRAPPER WITH LOGIN ==============
 function App() {
@@ -479,24 +598,37 @@ function DDSolutionManager({ currentUser, onLogout }) {
   const [transactions, setTransactions] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [activityLog, setActivityLog] = useState([]);
+  const [documents, setDocuments] = useState([]);
+  const [companyInfo, setCompanyInfo] = useState(DEFAULT_COMPANY_INFO);
   const [showJobModal, setShowJobModal] = useState(false);
   const [showStockModal, setShowStockModal] = useState(false);
   const [showPartnerModal, setShowPartnerModal] = useState(false);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showCapitalModal, setShowCapitalModal] = useState(false);
+  const [capitalMode, setCapitalMode] = useState('deposit'); // 'deposit' | 'withdraw'
+  const [showDocumentModal, setShowDocumentModal] = useState(false);
+  const [defaultDocType, setDefaultDocType] = useState('quotation');
+  const [docFilter, setDocFilter] = useState('active'); // 'active' | 'quotation' | 'invoice' | 'receipt' | 'closed'
+  const [docSearch, setDocSearch] = useState('');
+  const [showDocumentPreview, setShowDocumentPreview] = useState(false);
+  const [showCompanySettings, setShowCompanySettings] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [j, s, p, t, c, a] = await Promise.all([
+        const [j, s, p, t, c, a, d, ci] = await Promise.all([
           window.storage.get('dd5:jobs', true).catch(() => null),
           window.storage.get('dd5:stock', true).catch(() => null),
           window.storage.get('dd5:partners', true).catch(() => null),
           window.storage.get('dd5:transactions', true).catch(() => null),
           window.storage.get('dd5:customers', true).catch(() => null),
           window.storage.get('dd5:activity', true).catch(() => null),
+          window.storage.get('dd5:documents', true).catch(() => null),
+          window.storage.get('dd5:company', true).catch(() => null),
         ]);
         setJobs(j ? JSON.parse(j.value) : DEFAULT_JOBS);
         setStock(s ? JSON.parse(s.value) : DEFAULT_STOCK);
@@ -504,6 +636,8 @@ function DDSolutionManager({ currentUser, onLogout }) {
         setTransactions(t ? JSON.parse(t.value) : DEFAULT_TRANSACTIONS);
         setCustomers(c ? JSON.parse(c.value) : DEFAULT_CUSTOMERS);
         setActivityLog(a ? JSON.parse(a.value) : []);
+        setDocuments(d ? JSON.parse(d.value) : DEFAULT_DOCUMENTS);
+        setCompanyInfo(ci ? JSON.parse(ci.value) : DEFAULT_COMPANY_INFO);
         if (!j) await window.storage.set('dd5:jobs', JSON.stringify(DEFAULT_JOBS), true);
         if (!s) await window.storage.set('dd5:stock', JSON.stringify(DEFAULT_STOCK), true);
         if (!p) await window.storage.set('dd5:partners', JSON.stringify(DEFAULT_PARTNERS), true);
@@ -556,6 +690,16 @@ function DDSolutionManager({ currentUser, onLogout }) {
     try { await window.storage.set('dd5:customers', JSON.stringify(data), true); } catch(e){}
     if (action) await logActivity(action, 'ลูกค้า', details);
   };
+  const saveDocuments = async (data, action, details) => {
+    setDocuments(data);
+    try { await window.storage.set('dd5:documents', JSON.stringify(data), true); } catch(e){}
+    if (action) await logActivity(action, 'เอกสาร', details);
+  };
+  const saveCompanyInfo = async (data) => {
+    setCompanyInfo(data);
+    try { await window.storage.set('dd5:company', JSON.stringify(data), true); } catch(e){}
+    await logActivity('edit', 'ข้อมูลบริษัท', 'แก้ไขข้อมูลบริษัทในใบเสนอราคา/บิล');
+  };
 
   const totalRevenue = jobs.reduce((s, j) => s + (Number(j.salePrice) || 0), 0);
   const totalCost = jobs.reduce((s, j) => s + (Number(j.totalCost) || 0), 0);
@@ -567,10 +711,12 @@ function DDSolutionManager({ currentUser, onLogout }) {
     const inv = {};
     const fromJobs = {};
     const fromStock = {};
+    const fromDeposit = {};  // เพิ่ม/ถอนทุนผ่านปุ่ม
     partners.forEach(p => {
       inv[p.id] = 0;
       fromJobs[p.id] = 0;
       fromStock[p.id] = 0;
+      fromDeposit[p.id] = 0;
     });
     
     // 1. เงินลงทุนในแต่ละงาน
@@ -594,9 +740,19 @@ function DDSolutionManager({ currentUser, onLogout }) {
         }
       }
     });
+
+    // 3. เพิ่ม/ถอนทุนผ่านปุ่ม (เก็บใน transactions)
+    transactions.forEach(t => {
+      if (t.partnerId && (t.category === 'เพิ่มทุน' || t.category === 'ถอนทุน')) {
+        const sign = t.category === 'เพิ่มทุน' ? 1 : -1;
+        const delta = sign * Number(t.amount || 0);
+        fromDeposit[t.partnerId] = (fromDeposit[t.partnerId] || 0) + delta;
+        inv[t.partnerId] = (inv[t.partnerId] || 0) + delta;
+      }
+    });
     
-    return { inv, fromJobs, fromStock };
-  }, [jobs, partners, stock]);
+    return { inv, fromJobs, fromStock, fromDeposit };
+  }, [jobs, partners, stock, transactions]);
 
   const fmt = (n) => new Intl.NumberFormat('th-TH', { maximumFractionDigits: 2 }).format(Number(n) || 0);
   const fmt0 = (n) => new Intl.NumberFormat('th-TH', { maximumFractionDigits: 0 }).format(Math.round(Number(n) || 0));
@@ -1053,6 +1209,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
             { id: 'stock', label: 'สต็อก', icon: Package },
             { id: 'partners', label: 'ผู้ลงทุน', icon: Users },
             { id: 'finance', label: 'การเงิน', icon: Wallet },
+            { id: 'documents', label: 'งานเอกสาร', icon: Save },
             { id: 'activity', label: 'ประวัติ', icon: Activity },
           ].map(tab => {
             const Icon = tab.icon;
@@ -1071,6 +1228,68 @@ function DDSolutionManager({ currentUser, onLogout }) {
       <main className="max-w-7xl mx-auto p-4 md:p-6">
         {activeTab === 'dashboard' && (
           <div className="space-y-5 animate-fade-in">
+            {/* 💰 การ์ดเงินสดในมือ - ใหญ่เด่น */}
+            {(() => {
+              const totalInvestment = Object.values(actualInvestments.inv).reduce((s, v) => s + v, 0);
+              const cashOnHand = totalInvestment + totalProfit - totalStockValue;
+              return (
+                <div className="rounded-3xl shadow-xl overflow-hidden" style={{background: 'linear-gradient(135deg, #0d1f43 0%, #1e3a5f 50%, #0d1f43 100%)'}}>
+                  <div className="p-5 md:p-6 text-white">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="bg-amber-400 text-stone-900 rounded-full p-2">
+                          <Wallet className="w-5 h-5" />
+                        </div>
+                        <h2 className="display-font text-xl md:text-2xl">เงินสดในมือ</h2>
+                      </div>
+                      <span className="text-xs bg-white/10 px-2 py-1 rounded-full">อัพเดทอัตโนมัติ</span>
+                    </div>
+                    
+                    <div className="text-4xl md:text-5xl font-bold text-amber-300 mb-1">
+                      {fmt(cashOnHand)} <span className="text-2xl">฿</span>
+                    </div>
+                    <p className="text-stone-300 text-sm mb-4">เงินบริษัทที่จับได้จริง ณ ตอนนี้</p>
+                    
+                    {/* Breakdown */}
+                    <div className="bg-white/5 backdrop-blur rounded-2xl p-3 space-y-1.5 text-sm">
+                      <div className="flex justify-between text-stone-300">
+                        <span>เงินทุนรวม</span>
+                        <span className="font-mono">+ {fmt(totalInvestment)} ฿</span>
+                      </div>
+                      <div className="flex justify-between text-emerald-300">
+                        <span>กำไรสะสม</span>
+                        <span className="font-mono">+ {fmt(totalProfit)} ฿</span>
+                      </div>
+                      <div className="flex justify-between text-orange-300">
+                        <span>มูลค่าสต๊อก</span>
+                        <span className="font-mono">− {fmt(totalStockValue)} ฿</span>
+                      </div>
+                      <div className="border-t border-white/20 pt-1.5 flex justify-between font-bold text-amber-300">
+                        <span>คงเหลือ</span>
+                        <span className="font-mono">{fmt(cashOnHand)} ฿</span>
+                      </div>
+                    </div>
+
+                    {/* ปุ่มเพิ่ม/ถอนทุน */}
+                    <div className="grid grid-cols-2 gap-2 mt-3">
+                      <button
+                        onClick={() => { setCapitalMode('deposit'); setShowCapitalModal(true); }}
+                        className="bg-emerald-500 hover:bg-emerald-400 text-white font-medium py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-lg"
+                      >
+                        <ArrowDownLeft className="w-4 h-4" /> เพิ่มทุน
+                      </button>
+                      <button
+                        onClick={() => { setCapitalMode('withdraw'); setShowCapitalModal(true); }}
+                        className="bg-rose-500 hover:bg-rose-400 text-white font-medium py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-lg"
+                      >
+                        <ArrowUpRight className="w-4 h-4" /> ถอนทุน
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <StatCard icon={DollarSign} label="รายได้รวม" value={fmt0(totalRevenue)} suffix="฿" color="emerald" />
               <StatCard icon={TrendingDown} label="ต้นทุนรวม" value={fmt0(totalCost)} suffix="฿" color="rose" />
@@ -1439,6 +1658,36 @@ function DDSolutionManager({ currentUser, onLogout }) {
                       </div>
                     )}
                     {c.note && <div className="mt-2 text-xs text-stone-500">💬 {c.note}</div>}
+
+                    {/* 📸 Photo preview */}
+                    {c.photos && c.photos.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-stone-100">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-medium text-stone-600">📸 ผลงาน ({c.photos.length} รูป)</span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {c.photos.slice(0, 4).map((p, i) => (
+                            <div
+                              key={i}
+                              className="relative aspect-square rounded-lg overflow-hidden bg-stone-100 cursor-pointer group"
+                              onClick={() => { setEditingItem(c); setShowCustomerModal(true); }}
+                            >
+                              <img
+                                src={p.thumb || p.url}
+                                alt=""
+                                className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                                loading="lazy"
+                              />
+                              {i === 3 && c.photos.length > 4 && (
+                                <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white font-bold text-sm">
+                                  +{c.photos.length - 4}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -1452,6 +1701,289 @@ function DDSolutionManager({ currentUser, onLogout }) {
             )}
           </div>
         )}
+
+        {activeTab === 'documents' && (() => {
+          // Helper functions
+          const cloneFromDoc = (sourceDoc, newType) => {
+            const newDoc = {
+              id: `doc-${Date.now()}`,
+              type: newType,
+              docNumber: generateDocNumber(newType, documents),
+              docDate: new Date().toISOString().split('T')[0],
+              validUntil: '',
+              customerId: sourceDoc.customerId || '',
+              customerName: sourceDoc.customerName || '',
+              customerPhone: sourceDoc.customerPhone || '',
+              customerAddress: sourceDoc.customerAddress || '',
+              items: sourceDoc.items.map(it => ({ ...it, id: `item-${Date.now()}-${Math.random().toString(36).slice(2,5)}` })),
+              subtotal: sourceDoc.subtotal,
+              discount: sourceDoc.discount,
+              totalAmount: sourceDoc.totalAmount,
+              paymentTerms: sourceDoc.paymentTerms || '',
+              depositPercent: 0,
+              depositAmount: 0,
+              warrantyText: '',
+              notes: '',
+              jobId: sourceDoc.jobId || '',
+              status: 'active',
+              linkedDocId: sourceDoc.id,
+              createdAt: new Date().toISOString(),
+            };
+            saveDocuments([...documents, newDoc], 'add',
+              `สร้าง${newType === 'invoice' ? 'ใบแจ้งหนี้' : 'ใบเสร็จ'} ${newDoc.docNumber} จาก ${sourceDoc.docNumber}`);
+            // Open the new doc for editing
+            setEditingItem(newDoc);
+            setDefaultDocType(newType);
+            setTimeout(() => setShowDocumentModal(true), 100);
+          };
+
+          const closeJob = (doc) => {
+            if (!window.confirm(`จบงาน ${doc.docNumber}?\n\nเอกสารจะถูกย้ายไปยังประวัติ และจะไม่แสดงในรายการหลัก`)) return;
+            saveDocuments(
+              documents.map(d => d.id === doc.id ? { ...d, status: 'closed', closedAt: new Date().toISOString() } : d),
+              'edit',
+              `จบงาน: ${doc.docNumber} (${doc.customerName})`
+            );
+          };
+
+          const reopenJob = (doc) => {
+            saveDocuments(
+              documents.map(d => d.id === doc.id ? { ...d, status: 'active' } : d),
+              'edit',
+              `เปิดใหม่: ${doc.docNumber}`
+            );
+          };
+
+          // Filter & search
+          const isClosed = (d) => d.status === 'closed';
+          let filtered = [...documents];
+          if (docFilter === 'closed') {
+            filtered = filtered.filter(isClosed);
+          } else if (docFilter === 'active') {
+            filtered = filtered.filter(d => !isClosed(d));
+          } else {
+            filtered = filtered.filter(d => d.type === docFilter && !isClosed(d));
+          }
+          if (docSearch.trim()) {
+            const q = docSearch.toLowerCase();
+            filtered = filtered.filter(d => 
+              (d.customerName || '').toLowerCase().includes(q) ||
+              (d.docNumber || '').toLowerCase().includes(q)
+            );
+          }
+          filtered.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+
+          // Counts
+          const counts = {
+            active: documents.filter(d => !isClosed(d)).length,
+            quotation: documents.filter(d => d.type === 'quotation' && !isClosed(d)).length,
+            invoice: documents.filter(d => d.type === 'invoice' && !isClosed(d)).length,
+            receipt: documents.filter(d => d.type === 'receipt' && !isClosed(d)).length,
+            closed: documents.filter(isClosed).length,
+          };
+
+          return (
+          <div className="space-y-4 animate-fade-in">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <h2 className="display-font text-3xl text-stone-800">งานเอกสาร</h2>
+                <p className="text-sm text-stone-500">ใบเสนอราคา · ใบแจ้งหนี้ · ใบเสร็จรับเงิน</p>
+              </div>
+              <button onClick={() => setShowCompanySettings(true)}
+                className="bg-stone-200 hover:bg-stone-300 text-stone-700 px-3 py-2 rounded-xl flex items-center gap-1 text-sm">
+                ⚙️ ข้อมูลบริษัท
+              </button>
+            </div>
+
+            {/* Quick Action Buttons */}
+            <div className="bg-gradient-to-br from-stone-50 to-stone-100 rounded-2xl p-3 border border-stone-200">
+              <p className="text-xs font-medium text-stone-600 mb-2 px-1">📝 สร้างเอกสารใหม่</p>
+              <div className="grid grid-cols-3 gap-2">
+                <button onClick={() => { setEditingItem(null); setDefaultDocType('quotation'); setShowDocumentModal(true); }}
+                  className="bg-white hover:bg-blue-50 border-2 border-blue-200 hover:border-blue-400 rounded-xl p-3 text-center transition-all active:scale-95">
+                  <div className="text-3xl mb-1">📄</div>
+                  <div className="text-xs font-bold text-blue-700">ใบเสนอราคา</div>
+                  <div className="text-xs text-stone-400 mt-1">{counts.quotation} ฉบับ</div>
+                </button>
+                <button onClick={() => { setEditingItem(null); setDefaultDocType('invoice'); setShowDocumentModal(true); }}
+                  className="bg-white hover:bg-amber-50 border-2 border-amber-200 hover:border-amber-400 rounded-xl p-3 text-center transition-all active:scale-95">
+                  <div className="text-3xl mb-1">🧾</div>
+                  <div className="text-xs font-bold text-amber-700">ใบแจ้งหนี้</div>
+                  <div className="text-xs text-stone-400 mt-1">{counts.invoice} ฉบับ</div>
+                </button>
+                <button onClick={() => { setEditingItem(null); setDefaultDocType('receipt'); setShowDocumentModal(true); }}
+                  className="bg-white hover:bg-emerald-50 border-2 border-emerald-200 hover:border-emerald-400 rounded-xl p-3 text-center transition-all active:scale-95">
+                  <div className="text-3xl mb-1">✅</div>
+                  <div className="text-xs font-bold text-emerald-700">ใบเสร็จรับเงิน</div>
+                  <div className="text-xs text-stone-400 mt-1">{counts.receipt} ฉบับ</div>
+                </button>
+              </div>
+            </div>
+
+            {/* Search */}
+            {documents.length > 0 && (
+              <div className="relative">
+                <input
+                  type="text"
+                  value={docSearch}
+                  onChange={e => setDocSearch(e.target.value)}
+                  placeholder="🔍 ค้นหาเอกสาร (ชื่อลูกค้า / เลขที่บิล)..."
+                  className="w-full px-4 py-2.5 pr-10 border border-stone-300 rounded-xl bg-white focus:ring-2 focus:ring-amber-400 focus:border-transparent text-sm"
+                />
+                {docSearch && (
+                  <button onClick={() => setDocSearch('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-stone-100 rounded">
+                    <X className="w-4 h-4 text-stone-400" />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Filter Tabs */}
+            {documents.length > 0 && (
+              <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+                {[
+                  { id: 'active', label: '📋 ทั้งหมด', count: counts.active },
+                  { id: 'quotation', label: '📄 ใบเสนอราคา', count: counts.quotation },
+                  { id: 'invoice', label: '🧾 ใบแจ้งหนี้', count: counts.invoice },
+                  { id: 'receipt', label: '✅ ใบเสร็จ', count: counts.receipt },
+                  { id: 'closed', label: '📁 จบงานแล้ว', count: counts.closed },
+                ].map(f => (
+                  <button key={f.id} onClick={() => setDocFilter(f.id)}
+                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
+                      docFilter === f.id
+                        ? 'bg-stone-800 text-white'
+                        : 'bg-white border border-stone-200 text-stone-600 hover:bg-stone-50'
+                    }`}>
+                    {f.label} <span className="opacity-70">({f.count})</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Document List */}
+            {documents.length === 0 ? (
+              <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-stone-200">
+                <Save className="w-12 h-12 text-stone-300 mx-auto mb-2" />
+                <p className="text-stone-500 mb-1">ยังไม่มีเอกสาร</p>
+                <p className="text-xs text-stone-400">เริ่มจากกดปุ่มสร้างเอกสารด้านบน</p>
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-stone-200">
+                <p className="text-stone-500 text-sm">ไม่พบเอกสารตามเงื่อนไขที่ค้นหา</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filtered.map(doc => {
+                  const typeInfo = {
+                    quotation: { label: 'ใบเสนอราคา', color: 'blue', icon: '📄' },
+                    invoice: { label: 'ใบแจ้งหนี้', color: 'amber', icon: '🧾' },
+                    receipt: { label: 'ใบเสร็จ', color: 'emerald', icon: '✅' },
+                  }[doc.type] || { label: '-', color: 'stone', icon: '📋' };
+                  const closed = doc.status === 'closed';
+                  // Find linked docs
+                  const linkedDocs = documents.filter(d => d.linkedDocId === doc.id);
+                  
+                  return (
+                    <div key={doc.id} className={`bg-white rounded-2xl shadow-sm border animate-slide-up overflow-hidden ${closed ? 'border-stone-200 opacity-70' : 'border-stone-200'}`}>
+                      <div className="p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="text-3xl flex-shrink-0">{typeInfo.icon}</div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`text-xs px-2 py-0.5 rounded-full bg-${typeInfo.color}-100 text-${typeInfo.color}-700 font-medium`}>
+                                {typeInfo.label}
+                              </span>
+                              <span className="font-mono text-sm text-stone-500">{doc.docNumber}</span>
+                              {closed && (
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-stone-200 text-stone-600 font-medium">
+                                  📁 จบงานแล้ว
+                                </span>
+                              )}
+                              {doc.linkedDocId && (
+                                <span className="text-xs text-purple-600">
+                                  🔗 จาก {documents.find(d => d.id === doc.linkedDocId)?.docNumber || '-'}
+                                </span>
+                              )}
+                            </div>
+                            <h3 className="font-bold text-stone-800 mt-1">{doc.customerName || '-'}</h3>
+                            <div className="text-xs text-stone-500 mt-0.5">
+                              {doc.docDate} · {fmt(doc.totalAmount || 0)} ฿
+                            </div>
+                            {linkedDocs.length > 0 && (
+                              <div className="text-xs text-purple-600 mt-1">
+                                ➡️ มี {linkedDocs.map(d => d.docNumber).join(', ')}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex gap-1 flex-shrink-0">
+                            <button onClick={() => { setPreviewDoc(doc); setShowDocumentPreview(true); }}
+                              className="p-2 hover:bg-blue-50 rounded-lg" title="ดู/พิมพ์">
+                              <Eye className="w-4 h-4 text-blue-500" />
+                            </button>
+                            {!closed && (
+                              <button onClick={() => { setEditingItem(doc); setShowDocumentModal(true); }}
+                                className="p-2 hover:bg-stone-100 rounded-lg" title="แก้ไข">
+                                <Edit2 className="w-4 h-4 text-stone-500" />
+                              </button>
+                            )}
+                            <button onClick={() => {
+                              if (window.confirm(`ลบ ${typeInfo.label} ${doc.docNumber}?\n\n⚠️ การลบไม่สามารถกู้คืนได้`)) {
+                                saveDocuments(documents.filter(x => x.id !== doc.id), 'delete', `ลบ ${typeInfo.label}: ${doc.docNumber}`);
+                              }
+                            }} className="p-2 hover:bg-red-50 rounded-lg" title="ลบ">
+                              <Trash2 className="w-4 h-4 text-red-400" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Workflow Buttons */}
+                        {!closed && (
+                          <div className="mt-3 pt-3 border-t border-stone-100 flex gap-1.5 flex-wrap">
+                            {doc.type === 'quotation' && (
+                              <button onClick={() => cloneFromDoc(doc, 'invoice')}
+                                className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 px-3 py-1.5 rounded-lg font-medium flex items-center gap-1">
+                                🧾 สร้างใบแจ้งหนี้
+                              </button>
+                            )}
+                            {doc.type === 'invoice' && (
+                              <button onClick={() => cloneFromDoc(doc, 'receipt')}
+                                className="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-lg font-medium flex items-center gap-1">
+                                ✅ สร้างใบเสร็จรับเงิน
+                              </button>
+                            )}
+                            {doc.type === 'quotation' && (
+                              <button onClick={() => cloneFromDoc(doc, 'receipt')}
+                                className="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-lg font-medium flex items-center gap-1">
+                                ✅ สร้างใบเสร็จรับเงิน
+                              </button>
+                            )}
+                            <button onClick={() => closeJob(doc)}
+                              className="text-xs bg-stone-100 hover:bg-stone-200 text-stone-700 px-3 py-1.5 rounded-lg font-medium flex items-center gap-1 ml-auto">
+                              📁 จบงาน
+                            </button>
+                          </div>
+                        )}
+                        {closed && (
+                          <div className="mt-3 pt-3 border-t border-stone-100 flex justify-between items-center">
+                            <span className="text-xs text-stone-500">
+                              จบงานเมื่อ {doc.closedAt ? new Date(doc.closedAt).toLocaleDateString('th-TH') : '-'}
+                            </span>
+                            <button onClick={() => reopenJob(doc)}
+                              className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg font-medium">
+                              🔓 เปิดใหม่
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          );
+        })()}
 
         {activeTab === 'activity' && (
           <div className="space-y-4 animate-fade-in">
@@ -1580,6 +2112,72 @@ function DDSolutionManager({ currentUser, onLogout }) {
               saveCustomers([...customers, { ...data, id: `cust-${Date.now()}` }], 'add', `เพิ่ม: ${data.name}`);
             }
             setShowCustomerModal(false); setEditingItem(null);
+          }}
+        />
+      )}
+      {showCapitalModal && (
+        <CapitalModal
+          mode={capitalMode}
+          partners={partners}
+          actualInvestments={actualInvestments}
+          cashOnHand={Object.values(actualInvestments.inv).reduce((s, v) => s + v, 0) + totalProfit - totalStockValue}
+          fmt={fmt}
+          onClose={() => setShowCapitalModal(false)}
+          onSave={(data) => {
+            const partner = partners.find(p => p.id === data.partnerId);
+            const isDeposit = capitalMode === 'deposit';
+            const tx = {
+              id: `t-${Date.now()}`,
+              date: data.date,
+              type: isDeposit ? 'income' : 'expense',
+              category: isDeposit ? 'เพิ่มทุน' : 'ถอนทุน',
+              amount: Number(data.amount),
+              description: `${isDeposit ? 'เพิ่มทุน' : 'ถอนทุน'} ${partner?.name || ''}${data.note ? ' - ' + data.note : ''}`,
+              jobId: '',
+              partnerId: data.partnerId,
+            };
+            saveTransactions([...transactions, tx], 'add',
+              `${isDeposit ? '➕ เพิ่มทุน' : '➖ ถอนทุน'} ${partner?.name}: ${fmt(data.amount)} ฿${data.note ? ' (' + data.note + ')' : ''}`);
+            setShowCapitalModal(false);
+          }}
+        />
+      )}
+      {showDocumentModal && (
+        <DocumentModal
+          doc={editingItem}
+          defaultType={defaultDocType}
+          documents={documents}
+          customers={customers}
+          jobs={jobs}
+          companyInfo={companyInfo}
+          onClose={() => { setShowDocumentModal(false); setEditingItem(null); }}
+          onSave={(data) => {
+            if (editingItem) {
+              saveDocuments(documents.map(d => d.id === editingItem.id ? data : d), 'edit',
+                `แก้ไขเอกสาร ${data.docNumber}`);
+            } else {
+              saveDocuments([...documents, data], 'add',
+                `สร้างเอกสาร ${data.docNumber} (${data.customerName})`);
+            }
+            setShowDocumentModal(false); setEditingItem(null);
+          }}
+        />
+      )}
+      {showDocumentPreview && previewDoc && (
+        <DocumentPreview
+          doc={previewDoc}
+          companyInfo={companyInfo}
+          fmt={fmt}
+          onClose={() => { setShowDocumentPreview(false); setPreviewDoc(null); }}
+        />
+      )}
+      {showCompanySettings && (
+        <CompanySettingsModal
+          companyInfo={companyInfo}
+          onClose={() => setShowCompanySettings(false)}
+          onSave={(data) => {
+            saveCompanyInfo(data);
+            setShowCompanySettings(false);
           }}
         />
       )}
@@ -1732,13 +2330,25 @@ function StockRow({ item, fmt, fmt0, onEdit, onDelete }) {
 
 function Modal({ title, children, onClose, wide }) {
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-0 md:p-4 animate-fade-in">
-      <div className={`bg-white w-full ${wide ? 'md:max-w-2xl' : 'md:max-w-lg'} md:rounded-2xl rounded-t-2xl shadow-xl max-h-[92vh] overflow-hidden flex flex-col animate-slide-up`}>
-        <div className="flex items-center justify-between p-4 border-b border-stone-200">
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-0 md:p-4 animate-fade-in" onClick={onClose}>
+      <div
+        className={`bg-white w-full ${wide ? 'md:max-w-2xl' : 'md:max-w-lg'} md:rounded-2xl rounded-t-2xl shadow-xl max-h-[95vh] md:max-h-[90vh] overflow-hidden flex flex-col animate-slide-up`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Sticky Header */}
+        <div className="sticky top-0 bg-white flex items-center justify-between p-4 border-b border-stone-200 z-10 flex-shrink-0">
           <h3 className="display-font text-xl text-stone-800">{title}</h3>
-          <button onClick={onClose} className="p-1 hover:bg-stone-100 rounded-lg"><X className="w-5 h-5" /></button>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+            title="ปิด (Esc)"
+            aria-label="ปิด"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
-        <div className="overflow-y-auto p-4 flex-1">{children}</div>
+        {/* Scrollable content */}
+        <div className="overflow-y-auto p-4 flex-1" style={{WebkitOverflowScrolling: 'touch'}}>{children}</div>
       </div>
     </div>
   );
@@ -2197,12 +2807,70 @@ function CustomerModal({ customer, jobs, onClose, onSave }) {
   const [form, setForm] = useState(customer || {
     name: '', phone: '', address: '', mapLink: '',
     installDate: new Date().toISOString().split('T')[0],
-    system: '', warranty: '', jobId: '', note: ''
+    system: '', warranty: '', jobId: '', note: '',
+    photos: []
   });
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
+  const [uploadError, setUploadError] = useState('');
+  const [lightboxIndex, setLightboxIndex] = useState(-1);
+  const fileInputRef = useRef(null);
   const update = (f, v) => setForm({...form, [f]: v});
+  
+  const photos = form.photos || [];
+  const remainingSlots = MAX_PHOTOS_PER_CUSTOMER - photos.length;
+
+  const handleFileSelect = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    
+    if (files.length > remainingSlots) {
+      setUploadError(`เพิ่มได้อีก ${remainingSlots} รูปเท่านั้น (สูงสุด ${MAX_PHOTOS_PER_CUSTOMER} รูป/ลูกค้า)`);
+      return;
+    }
+    
+    setUploadError('');
+    setUploading(true);
+    setUploadProgress({ current: 0, total: files.length });
+    
+    const newPhotos = [...photos];
+    
+    for (let i = 0; i < files.length; i++) {
+      try {
+        setUploadProgress({ current: i + 1, total: files.length });
+        const compressed = await compressImage(files[i]);
+        const result = await uploadToImgBB(compressed);
+        newPhotos.push({
+          url: result.url,
+          thumb: result.thumb,
+          medium: result.medium,
+          caption: '',
+          uploadedAt: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.error('Upload error:', err);
+        setUploadError(`อัพรูปที่ ${i + 1} ไม่สำเร็จ: ${err.message}`);
+        break;
+      }
+    }
+    
+    setForm({...form, photos: newPhotos});
+    setUploading(false);
+    setUploadProgress({ current: 0, total: 0 });
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+  
+  const removePhoto = (idx) => {
+    if (!window.confirm('ลบรูปนี้?')) return;
+    setForm({...form, photos: photos.filter((_, i) => i !== idx)});
+  };
+  
+  const updateCaption = (idx, caption) => {
+    setForm({...form, photos: photos.map((p, i) => i === idx ? {...p, caption} : p)});
+  };
 
   return (
-    <Modal title={customer ? 'แก้ไขลูกค้า' : 'เพิ่มลูกค้า'} onClose={onClose}>
+    <Modal title={customer ? 'แก้ไขลูกค้า' : 'เพิ่มลูกค้า'} onClose={onClose} wide>
       <Field label="ชื่อ-สกุล / ชื่อบริษัท">
         <input value={form.name} onChange={e => update('name', e.target.value)} className={inputCls} placeholder="พี่เกรียงศักดิ์" />
       </Field>
@@ -2233,13 +2901,1060 @@ function CustomerModal({ customer, jobs, onClose, onSave }) {
       <Field label="หมายเหตุ">
         <textarea value={form.note} onChange={e => update('note', e.target.value)} className={inputCls} rows={2} />
       </Field>
+
+      {/* 📸 รูปผลงาน */}
+      <div className="mt-5 pt-5 border-t border-stone-200">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">📸</span>
+            <h3 className="font-bold text-stone-800">รูปผลงาน</h3>
+            <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${photos.length >= MAX_PHOTOS_PER_CUSTOMER ? 'bg-rose-100 text-rose-700' : 'bg-stone-100 text-stone-600'}`}>
+              {photos.length}/{MAX_PHOTOS_PER_CUSTOMER}
+            </span>
+          </div>
+        </div>
+
+        {/* Photo Grid */}
+        {photos.length > 0 && (
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mb-3">
+            {photos.map((photo, idx) => (
+              <div key={idx} className="relative aspect-square group rounded-lg overflow-hidden bg-stone-100 border border-stone-200">
+                <img
+                  src={photo.thumb || photo.url}
+                  alt={photo.caption || `รูปที่ ${idx + 1}`}
+                  className="w-full h-full object-cover cursor-pointer"
+                  onClick={() => setLightboxIndex(idx)}
+                  loading="lazy"
+                />
+                <button
+                  type="button"
+                  onClick={() => removePhoto(idx)}
+                  className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-lg transition-all opacity-90 hover:opacity-100"
+                  title="ลบรูปนี้"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+                <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs px-1.5 py-0.5 truncate">
+                  {photo.caption || `รูปที่ ${idx + 1}`}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Upload button */}
+        {photos.length < MAX_PHOTOS_PER_CUSTOMER && (
+          <div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleFileSelect}
+              disabled={uploading}
+              className="hidden"
+              id="photo-upload-input"
+            />
+            <label
+              htmlFor="photo-upload-input"
+              className={`flex flex-col items-center justify-center w-full p-4 border-2 border-dashed rounded-xl transition-colors cursor-pointer ${
+                uploading
+                  ? 'bg-amber-50 border-amber-300 cursor-wait'
+                  : 'bg-stone-50 border-stone-300 hover:bg-amber-50 hover:border-amber-400'
+              }`}
+            >
+              {uploading ? (
+                <>
+                  <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin mb-2" />
+                  <p className="text-sm text-stone-700 font-medium">
+                    กำลังอัพโหลด {uploadProgress.current}/{uploadProgress.total}...
+                  </p>
+                  <p className="text-xs text-stone-500 mt-1">บีบอัดและอัพโหลดอัตโนมัติ</p>
+                </>
+              ) : (
+                <>
+                  <Plus className="w-8 h-8 text-stone-400 mb-2" />
+                  <p className="text-sm text-stone-700 font-medium">เลือกรูป (เลือกหลายรูปได้)</p>
+                  <p className="text-xs text-stone-500 mt-1">
+                    เพิ่มได้อีก {remainingSlots} รูป · บีบอัดอัตโนมัติให้พอดีโพสต์ social media
+                  </p>
+                </>
+              )}
+            </label>
+          </div>
+        )}
+
+        {/* Captions */}
+        {photos.length > 0 && (
+          <details className="mt-3">
+            <summary className="text-sm text-stone-600 cursor-pointer hover:text-amber-600 select-none">
+              ✏️ ใส่คำอธิบายรูป (optional)
+            </summary>
+            <div className="mt-2 space-y-2">
+              {photos.map((photo, idx) => (
+                <div key={idx} className="flex gap-2 items-center">
+                  <img src={photo.thumb || photo.url} alt="" className="w-10 h-10 object-cover rounded flex-shrink-0" />
+                  <input
+                    type="text"
+                    value={photo.caption || ''}
+                    onChange={(e) => updateCaption(idx, e.target.value)}
+                    placeholder={`คำอธิบายรูปที่ ${idx + 1}`}
+                    className="flex-1 px-3 py-1.5 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+                  />
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
+
+        {uploadError && (
+          <div className="bg-rose-100 border border-rose-300 text-rose-700 px-3 py-2 rounded-lg text-sm flex items-center gap-2 mt-2">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" /> {uploadError}
+          </div>
+        )}
+
+        {photos.length > 0 && (
+          <p className="text-xs text-stone-500 mt-2">
+            💡 คลิกรูปเพื่อดูใหญ่ · กดกากบาทเพื่อลบ · รูปทั้งหมดเก็บใน ImgBB (ฟรี)
+          </p>
+        )}
+      </div>
+
+      <button
+        onClick={() => onSave(form)}
+        disabled={uploading}
+        className="w-full bg-amber-500 hover:bg-amber-600 disabled:bg-stone-300 text-white py-3 rounded-xl font-medium mt-4 flex items-center justify-center gap-2"
+      >
+        <Save className="w-4 h-4" /> {uploading ? 'รออัพรูปเสร็จก่อน...' : 'บันทึก'}
+      </button>
+
+      {/* Lightbox */}
+      {lightboxIndex >= 0 && photos[lightboxIndex] && (
+        <PhotoLightbox
+          photos={photos}
+          index={lightboxIndex}
+          onClose={() => setLightboxIndex(-1)}
+          onChange={setLightboxIndex}
+        />
+      )}
+    </Modal>
+  );
+}
+
+function PhotoLightbox({ photos, index, onClose, onChange }) {
+  const photo = photos[index];
+  const total = photos.length;
+
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft' && index > 0) onChange(index - 1);
+      if (e.key === 'ArrowRight' && index < total - 1) onChange(index + 1);
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [index, total, onChange, onClose]);
+
+  return (
+    <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white rounded-full w-10 h-10 flex items-center justify-center"
+      >
+        <X className="w-5 h-5" />
+      </button>
+
+      {index > 0 && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onChange(index - 1); }}
+          className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 text-white rounded-full w-10 h-10 flex items-center justify-center text-xl"
+        >‹</button>
+      )}
+      {index < total - 1 && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onChange(index + 1); }}
+          className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 text-white rounded-full w-10 h-10 flex items-center justify-center text-xl"
+        >›</button>
+      )}
+
+      <div className="max-w-5xl w-full max-h-[90vh] flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+        <img
+          src={photo.url}
+          alt={photo.caption || `รูปที่ ${index + 1}`}
+          className="max-h-[80vh] max-w-full object-contain rounded-lg"
+        />
+        <div className="mt-3 text-center text-white">
+          {photo.caption && <p className="text-base mb-1">{photo.caption}</p>}
+          <p className="text-sm text-stone-300">{index + 1} / {total}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function CapitalModal({ mode, partners, actualInvestments, cashOnHand, fmt, onClose, onSave }) {
+  const isDeposit = mode === 'deposit';
+  const [partnerId, setPartnerId] = useState(partners[0]?.id || '');
+  const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [error, setError] = useState('');
+
+  const partnerInv = (id) => actualInvestments.inv[id] || 0;
+  const selectedInv = partnerInv(partnerId);
+  const amt = Number(amount) || 0;
+
+  // ตรวจสอบ
+  let warning = '';
+  let canSave = amt > 0;
+  if (!isDeposit && amt > 0) {
+    if (amt > selectedInv) {
+      warning = `⚠ ถอนได้สูงสุด ${fmt(selectedInv)} ฿ (ทุนของคนนี้)`;
+      canSave = false;
+    } else if (amt > cashOnHand) {
+      warning = `⚠ เงินสดบริษัทมีแค่ ${fmt(cashOnHand)} ฿ (ของส่วนใหญ่อยู่ในสต๊อก)`;
+      canSave = false;
+    }
+  }
+
+  const handleSubmit = () => {
+    setError('');
+    if (!partnerId) { setError('กรุณาเลือกผู้ลงทุน'); return; }
+    if (amt <= 0) { setError('กรุณากรอกจำนวนเงิน'); return; }
+    if (!isDeposit) {
+      if (amt > selectedInv) { setError(`ถอนเกินทุนของคนนี้ (สูงสุด ${fmt(selectedInv)} ฿)`); return; }
+      if (amt > cashOnHand) { setError(`ถอนเกินเงินสดในมือ (เหลือ ${fmt(cashOnHand)} ฿)`); return; }
+    }
+    onSave({ partnerId, amount: amt, note, date });
+  };
+
+  return (
+    <Modal title={isDeposit ? '➕ เพิ่มทุน' : '➖ ถอนทุน'} onClose={onClose}>
+      <div className="space-y-4">
+        {/* ใครเพิ่ม/ถอน */}
+        <div>
+          <label className="block text-sm font-medium text-stone-700 mb-2">
+            {isDeposit ? 'ใครเพิ่มทุน' : 'ใครถอนทุน'}
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            {partners.map(p => {
+              const inv = partnerInv(p.id);
+              const selected = partnerId === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setPartnerId(p.id)}
+                  className={`p-3 rounded-xl border-2 transition-all text-center ${
+                    selected
+                      ? (isDeposit ? 'border-emerald-500 bg-emerald-50' : 'border-rose-500 bg-rose-50')
+                      : 'border-stone-200 bg-white hover:border-stone-300'
+                  }`}
+                >
+                  <div className="font-bold text-stone-800">{p.name}</div>
+                  <div className="text-xs text-stone-500 mt-0.5">
+                    {isDeposit ? 'ทุนปัจจุบัน' : 'มี'} {fmt(inv)} ฿
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* วันที่ */}
+        <div>
+          <label className="block text-sm font-medium text-stone-700 mb-1">วันที่</label>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="w-full px-3 py-2 border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+          />
+        </div>
+
+        {/* จำนวน */}
+        <div>
+          <label className="block text-sm font-medium text-stone-700 mb-1">
+            จำนวน (บาท)
+          </label>
+          <input
+            type="number"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="0"
+            className={`w-full px-3 py-3 border-2 rounded-lg text-2xl font-bold text-right ${
+              warning
+                ? 'border-rose-400 bg-rose-50 text-rose-700'
+                : (isDeposit ? 'border-emerald-300 focus:border-emerald-500' : 'border-rose-300 focus:border-rose-500')
+            } focus:outline-none`}
+            min="0"
+            step="100"
+          />
+          {warning && (
+            <p className="text-rose-600 text-sm mt-1.5 flex items-start gap-1">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <span>{warning}</span>
+            </p>
+          )}
+          {!isDeposit && !warning && amt > 0 && (
+            <p className="text-stone-500 text-xs mt-1.5">
+              จะเหลือทุน {fmt(selectedInv - amt)} ฿ · เงินสดเหลือ {fmt(cashOnHand - amt)} ฿
+            </p>
+          )}
+        </div>
+
+        {/* หมายเหตุ */}
+        <div>
+          <label className="block text-sm font-medium text-stone-700 mb-1">
+            หมายเหตุ <span className="text-stone-400 font-normal">(ไม่บังคับ)</span>
+          </label>
+          <input
+            type="text"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder={isDeposit ? 'เช่น เติมทุนเพื่อซื้อแผง' : 'เช่น คืนเงินกู้'}
+            className="w-full px-3 py-2 border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+          />
+        </div>
+
+        {/* Error */}
+        {error && (
+          <div className="bg-rose-100 border border-rose-300 text-rose-700 px-3 py-2 rounded-lg text-sm flex items-center gap-2">
+            <AlertCircle className="w-4 h-4" /> {error}
+          </div>
+        )}
+
+        {/* Buttons */}
+        <div className="flex gap-2 pt-2">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-3 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl font-medium transition-colors"
+          >
+            ยกเลิก
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!canSave}
+            className={`flex-1 px-4 py-3 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-1.5 ${
+              canSave
+                ? (isDeposit ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-rose-500 hover:bg-rose-600')
+                : 'bg-stone-300 cursor-not-allowed'
+            }`}
+          >
+            <Save className="w-4 h-4" />
+            {isDeposit ? 'เพิ่มทุน' : 'ถอนทุน'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ============== DOCUMENT MODAL (สร้าง/แก้ไขเอกสาร) ==============
+function DocumentModal({ doc, defaultType = 'quotation', documents, customers, jobs, companyInfo, onClose, onSave }) {
+  const isEdit = !!doc;
+  const [form, setForm] = useState(doc || {
+    id: `doc-${Date.now()}`,
+    type: defaultType,
+    docNumber: '',
+    docDate: new Date().toISOString().split('T')[0],
+    validUntil: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+    customerId: '',
+    customerName: '',
+    customerPhone: '',
+    customerAddress: '',
+    items: [{ id: 'item-1', name: '', qty: 1, unit: 'ชุด', unitPrice: 0, amount: 0 }],
+    subtotal: 0,
+    discount: 0,
+    totalAmount: 0,
+    paymentTerms: '',
+    depositPercent: 0,
+    depositAmount: 0,
+    warrantyText: companyInfo?.defaultWarranty?.join('\n') || '',
+    notes: '',
+    jobId: '',
+    status: 'active',
+    linkedDocId: '',
+    createdAt: new Date().toISOString(),
+  });
+
+  // Auto-generate doc number when type changes
+  useEffect(() => {
+    if (!isEdit && (!form.docNumber || form.docNumber === '')) {
+      setForm(f => ({ ...f, docNumber: generateDocNumber(f.type, documents) }));
+    }
+  }, [form.type, isEdit]);
+
+  const update = (f, v) => setForm({...form, [f]: v});
+  
+  const updateItem = (idx, field, value) => {
+    const newItems = [...form.items];
+    newItems[idx] = { ...newItems[idx], [field]: value };
+    if (field === 'qty' || field === 'unitPrice') {
+      newItems[idx].amount = (Number(newItems[idx].qty) || 0) * (Number(newItems[idx].unitPrice) || 0);
+    }
+    const subtotal = newItems.reduce((s, it) => s + Number(it.amount || 0), 0);
+    const discount = Number(form.discount || 0);
+    setForm({ ...form, items: newItems, subtotal, totalAmount: subtotal - discount });
+  };
+
+  const addItem = () => {
+    setForm({ ...form, items: [...form.items, { id: `item-${Date.now()}`, name: '', qty: 1, unit: 'ชุด', unitPrice: 0, amount: 0 }] });
+  };
+
+  const removeItem = (idx) => {
+    if (form.items.length === 1) return;
+    const newItems = form.items.filter((_, i) => i !== idx);
+    const subtotal = newItems.reduce((s, it) => s + Number(it.amount || 0), 0);
+    setForm({ ...form, items: newItems, subtotal, totalAmount: subtotal - Number(form.discount || 0) });
+  };
+
+  const updateDiscount = (v) => {
+    const discount = Number(v) || 0;
+    setForm({ ...form, discount, totalAmount: form.subtotal - discount });
+  };
+
+  const selectCustomer = (id) => {
+    const c = customers.find(x => x.id === id);
+    if (!c) {
+      setForm({ ...form, customerId: '', customerName: '', customerPhone: '', customerAddress: '' });
+      return;
+    }
+    setForm({
+      ...form, customerId: id,
+      customerName: c.name || '', customerPhone: c.phone || '', customerAddress: c.address || ''
+    });
+  };
+
+  const selectJob = (id) => {
+    const j = jobs.find(x => x.id === id);
+    if (!j) { setForm({...form, jobId: ''}); return; }
+    
+    // Auto-fill จากงาน
+    const itemName = `ระบบโซล่าเซลล์ ${j.type || ''} พร้อมติดตั้ง${j.location ? ` (${j.location})` : ''}`;
+    const newItem = {
+      id: `item-${Date.now()}`,
+      name: itemName,
+      qty: 1, unit: 'ชุด',
+      unitPrice: Number(j.salePrice || 0),
+      amount: Number(j.salePrice || 0),
+    };
+    setForm({
+      ...form, jobId: id,
+      items: [newItem],
+      subtotal: Number(j.salePrice || 0),
+      discount: Number(j.discount || 0),
+      totalAmount: Number(j.salePrice || 0) - Number(j.discount || 0),
+    });
+  };
+
+  const typeOptions = [
+    { id: 'quotation', label: '📄 ใบเสนอราคา (Quotation)', color: 'blue' },
+    { id: 'invoice', label: '🧾 ใบแจ้งหนี้ (Invoice)', color: 'amber' },
+    { id: 'receipt', label: '✅ ใบเสร็จรับเงิน (Receipt)', color: 'emerald' },
+  ];
+
+  const [submitError, setSubmitError] = useState('');
+
+  const handleSubmit = () => {
+    setSubmitError('');
+    if (!form.customerName || !form.customerName.trim()) {
+      setSubmitError('กรุณากรอกชื่อลูกค้า');
+      // scroll up to show error
+      setTimeout(() => {
+        const errEl = document.getElementById('doc-error-msg');
+        errEl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
+      return;
+    }
+    if (!form.docNumber || !form.docNumber.trim()) {
+      setSubmitError('กรุณากรอกเลขที่เอกสาร');
+      return;
+    }
+    if (!form.items || form.items.length === 0 || form.items.every(i => !i.name)) {
+      setSubmitError('กรุณาเพิ่มอย่างน้อย 1 รายการ');
+      return;
+    }
+    if (!Number(form.totalAmount) || Number(form.totalAmount) <= 0) {
+      setSubmitError('กรุณากรอกราคาในรายการ');
+      return;
+    }
+    onSave(form);
+  };
+
+  return (
+    <Modal title={isEdit ? 'แก้ไขเอกสาร' : 'สร้างเอกสารใหม่'} onClose={onClose} wide>
+      {/* Type Selector */}
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-stone-700 mb-2">ประเภทเอกสาร</label>
+        <div className="grid grid-cols-3 gap-2">
+          {typeOptions.map(opt => (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => {
+                const newType = opt.id;
+                const newDocNumber = isEdit ? form.docNumber : generateDocNumber(newType, documents);
+                setForm({...form, type: newType, docNumber: newDocNumber});
+              }}
+              className={`p-3 rounded-xl border-2 text-sm font-medium transition-all ${
+                form.type === opt.id ? `border-${opt.color}-500 bg-${opt.color}-50 text-${opt.color}-700` : 'border-stone-200 bg-white'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-3">
+        <Field label="เลขที่เอกสาร">
+          <input value={form.docNumber} onChange={e => update('docNumber', e.target.value)} className={inputCls} placeholder="QT2026/05-001" />
+        </Field>
+        <Field label="วันที่">
+          <input type="date" value={form.docDate} onChange={e => update('docDate', e.target.value)} className={inputCls} />
+        </Field>
+      </div>
+
+      {form.type === 'quotation' && (
+        <Field label="ใช้ได้ถึง" hint="ใบเสนอราคามีอายุการใช้งาน">
+          <input type="date" value={form.validUntil} onChange={e => update('validUntil', e.target.value)} className={inputCls} />
+        </Field>
+      )}
+
+      {/* Customer */}
+      <div className="mt-4 pt-4 border-t border-stone-200">
+        <Field label="ลูกค้า (เลือกจากรายการหรือกรอกใหม่)">
+          <select value={form.customerId} onChange={e => selectCustomer(e.target.value)} className={inputCls}>
+            <option value="">-- กรอกข้อมูลใหม่ --</option>
+            {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </Field>
+        <Field label="ชื่อลูกค้า">
+          <input value={form.customerName} onChange={e => update('customerName', e.target.value)} className={inputCls} placeholder="คุณ..." />
+        </Field>
+        <Field label="เบอร์โทร">
+          <input value={form.customerPhone} onChange={e => update('customerPhone', e.target.value)} className={inputCls} placeholder="08x-xxx-xxxx" />
+        </Field>
+        <Field label="ที่อยู่">
+          <textarea value={form.customerAddress} onChange={e => update('customerAddress', e.target.value)} className={inputCls} rows={2} />
+        </Field>
+      </div>
+
+      {/* Job link (optional) */}
+      <Field label="ผูกกับงาน (optional - autofill ราคา)">
+        <select value={form.jobId} onChange={e => selectJob(e.target.value)} className={inputCls}>
+          <option value="">-- ไม่ระบุ --</option>
+          {jobs.map(j => <option key={j.id} value={j.id}>{j.customer} ({j.date}) - {j.salePrice?.toLocaleString()} ฿</option>)}
+        </select>
+      </Field>
+
+      {/* Items */}
+      <div className="mt-4 pt-4 border-t border-stone-200">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="font-bold text-stone-800">📋 รายการ</h3>
+          <button type="button" onClick={addItem} className="text-sm bg-amber-100 hover:bg-amber-200 text-amber-700 px-2 py-1 rounded-lg flex items-center gap-1">
+            <Plus className="w-3.5 h-3.5" /> เพิ่ม
+          </button>
+        </div>
+        <div className="space-y-2">
+          {form.items.map((item, idx) => (
+            <div key={item.id} className="bg-stone-50 rounded-xl p-3 space-y-2">
+              <div className="flex gap-2">
+                <input
+                  value={item.name}
+                  onChange={e => updateItem(idx, 'name', e.target.value)}
+                  placeholder={`รายการที่ ${idx + 1}`}
+                  className="flex-1 px-2 py-1.5 border border-stone-300 rounded-lg text-sm"
+                />
+                {form.items.length > 1 && (
+                  <button onClick={() => removeItem(idx)} className="p-1.5 hover:bg-red-50 rounded-lg">
+                    <Trash2 className="w-4 h-4 text-red-400" />
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-1.5">
+                <div>
+                  <label className="text-xs text-stone-500 ml-1">จำนวน (ชุด)</label>
+                  <input type="number" value={item.qty} onChange={e => updateItem(idx, 'qty', e.target.value)}
+                    placeholder="1" className="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-sm mt-0.5" />
+                </div>
+                <div>
+                  <label className="text-xs text-stone-500 ml-1">ราคา (บาท)</label>
+                  <input type="number" value={item.unitPrice} onChange={e => updateItem(idx, 'unitPrice', e.target.value)}
+                    placeholder="0" className="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-sm mt-0.5" />
+                </div>
+                <div>
+                  <label className="text-xs text-stone-500 ml-1">รวม</label>
+                  <div className="px-2 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-sm text-right font-medium text-amber-700 mt-0.5">
+                    {Number(item.amount || 0).toLocaleString()}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Totals */}
+      <div className="mt-4 bg-stone-50 rounded-xl p-3 space-y-2">
+        <div className="flex justify-between text-sm">
+          <span className="text-stone-600">รวมทั้งหมด</span>
+          <span className="font-mono font-medium">{form.subtotal.toLocaleString()} ฿</span>
+        </div>
+        <div className="flex justify-between items-center text-sm">
+          <span className="text-stone-600">ส่วนลด</span>
+          <input type="number" value={form.discount} onChange={e => updateDiscount(e.target.value)}
+            className="px-2 py-1 border border-stone-300 rounded-lg text-right w-32 text-sm" placeholder="0" />
+        </div>
+        <div className="border-t border-stone-300 pt-2 flex justify-between items-center">
+          <span className="font-bold text-stone-800">ยอดสุทธิ</span>
+          <span className="font-bold text-2xl text-amber-600">
+            {Number(form.totalAmount || 0).toLocaleString()} ฿
+          </span>
+        </div>
+      </div>
+
+      {/* เงินมัดจำ (เฉพาะใบเสนอราคา) */}
+      {form.type === 'quotation' && (
+        <div className="mt-4 bg-blue-50 border border-blue-200 rounded-xl p-3">
+          <label className="block text-sm font-medium text-blue-700 mb-2">💳 เงินมัดจำ</label>
+          
+          {/* Input ตัวเลขเงินมัดจำตรงๆ */}
+          <div className="bg-white rounded-lg p-2 mb-2">
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                value={form.depositAmount || 0}
+                onChange={e => {
+                  const amt = Number(e.target.value) || 0;
+                  const pct = form.totalAmount > 0 ? Math.round((amt / form.totalAmount) * 100) : 0;
+                  setForm({...form, depositAmount: amt, depositPercent: pct});
+                }}
+                placeholder="0"
+                className="flex-1 px-3 py-2 border-2 border-blue-300 rounded-lg text-lg font-bold text-right text-blue-700 focus:outline-none focus:border-blue-500"
+              />
+              <span className="text-blue-700 font-medium">฿</span>
+            </div>
+            <div className="text-xs text-stone-500 mt-1 text-right">
+              คิดเป็น {form.depositPercent || 0}% ของยอดสุทธิ {Number(form.totalAmount || 0).toLocaleString()} ฿
+            </div>
+          </div>
+
+          {/* Quick % buttons */}
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs text-stone-500">เลือกแบบเร็ว:</span>
+            <div className="flex gap-1 flex-wrap">
+              {[0, 30, 50, 70, 100].map(pct => {
+                const calcAmt = Math.round(form.totalAmount * pct / 100);
+                return (
+                  <button
+                    key={pct}
+                    type="button"
+                    onClick={() => setForm({...form, depositPercent: pct, depositAmount: calcAmt})}
+                    className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
+                      Number(form.depositPercent) === pct
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-white border border-blue-200 text-blue-700 hover:bg-blue-100'
+                    }`}
+                  >
+                    {pct === 0 ? 'ไม่มี' : pct === 100 ? 'จ่ายครบ' : `${pct}%`}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* แสดงสรุป */}
+          {Number(form.depositAmount || 0) > 0 && Number(form.depositAmount || 0) < Number(form.totalAmount || 0) && (
+            <div className="bg-white rounded-lg p-2 grid grid-cols-2 gap-2 text-xs">
+              <div className="bg-amber-50 rounded p-1.5 border border-amber-200">
+                <div className="text-stone-500">มัดจำ</div>
+                <div className="font-bold text-amber-700">{Number(form.depositAmount).toLocaleString()} ฿</div>
+              </div>
+              <div className="bg-stone-50 rounded p-1.5 border border-stone-200">
+                <div className="text-stone-500">คงเหลือ</div>
+                <div className="font-bold text-stone-700">{(form.totalAmount - form.depositAmount).toLocaleString()} ฿</div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Payment Terms */}
+      <Field label="เงื่อนไขการชำระเงิน (เพิ่มเติม)" hint="ระบุรายละเอียดเพิ่มได้">
+        <textarea value={form.paymentTerms} onChange={e => update('paymentTerms', e.target.value)}
+          className={inputCls} rows={2}
+          placeholder="เช่น โอนภายใน 7 วันหลังได้รับใบแจ้งหนี้" />
+      </Field>
+
+      {form.type === 'quotation' && (
+        <Field label="การรับประกัน">
+          <textarea value={form.warrantyText} onChange={e => update('warrantyText', e.target.value)}
+            className={inputCls} rows={3} placeholder="แผงโซล่าเซลล์: 25 ปี..." />
+        </Field>
+      )}
+
+      <Field label="หมายเหตุเพิ่มเติม">
+        <textarea value={form.notes} onChange={e => update('notes', e.target.value)} className={inputCls} rows={2} />
+      </Field>
+
+      {submitError && (
+        <div id="doc-error-msg" className="bg-rose-100 border border-rose-300 text-rose-700 px-3 py-2 rounded-lg text-sm flex items-center gap-2 mt-3">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" /> {submitError}
+        </div>
+      )}
+
+      <div className="flex gap-2 mt-4 sticky bottom-0 bg-white pt-2 -mx-4 px-4 pb-1 border-t border-stone-100">
+        <button onClick={onClose}
+          className="flex-1 px-4 py-3 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl font-medium transition-colors">
+          ยกเลิก
+        </button>
+        <button onClick={handleSubmit}
+          className="flex-[2] bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-xl font-medium flex items-center justify-center gap-2">
+          <Save className="w-4 h-4" /> {isEdit ? 'อัพเดทเอกสาร' : 'สร้างเอกสาร'}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+// ============== DOCUMENT PREVIEW (พิมพ์/Export PDF) ==============
+function DocumentPreview({ doc, companyInfo, fmt, onClose }) {
+  const typeLabel = {
+    quotation: 'ใบเสนอราคา',
+    invoice: 'ใบแจ้งหนี้',
+    receipt: 'ใบเสร็จรับเงิน',
+  }[doc.type] || 'เอกสาร';
+  const typeLabelEn = {
+    quotation: 'Quotation',
+    invoice: 'Invoice',
+    receipt: 'Receipt',
+  }[doc.type] || 'Document';
+
+  const formatThaiDate = (s) => {
+    if (!s) return '-';
+    const d = new Date(s);
+    const day = d.getDate();
+    const months = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+                    'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+    return `${day} ${months[d.getMonth()]} ${d.getFullYear() + 543}`;
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-start justify-center overflow-y-auto p-4 print:bg-white print:p-0 print:overflow-visible">
+      {/* Print styles */}
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          .print-area, .print-area * { visibility: visible; }
+          .print-area { position: absolute; left: 0; top: 0; width: 100%; }
+          .no-print { display: none !important; }
+          @page { size: A4; margin: 1cm; }
+        }
+      `}</style>
+
+      {/* Top Action Bar */}
+      <div className="fixed top-0 left-0 right-0 bg-stone-900 text-white p-3 z-10 flex items-center justify-between gap-2 no-print print:hidden">
+        <div className="text-sm">
+          <span className="opacity-60">ดูตัวอย่าง:</span> <span className="font-medium">{doc.docNumber}</span>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={handlePrint} className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-1.5 rounded-lg text-sm flex items-center gap-1.5 font-medium">
+            🖨️ พิมพ์ / บันทึก PDF
+          </button>
+          <button onClick={onClose} className="bg-stone-700 hover:bg-stone-600 text-white px-3 py-1.5 rounded-lg text-sm">
+            ✕ ปิด
+          </button>
+        </div>
+      </div>
+
+      {/* Document */}
+      <div className="bg-white shadow-xl mt-16 mb-8 print:mt-0 print:shadow-none print-area" style={{ width: '210mm', minHeight: '297mm', fontFamily: "'Sarabun', sans-serif" }}>
+        <div className="p-10 print:p-8">
+          {/* Header */}
+          <div className="flex items-start justify-between pb-4 border-b-4 border-amber-500 mb-6">
+            <div className="flex items-center gap-3">
+              <img src="icons/icon-192.png" alt="DD" className="w-20 h-20" />
+              <div>
+                <h1 className="text-3xl font-bold text-stone-800" style={{ letterSpacing: '0.02em' }}>
+                  {companyInfo.name || 'D.D. Solution'}
+                </h1>
+                <p className="text-sm text-stone-500">{companyInfo.subName || 'Daddy Solution'}</p>
+                {companyInfo.tagline && <p className="text-xs text-stone-500 mt-1">{companyInfo.tagline}</p>}
+              </div>
+            </div>
+            <div className="text-right">
+              <h2 className="text-2xl font-bold text-amber-600">{typeLabel}</h2>
+              <p className="text-sm text-stone-500 italic">{typeLabelEn}</p>
+              <div className="mt-2 inline-block bg-stone-100 px-3 py-1 rounded">
+                <p className="text-xs text-stone-500">เลขที่</p>
+                <p className="font-mono font-bold text-stone-800">{doc.docNumber}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Date Info */}
+          <div className="grid grid-cols-2 gap-4 mb-6 text-sm">
+            <div>
+              <span className="text-stone-500">วันที่: </span>
+              <span className="font-medium">{formatThaiDate(doc.docDate)}</span>
+            </div>
+            {doc.type === 'quotation' && doc.validUntil && (
+              <div>
+                <span className="text-stone-500">ใช้ได้ถึง: </span>
+                <span className="font-medium">{formatThaiDate(doc.validUntil)}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Customer Info */}
+          <div className="grid grid-cols-2 gap-6 mb-6">
+            <div className="border border-stone-200 rounded-lg p-4">
+              <p className="text-xs text-stone-500 mb-1 uppercase">จาก / From</p>
+              <p className="font-bold text-stone-800">{companyInfo.name}</p>
+              {companyInfo.subName && <p className="text-sm text-stone-600">{companyInfo.subName}</p>}
+              {companyInfo.address && <p className="text-xs text-stone-500 mt-1 whitespace-pre-line">{companyInfo.address}</p>}
+              {companyInfo.phone && <p className="text-xs text-stone-600 mt-1">📞 {companyInfo.phone}</p>}
+              {companyInfo.lineId && <p className="text-xs text-stone-600">💬 LINE: {companyInfo.lineId}</p>}
+              {companyInfo.email && <p className="text-xs text-stone-600">✉️ {companyInfo.email}</p>}
+              {companyInfo.taxId && <p className="text-xs text-stone-600">เลขผู้เสียภาษี: {companyInfo.taxId}</p>}
+            </div>
+            <div className="border border-stone-200 rounded-lg p-4">
+              <p className="text-xs text-stone-500 mb-1 uppercase">ถึง / To</p>
+              <p className="font-bold text-stone-800">{doc.customerName}</p>
+              {doc.customerAddress && <p className="text-xs text-stone-600 mt-1 whitespace-pre-line">{doc.customerAddress}</p>}
+              {doc.customerPhone && <p className="text-xs text-stone-600 mt-1">📞 {doc.customerPhone}</p>}
+            </div>
+          </div>
+
+          {/* Items Table */}
+          <table className="w-full mb-4 border-collapse">
+            <thead>
+              <tr className="bg-stone-800 text-white">
+                <th className="text-left p-2 text-xs font-medium" style={{ width: '40px' }}>ลำดับ</th>
+                <th className="text-left p-2 text-xs font-medium">รายการ</th>
+                <th className="text-center p-2 text-xs font-medium" style={{ width: '90px' }}>จำนวน (ชุด)</th>
+                <th className="text-right p-2 text-xs font-medium" style={{ width: '130px' }}>ราคา (บาท)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {doc.items.map((item, idx) => (
+                <tr key={item.id} className="border-b border-stone-200">
+                  <td className="p-2 text-sm text-center">{idx + 1}</td>
+                  <td className="p-2 text-sm">{item.name}</td>
+                  <td className="p-2 text-sm text-center">{item.qty}</td>
+                  <td className="p-2 text-sm text-right font-mono font-medium">{Number(item.amount || 0).toLocaleString()}</td>
+                </tr>
+              ))}
+              {/* Empty rows for visual */}
+              {[...Array(Math.max(0, 5 - doc.items.length))].map((_, i) => (
+                <tr key={`empty-${i}`} className="border-b border-stone-100"><td colSpan={4} className="p-2">&nbsp;</td></tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Totals */}
+          <div className="flex justify-end mb-6">
+            <table className="w-1/2">
+              <tbody>
+                <tr>
+                  <td className="p-2 text-sm text-stone-600">รวมทั้งหมด</td>
+                  <td className="p-2 text-sm text-right font-mono">{Number(doc.subtotal || 0).toLocaleString()} ฿</td>
+                </tr>
+                {Number(doc.discount || 0) > 0 && (
+                  <tr>
+                    <td className="p-2 text-sm text-stone-600">ส่วนลด</td>
+                    <td className="p-2 text-sm text-right font-mono text-rose-600">- {Number(doc.discount).toLocaleString()} ฿</td>
+                  </tr>
+                )}
+                <tr className="border-t-2 border-stone-800 bg-amber-50">
+                  <td className="p-2 font-bold text-stone-800">ยอดสุทธิ</td>
+                  <td className="p-2 text-right font-mono font-bold text-xl text-amber-600">
+                    {Number(doc.totalAmount || 0).toLocaleString()} ฿
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Warranty */}
+          {doc.type === 'quotation' && doc.warrantyText && (
+            <div className="border-l-4 border-emerald-500 bg-emerald-50 p-3 mb-4">
+              <p className="text-xs font-bold text-emerald-700 mb-1">🛡️ การรับประกัน</p>
+              <pre className="text-xs text-emerald-800 whitespace-pre-wrap font-sans">{doc.warrantyText}</pre>
+            </div>
+          )}
+
+          {/* Deposit Info (เฉพาะใบเสนอราคา) */}
+          {doc.type === 'quotation' && Number(doc.depositAmount || 0) > 0 && Number(doc.depositAmount || 0) < Number(doc.totalAmount || 0) && (
+            <div className="border-l-4 border-amber-500 bg-amber-50 p-3 mb-4">
+              <p className="text-xs font-bold text-amber-700 mb-2">💳 เงื่อนไขการชำระเงิน</p>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="bg-white rounded-lg p-2 border border-amber-200">
+                  <div className="text-xs text-stone-500">เงินมัดจำ{doc.depositPercent ? ` (${doc.depositPercent}%)` : ''}</div>
+                  <div className="font-bold text-amber-700 text-base">
+                    {Number(doc.depositAmount).toLocaleString()} ฿
+                  </div>
+                  <div className="text-xs text-stone-500 mt-0.5">ตอนยืนยันสั่งซื้อ</div>
+                </div>
+                <div className="bg-white rounded-lg p-2 border border-amber-200">
+                  <div className="text-xs text-stone-500">ส่วนที่เหลือ{doc.depositPercent ? ` (${100 - doc.depositPercent}%)` : ''}</div>
+                  <div className="font-bold text-stone-700 text-base">
+                    {(doc.totalAmount - doc.depositAmount).toLocaleString()} ฿
+                  </div>
+                  <div className="text-xs text-stone-500 mt-0.5">หลังติดตั้งเสร็จ</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {doc.paymentTerms && (
+            <div className="border-l-4 border-blue-500 bg-blue-50 p-3 mb-4">
+              <p className="text-xs font-bold text-blue-700 mb-1">📋 เงื่อนไขเพิ่มเติม</p>
+              <pre className="text-xs text-blue-800 whitespace-pre-wrap font-sans">{doc.paymentTerms}</pre>
+            </div>
+          )}
+
+          {/* Bank Info */}
+          {companyInfo.bankAccounts && companyInfo.bankAccounts.length > 0 && (
+            <div className="bg-stone-50 border border-stone-200 rounded-lg p-3 mb-4">
+              <p className="text-xs font-bold text-stone-700 mb-2">📲 ชำระโดยโอนเข้าบัญชี</p>
+              {companyInfo.bankAccounts.map((acc, i) => (
+                <div key={i} className="text-xs text-stone-600">
+                  • <span className="font-medium">{acc.bank}</span> เลขที่ <span className="font-mono">{acc.number}</span> ชื่อ <span className="font-medium">{acc.name}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Notes */}
+          {doc.notes && (
+            <div className="text-xs text-stone-500 italic mb-4">
+              <p className="font-bold mb-1">หมายเหตุ:</p>
+              <pre className="whitespace-pre-wrap font-sans">{doc.notes}</pre>
+            </div>
+          )}
+
+          {/* Signatures */}
+          <div className="grid grid-cols-2 gap-8 mt-12 pt-4">
+            <div className="text-center">
+              <div className="h-12 border-b border-stone-400"></div>
+              <p className="text-xs text-stone-500 mt-1">
+                ({doc.type === 'receipt' ? 'ผู้รับเงิน' : 'ผู้เสนอราคา'})
+              </p>
+              <p className="text-xs text-stone-400">วันที่ ___________________</p>
+            </div>
+            <div className="text-center">
+              <div className="h-12 border-b border-stone-400"></div>
+              <p className="text-xs text-stone-500 mt-1">(ผู้รับ / ลูกค้า)</p>
+              <p className="text-xs text-stone-400">วันที่ ___________________</p>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="text-center text-xs text-stone-400 mt-8 pt-4 border-t border-stone-200">
+            ขอบคุณที่ไว้วางใจ {companyInfo.name} · เอกสารสร้างโดยระบบอัตโนมัติ
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============== COMPANY SETTINGS MODAL ==============
+function CompanySettingsModal({ companyInfo, onClose, onSave }) {
+  const [form, setForm] = useState(companyInfo || DEFAULT_COMPANY_INFO);
+  const update = (f, v) => setForm({...form, [f]: v});
+
+  const updateBank = (idx, field, value) => {
+    const newBanks = [...(form.bankAccounts || [])];
+    newBanks[idx] = { ...newBanks[idx], [field]: value };
+    setForm({...form, bankAccounts: newBanks});
+  };
+
+  const addBank = () => {
+    setForm({...form, bankAccounts: [...(form.bankAccounts || []), { bank: '', number: '', name: '' }]});
+  };
+
+  const removeBank = (idx) => {
+    setForm({...form, bankAccounts: form.bankAccounts.filter((_, i) => i !== idx)});
+  };
+
+  return (
+    <Modal title="⚙️ ข้อมูลบริษัท" onClose={onClose} wide>
+      <p className="text-sm text-stone-500 mb-4">ข้อมูลนี้จะแสดงบนใบเสนอราคา / ใบแจ้งหนี้ / ใบเสร็จ</p>
+
+      <Field label="ชื่อบริษัท">
+        <input value={form.name || ''} onChange={e => update('name', e.target.value)} className={inputCls} placeholder="D.D. Solution" />
+      </Field>
+      <Field label="ชื่อรอง / Sub-name">
+        <input value={form.subName || ''} onChange={e => update('subName', e.target.value)} className={inputCls} placeholder="Daddy Solution" />
+      </Field>
+      <Field label="คำอธิบายธุรกิจ">
+        <input value={form.tagline || ''} onChange={e => update('tagline', e.target.value)} className={inputCls} placeholder="ติดตั้งโซล่าเซลล์ครบวงจร" />
+      </Field>
+      <Field label="ที่อยู่บริษัท">
+        <textarea value={form.address || ''} onChange={e => update('address', e.target.value)} className={inputCls} rows={2} placeholder="ที่อยู่..." />
+      </Field>
+      <Field label="เบอร์โทรศัพท์">
+        <input value={form.phone || ''} onChange={e => update('phone', e.target.value)} className={inputCls} placeholder="089-xxx-xxxx" />
+      </Field>
+      <Field label="LINE ID">
+        <input value={form.lineId || ''} onChange={e => update('lineId', e.target.value)} className={inputCls} placeholder="@ddsolution" />
+      </Field>
+      <Field label="Email">
+        <input value={form.email || ''} onChange={e => update('email', e.target.value)} className={inputCls} type="email" />
+      </Field>
+      <Field label="เลขประจำตัวผู้เสียภาษี (ถ้ามี)">
+        <input value={form.taxId || ''} onChange={e => update('taxId', e.target.value)} className={inputCls} />
+      </Field>
+
+      {/* Bank Accounts */}
+      <div className="mt-4 pt-4 border-t border-stone-200">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="font-bold text-stone-800">💳 บัญชีรับโอน</h3>
+          <button type="button" onClick={addBank} className="text-sm bg-amber-100 hover:bg-amber-200 text-amber-700 px-2 py-1 rounded-lg flex items-center gap-1">
+            <Plus className="w-3.5 h-3.5" /> เพิ่ม
+          </button>
+        </div>
+        <div className="space-y-2">
+          {(form.bankAccounts || []).map((acc, idx) => (
+            <div key={idx} className="bg-stone-50 rounded-xl p-3 grid grid-cols-12 gap-1.5 items-center">
+              <input value={acc.bank} onChange={e => updateBank(idx, 'bank', e.target.value)}
+                placeholder="ธนาคาร" className="col-span-3 px-2 py-1.5 border border-stone-300 rounded-lg text-sm" />
+              <input value={acc.number} onChange={e => updateBank(idx, 'number', e.target.value)}
+                placeholder="เลขบัญชี" className="col-span-4 px-2 py-1.5 border border-stone-300 rounded-lg text-sm" />
+              <input value={acc.name} onChange={e => updateBank(idx, 'name', e.target.value)}
+                placeholder="ชื่อบัญชี" className="col-span-4 px-2 py-1.5 border border-stone-300 rounded-lg text-sm" />
+              <button onClick={() => removeBank(idx)} className="col-span-1 p-1.5 hover:bg-red-50 rounded-lg flex items-center justify-center">
+                <Trash2 className="w-4 h-4 text-red-400" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Default warranty */}
+      <Field label="การรับประกัน (default)" hint="แต่ละบรรทัด = 1 ข้อ">
+        <textarea
+          value={(form.defaultWarranty || []).join('\n')}
+          onChange={e => update('defaultWarranty', e.target.value.split('\n').filter(Boolean))}
+          className={inputCls} rows={4}
+          placeholder="แผงโซล่าเซลล์: 25 ปี" />
+      </Field>
+
       <button onClick={() => onSave(form)} className="w-full bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-xl font-medium mt-4 flex items-center justify-center gap-2">
         <Save className="w-4 h-4" /> บันทึก
       </button>
     </Modal>
   );
 }
-
 
 // ============== RENDER APP ==============
 const root = ReactDOM.createRoot(document.getElementById('root'));
