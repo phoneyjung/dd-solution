@@ -2644,12 +2644,43 @@ function DDSolutionManager({ currentUser, onLogout }) {
             const paid = getChainPaid(chainId);
             const unpaid = total - paid;
             
+            // ค้นหา job ที่ผูกกับ chain นี้
+            const linkedJob = master?.jobId ? jobs.find(j => j.id === master.jobId) : null;
+            
+            // ค้นหาสายไฟ "ม้วนใหม่" ที่มีของเหลือ
+            const wireRemainings = [];
+            if (linkedJob && linkedJob.costsByCategory?.wire) {
+              linkedJob.costsByCategory.wire.forEach(item => {
+                // เฉพาะที่ไม่ใช่ stock (เป็นม้วนใหม่ที่ซื้อมา) และมีเหลือ
+                if (!item.stockId && Number(item.rollLength || 0) > 0) {
+                  const remaining = Number(item.rollLength || 0) - Number(item.usedLength || 0);
+                  const pricePerMeter = item.rollLength > 0 ? item.rollPrice / item.rollLength : 0;
+                  if (remaining > 0) {
+                    wireRemainings.push({
+                      name: item.item,
+                      remaining,
+                      pricePerMeter,
+                      unitCost: pricePerMeter,
+                    });
+                  }
+                }
+              });
+            }
+            
             let warning = '';
             if (unpaid > 0) {
               warning = `\n\n⚠️ ลูกค้ายังจ่ายไม่ครบ\n• ยอดรวม: ${total.toLocaleString()} ฿\n• จ่ายแล้ว: ${paid.toLocaleString()} ฿\n• ค้าง: ${unpaid.toLocaleString()} ฿`;
             }
             
-            if (!window.confirm(`จบงาน ${master?.docNumber || '-'}\n(${master?.customerName || '-'})\n\nเอกสารทั้งหมดในงานนี้ (${chainDocs.length} ฉบับ) จะถูกซ่อนเข้าประวัติ${warning}\n\nยืนยันจบงาน?`)) return;
+            let wireInfo = '';
+            if (wireRemainings.length > 0) {
+              const wireList = wireRemainings.map(w => 
+                `• ${w.name}: ${w.remaining.toFixed(1)}m × ${w.pricePerMeter.toFixed(2)} ฿/m`
+              ).join('\n');
+              wireInfo = `\n\n💡 จะบันทึกสายไฟเหลือเข้าสต๊อก:\n${wireList}`;
+            }
+            
+            if (!window.confirm(`จบงาน ${master?.docNumber || '-'}\n(${master?.customerName || '-'})\n\nเอกสารทั้งหมดในงานนี้ (${chainDocs.length} ฉบับ) จะถูกซ่อนเข้าประวัติ${warning}${wireInfo}\n\nยืนยันจบงาน?`)) return;
             
             const closedAt = new Date().toISOString();
             saveDocuments(
@@ -2657,6 +2688,41 @@ function DDSolutionManager({ currentUser, onLogout }) {
               'edit',
               `จบงาน: ${master?.docNumber} (${master?.customerName}) — ซ่อน ${chainDocs.length} ฉบับ`
             );
+            
+            // บันทึกสายไฟเหลือเข้าสต๊อก
+            if (wireRemainings.length > 0) {
+              const newStock = [...stock];
+              wireRemainings.forEach(w => {
+                // เช็คว่ามีของชื่อเดียวกันในสต๊อกไหม → ถ้ามีให้บวกเพิ่ม
+                const existing = newStock.find(s => 
+                  s.category === 'wire' && s.name === w.name
+                );
+                if (existing) {
+                  // รวมของเดิม + ของใหม่ (ราคาเฉลี่ย)
+                  const oldQty = Number(existing.qty || 0);
+                  const oldCost = Number(existing.unitCost || 0);
+                  const newQty = oldQty + w.remaining;
+                  const newCost = newQty > 0 ? ((oldQty * oldCost) + (w.remaining * w.unitCost)) / newQty : w.unitCost;
+                  existing.qty = newQty;
+                  existing.unitCost = Number(newCost.toFixed(2));
+                } else {
+                  // สร้างใหม่
+                  newStock.push({
+                    id: `s-wire-${Date.now()}-${Math.random().toString(36).slice(2,5)}`,
+                    name: w.name,
+                    category: 'wire',
+                    qty: w.remaining,
+                    unit: 'เมตร',
+                    unitCost: Number(w.unitCost.toFixed(2)),
+                    partner: 'p-aam',
+                    note: `เหลือจากงาน ${master?.customerName || master?.docNumber}`,
+                    createdAt: closedAt,
+                  });
+                }
+              });
+              saveStock(newStock, 'add', 
+                `บันทึกสายไฟเหลือเข้าสต๊อก ${wireRemainings.length} รายการ จากงาน ${master?.customerName}`);
+            }
           };
 
           // ยกเลิกงาน
@@ -3660,13 +3726,14 @@ function JobModal({ job, partners, stock = [], documents = [], onUpdateStock, on
                   // แผงโซล่า
                   if (snap.panel) {
                     const items = newCosts.panel || [];
-                    const itemName = `${snap.panel.brand} ${snap.panel.model} × ${snap.panel.qty} แผ่น`;
-                    const itemAmount = snap.panel.total || (snap.panel.costEach * snap.panel.qty);
-                    // เช็คว่ามีรายการชื่อนี้อยู่แล้วไหม
+                    const itemName = `${snap.panel.brand} ${snap.panel.model}`;
+                    const qty = snap.panel.qty;
+                    const unitPrice = snap.panel.costEach;
+                    const itemAmount = snap.panel.total || (unitPrice * qty);
                     const exists = items.some(it => it.item === itemName);
                     if (!exists) {
-                      newCosts.panel = [...items, { item: itemName, amount: itemAmount }];
-                      messages.push(`✓ แผงโซล่า: ${itemName}`);
+                      newCosts.panel = [...items, { item: itemName, qty, unitPrice, amount: itemAmount }];
+                      messages.push(`✓ แผงโซล่า: ${itemName} × ${qty} แผ่น`);
                     }
                   }
                   
@@ -3677,7 +3744,7 @@ function JobModal({ job, partners, stock = [], documents = [], onUpdateStock, on
                     const itemAmount = snap.inverter.cost;
                     const exists = items.some(it => it.item === itemName);
                     if (!exists) {
-                      newCosts.inverter = [...items, { item: itemName, amount: itemAmount }];
+                      newCosts.inverter = [...items, { item: itemName, qty: 1, unitPrice: itemAmount, amount: itemAmount }];
                       messages.push(`✓ อินเวอร์เตอร์: ${itemName}`);
                     }
                   }
@@ -3689,7 +3756,7 @@ function JobModal({ job, partners, stock = [], documents = [], onUpdateStock, on
                     const itemAmount = snap.battery.cost;
                     const exists = items.some(it => it.item === itemName);
                     if (!exists) {
-                      newCosts.battery = [...items, { item: itemName, amount: itemAmount }];
+                      newCosts.battery = [...items, { item: itemName, qty: 1, unitPrice: itemAmount, amount: itemAmount }];
                       messages.push(`✓ แบตเตอรี่: ${itemName}`);
                     }
                   }
@@ -3730,14 +3797,168 @@ function JobModal({ job, partners, stock = [], documents = [], onUpdateStock, on
                 <span className="font-medium text-amber-700">{cat.label}</span>
                 <span className="text-sm font-mono">{subtotal.toFixed(2)} ฿</span>
               </div>
-              {items.map((item, i) => (
-                <div key={i} className={`flex gap-2 mb-2 ${item.stockId ? 'bg-emerald-50 p-2 rounded-lg' : ''}`}>
-                  {item.stockId && <span className="text-emerald-600 self-center" title="เบิกจากสต๊อก">📦</span>}
-                  <input value={item.item} onChange={e => updateCostItem(cat.id, i, 'item', e.target.value)} className={inputCls + " flex-1"} placeholder="ชื่อรายการ" disabled={!!item.stockId} />
-                  <input type="number" step="0.01" value={item.amount} onChange={e => updateCostItem(cat.id, i, 'amount', Number(e.target.value))} className={inputCls + " w-28"} placeholder="0" disabled={!!item.stockId} />
-                  <button onClick={() => removeCostItem(cat.id, i)} className="p-2 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4 text-red-400" /></button>
-                </div>
-              ))}
+              {items.map((item, i) => {
+                // หมวดที่มี qty × unitPrice
+                const hasQtyPrice = (cat.id === 'panel' || cat.id === 'battery' || cat.id === 'inverter');
+                const isWire = cat.id === 'wire';
+                const qty = Number(item.qty || 0);
+                const unitPrice = Number(item.unitPrice || 0);
+                
+                // === สายไฟ - ม้วนใหม่ ===
+                // มี: ความยาวม้วน, ราคาม้วน, ใช้กี่เมตร
+                // คำนวณ: ราคา/เมตร = ราคาม้วน ÷ ยาวม้วน
+                //        amount   = ใช้ × ราคา/เมตร
+                //        เหลือ    = ยาวม้วน - ใช้ (เก็บเข้าสต๊อกตอนจบงาน)
+                if (isWire && !item.stockId) {
+                  const rollLength = Number(item.rollLength || 0);
+                  const rollPrice = Number(item.rollPrice || 0);
+                  const usedLength = Number(item.usedLength || 0);
+                  const pricePerMeter = rollLength > 0 ? rollPrice / rollLength : 0;
+                  const remaining = rollLength - usedLength;
+                  
+                  return (
+                    <div key={i} className="border border-stone-100 rounded-lg p-2 mb-2 bg-stone-50/50">
+                      <div className="flex gap-2 mb-1.5">
+                        <input value={item.item} onChange={e => updateCostItem(cat.id, i, 'item', e.target.value)} className={inputCls + " flex-1"} placeholder="เช่น Yasaki THW 10mm² สีดำ" />
+                        <button onClick={() => removeCostItem(cat.id, i)} className="p-2 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4 text-red-400" /></button>
+                      </div>
+                      
+                      {/* บรรทัด 1: ม้วน */}
+                      <div className="flex gap-1.5 items-center text-xs mb-1">
+                        <span className="text-stone-500 w-12">ม้วน:</span>
+                        <input 
+                          type="number" 
+                          value={item.rollLength || ''} 
+                          onChange={e => {
+                            const newRollLength = Number(e.target.value);
+                            const newPricePerM = newRollLength > 0 ? rollPrice / newRollLength : 0;
+                            const newAmount = usedLength * newPricePerM;
+                            const newItems = [...(costsByCategory[cat.id] || [])];
+                            newItems[i] = { ...newItems[i], rollLength: newRollLength, amount: newAmount };
+                            setCostsByCategory({...costsByCategory, [cat.id]: newItems});
+                          }}
+                          className={inputCls + " w-16 text-center"} 
+                          placeholder="100"
+                        />
+                        <span className="text-stone-500 whitespace-nowrap">เมตร</span>
+                        <span className="text-stone-400">×</span>
+                        <input 
+                          type="number" 
+                          step="0.01"
+                          value={item.rollPrice || ''} 
+                          onChange={e => {
+                            const newRollPrice = Number(e.target.value);
+                            const newPricePerM = rollLength > 0 ? newRollPrice / rollLength : 0;
+                            const newAmount = usedLength * newPricePerM;
+                            const newItems = [...(costsByCategory[cat.id] || [])];
+                            newItems[i] = { ...newItems[i], rollPrice: newRollPrice, amount: newAmount };
+                            setCostsByCategory({...costsByCategory, [cat.id]: newItems});
+                          }}
+                          className={inputCls + " w-24 text-center"} 
+                          placeholder="9,500"
+                        />
+                        <span className="text-stone-500 whitespace-nowrap">฿/ม้วน</span>
+                        <span className="text-[10px] text-stone-400 ml-auto whitespace-nowrap">
+                          ≈ {pricePerMeter.toFixed(2)} ฿/m
+                        </span>
+                      </div>
+                      
+                      {/* บรรทัด 2: ใช้ในงาน */}
+                      <div className="flex gap-1.5 items-center text-xs">
+                        <span className="text-stone-500 w-12">ใช้:</span>
+                        <input 
+                          type="number" 
+                          step="0.1"
+                          value={item.usedLength || ''} 
+                          onChange={e => {
+                            const newUsed = Number(e.target.value);
+                            const newAmount = newUsed * pricePerMeter;
+                            const newItems = [...(costsByCategory[cat.id] || [])];
+                            newItems[i] = { ...newItems[i], usedLength: newUsed, amount: newAmount };
+                            setCostsByCategory({...costsByCategory, [cat.id]: newItems});
+                          }}
+                          className={inputCls + " w-16 text-center"} 
+                          placeholder="45"
+                        />
+                        <span className="text-stone-500 whitespace-nowrap">เมตร</span>
+                        <span className="text-stone-400">=</span>
+                        <span className="font-mono font-bold text-amber-700 text-sm flex-1 text-right">
+                          {Number(item.amount || 0).toLocaleString(undefined, {maximumFractionDigits: 2})} ฿
+                        </span>
+                      </div>
+                      
+                      {/* แสดง คงเหลือ */}
+                      {rollLength > 0 && usedLength > 0 && remaining >= 0 && (
+                        <div className="text-[10px] text-emerald-700 mt-1 pt-1 border-t border-stone-200 flex items-center gap-1">
+                          💡 เหลือ <strong>{remaining.toFixed(1)} เมตร</strong>
+                          {remaining > 0 && <span className="text-stone-500">— จะบันทึกเข้าสต๊อกอัตโนมัติตอน "จบงาน"</span>}
+                        </div>
+                      )}
+                      {rollLength > 0 && usedLength > rollLength && (
+                        <div className="text-[10px] text-rose-600 mt-1 pt-1 border-t border-stone-200">
+                          ⚠️ ใช้เกินม้วน! (เกิน {(usedLength - rollLength).toFixed(1)}m)
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+                
+                if (hasQtyPrice && !item.stockId) {
+                  return (
+                    <div key={i} className="border border-stone-100 rounded-lg p-2 mb-2 bg-stone-50/50">
+                      <div className="flex gap-2 mb-1.5">
+                        <input value={item.item} onChange={e => updateCostItem(cat.id, i, 'item', e.target.value)} className={inputCls + " flex-1"} placeholder={cat.id === 'panel' ? 'เช่น Longi 640W' : cat.id === 'battery' ? 'เช่น Deye 16kWh' : 'เช่น Solis 8kW Hybrid'} />
+                        <button onClick={() => removeCostItem(cat.id, i)} className="p-2 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4 text-red-400" /></button>
+                      </div>
+                      <div className="flex gap-1.5 items-center text-xs">
+                        <input 
+                          type="number" 
+                          value={item.qty || ''} 
+                          onChange={e => {
+                            const newQty = Number(e.target.value);
+                            const newAmount = newQty * unitPrice;
+                            const newItems = [...(costsByCategory[cat.id] || [])];
+                            newItems[i] = { ...newItems[i], qty: newQty, amount: newAmount };
+                            setCostsByCategory({...costsByCategory, [cat.id]: newItems});
+                          }}
+                          className={inputCls + " w-16 text-center"} 
+                          placeholder="0"
+                        />
+                        <span className="text-stone-500 whitespace-nowrap">{cat.id === 'panel' ? 'แผ่น' : 'ชุด'}</span>
+                        <span className="text-stone-400">×</span>
+                        <input 
+                          type="number" 
+                          step="0.01"
+                          value={item.unitPrice || ''} 
+                          onChange={e => {
+                            const newPrice = Number(e.target.value);
+                            const newAmount = qty * newPrice;
+                            const newItems = [...(costsByCategory[cat.id] || [])];
+                            newItems[i] = { ...newItems[i], unitPrice: newPrice, amount: newAmount };
+                            setCostsByCategory({...costsByCategory, [cat.id]: newItems});
+                          }}
+                          className={inputCls + " w-24 text-center"} 
+                          placeholder="ราคา/หน่วย"
+                        />
+                        <span className="text-stone-400">=</span>
+                        <span className="font-mono font-bold text-amber-700 text-sm flex-1 text-right">
+                          {Number(item.amount || 0).toLocaleString(undefined, {maximumFractionDigits: 2})} ฿
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
+                
+                // แบบเดิมสำหรับหมวดอื่นๆ + รายการที่เบิกจากสต๊อก
+                return (
+                  <div key={i} className={`flex gap-2 mb-2 ${item.stockId ? 'bg-emerald-50 p-2 rounded-lg' : ''}`}>
+                    {item.stockId && <span className="text-emerald-600 self-center" title="เบิกจากสต๊อก">📦</span>}
+                    <input value={item.item} onChange={e => updateCostItem(cat.id, i, 'item', e.target.value)} className={inputCls + " flex-1"} placeholder="ชื่อรายการ" disabled={!!item.stockId} />
+                    <input type="number" step="0.01" value={item.amount} onChange={e => updateCostItem(cat.id, i, 'amount', Number(e.target.value))} className={inputCls + " w-28"} placeholder="0" disabled={!!item.stockId} />
+                    <button onClick={() => removeCostItem(cat.id, i)} className="p-2 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4 text-red-400" /></button>
+                  </div>
+                );
+              })}
               <div className="flex gap-2 flex-wrap">
                 <button onClick={() => addCostItem(cat.id)} className="text-xs text-amber-600 font-medium flex items-center gap-1 hover:bg-amber-50 px-2 py-1 rounded">
                   <Plus className="w-3 h-3" /> เพิ่มรายการ
