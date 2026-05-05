@@ -1399,6 +1399,91 @@ function DDSolutionManager({ currentUser, onLogout }) {
   const completedJobs = jobs.filter(j => j.status === 'completed').length;
   const totalStockValue = stock.filter(s => Number(s.qty) > 0).reduce((sum, s) => sum + Number(s.qty || 0) * Number(s.unitCost || 0), 0);
 
+  // === Quick Stats (Phase B) ===
+  const quickStats = useMemo(() => {
+    const now = new Date();
+    const thisYear = now.getFullYear();
+    const thisMonth = now.getMonth(); // 0-11
+    const lastMonth = thisMonth === 0 ? 11 : thisMonth - 1;
+    const lastMonthYear = thisMonth === 0 ? thisYear - 1 : thisYear;
+    
+    // helper: parse job date safely
+    const getJobDate = (j) => {
+      const d = new Date(j.date || 0);
+      return isNaN(d.getTime()) ? null : d;
+    };
+    
+    // ▶ กำไรเดือนนี้ vs เดือนที่แล้ว (เฉพาะงานที่ completed)
+    let profitThisMonth = 0, profitLastMonth = 0;
+    let revenueThisMonth = 0;
+    jobs.forEach(j => {
+      if (j.status !== 'completed') return;
+      const d = getJobDate(j);
+      if (!d) return;
+      const profit = Number(j.profit || (Number(j.salePrice || 0) - Number(j.totalCost || 0)));
+      if (d.getFullYear() === thisYear && d.getMonth() === thisMonth) {
+        profitThisMonth += profit;
+        revenueThisMonth += Number(j.salePrice || 0);
+      } else if (d.getFullYear() === lastMonthYear && d.getMonth() === lastMonth) {
+        profitLastMonth += profit;
+      }
+    });
+    const profitChange = profitLastMonth !== 0 
+      ? ((profitThisMonth - profitLastMonth) / Math.abs(profitLastMonth)) * 100 
+      : (profitThisMonth > 0 ? 100 : 0);
+    
+    // ▶ Conversion Rate: ใบเสนอราคา → งานจริง
+    // นับเฉพาะใบเสนอที่ออกในช่วง 90 วันล่าสุด เพื่อให้สะท้อนสถานการณ์ปัจจุบัน
+    const ninetyDaysAgo = now.getTime() - 90 * 24 * 60 * 60 * 1000;
+    const recentQuotations = documents.filter(d => {
+      if (d.type !== 'quotation') return false;
+      const ts = new Date(d.createdAt || 0).getTime();
+      return ts >= ninetyDaysAgo;
+    });
+    const convertedQuotations = recentQuotations.filter(q => {
+      // มีงานที่อ้าง quotation นี้
+      return jobs.some(j => j.quotationId === q.id);
+    });
+    const conversionRate = recentQuotations.length > 0 
+      ? (convertedQuotations.length / recentQuotations.length) * 100 
+      : 0;
+    
+    // ▶ Top Customer (มูลค่างานสูงสุด YTD)
+    const customerTotals = {};
+    jobs.forEach(j => {
+      if (j.status !== 'completed') return;
+      const d = getJobDate(j);
+      if (!d || d.getFullYear() !== thisYear) return;
+      const name = (j.customer || '').trim();
+      if (!name) return;
+      customerTotals[name] = (customerTotals[name] || 0) + Number(j.salePrice || 0);
+    });
+    const topCustomerEntry = Object.entries(customerTotals).sort((a, b) => b[1] - a[1])[0];
+    const topCustomer = topCustomerEntry ? { name: topCustomerEntry[0], total: topCustomerEntry[1] } : null;
+    
+    // ▶ Stock Health
+    const lowStockItems = stock.filter(s => {
+      const qty = Number(s.qty || 0);
+      if (qty === 0) return false; // ของหมดไม่นับ (เป็น history)
+      if (s.category === 'wire') return qty < 20;
+      return qty < 3;
+    });
+    const stockHealth = lowStockItems.length === 0 ? 'good' : (lowStockItems.length < 3 ? 'warn' : 'bad');
+    
+    return {
+      profitThisMonth,
+      profitLastMonth,
+      profitChange,
+      revenueThisMonth,
+      conversionRate,
+      conversionTotal: recentQuotations.length,
+      conversionDone: convertedQuotations.length,
+      topCustomer,
+      lowStockItems,
+      stockHealth,
+    };
+  }, [jobs, documents, stock]);
+
   const actualInvestments = useMemo(() => {
     const inv = {};
     const fromJobs = {};
@@ -1449,19 +1534,93 @@ function DDSolutionManager({ currentUser, onLogout }) {
   const fmt = (n) => new Intl.NumberFormat('th-TH', { maximumFractionDigits: 2 }).format(Number(n) || 0);
   const fmt0 = (n) => new Intl.NumberFormat('th-TH', { maximumFractionDigits: 0 }).format(Math.round(Number(n) || 0));
 
-  const resetData = async () => {
-    if (!window.confirm('รีเซ็ตข้อมูลทั้งหมดกลับเป็นค่าเริ่มต้น?')) return;
+  const [showResetModal, setShowResetModal] = useState(false);
+  
+  const resetData = () => setShowResetModal(true);
+  
+  const performReset = async (selections) => {
+    // selections = { jobs: true/false, documents: true/false, ... }
+    // หรือ { mode: 'recent', sinceDate: '2025-...', targets: {...} }
+    
+    // helper: ดึง timestamp จาก id format `prefix-1234567890` (anchored) หรือ field
+    const getEntityTs = (entity, dateField = 'date') => {
+      const idMatch = String(entity.id || '').match(/-(\d{10,13})$/);
+      if (idMatch) {
+        const ts = Number(idMatch[1]);
+        if (ts > 1262304000000 && ts < 2524608000000) return ts;
+        if (ts > 1262304000 && ts < 2524608000) return ts * 1000;
+      }
+      const ts = new Date(entity[dateField] || entity.createdAt || 0).getTime();
+      return isNaN(ts) ? 0 : ts;
+    };
+    
     try {
-      await Promise.all([
-        window.storage.delete('dd5:jobs', true),
-        window.storage.delete('dd5:stock', true),
-        window.storage.delete('dd5:partners', true),
-        window.storage.delete('dd5:transactions', true),
-        window.storage.delete('dd5:customers', true),
-        window.storage.delete('dd5:activity', true),
-      ]);
-      window.location.reload();
-    } catch (e) { console.error(e); }
+      if (selections.mode === 'recent' && selections.sinceDate) {
+        // ลบเฉพาะที่ created/date หลังจาก sinceDate
+        const cutoff = new Date(selections.sinceDate).getTime();
+        
+        if (selections.targets.jobs) {
+          const toDelete = jobs.filter(j => getEntityTs(j, 'date') >= cutoff);
+          const filtered = jobs.filter(j => getEntityTs(j, 'date') < cutoff);
+          
+          // Restore stock จากงานที่ลบ (ถ้าเคย deduct)
+          const refundsByStockId = {};
+          let restoredCount = 0;
+          toDelete.forEach(j => {
+            (j.deductionLog || []).forEach(d => {
+              refundsByStockId[d.stockId] = (refundsByStockId[d.stockId] || 0) + Number(d.qty || 0);
+              restoredCount++;
+            });
+          });
+          if (Object.keys(refundsByStockId).length > 0) {
+            const newStock = stock.map(s => {
+              if (refundsByStockId[s.id]) {
+                return { ...s, qty: Number(s.qty) + refundsByStockId[s.id] };
+              }
+              return s;
+            });
+            await saveStock(newStock, 'restore', `คืนสต๊อกจากการลบงานทดสอบ (${restoredCount} รายการ)`);
+          }
+          
+          await saveJobs(filtered, 'delete', `ลบงานทดสอบ (${toDelete.length} รายการ${restoredCount > 0 ? ', คืนสต๊อก ' + restoredCount + ' รายการ' : ''})`);
+        }
+        
+        if (selections.targets.documents) {
+          const filtered = documents.filter(d => getEntityTs(d, 'createdAt') < cutoff);
+          await saveDocuments(filtered, 'delete', `ลบเอกสารทดสอบ (${documents.length - filtered.length} รายการ)`);
+        }
+        
+        if (selections.targets.transactions) {
+          const filtered = transactions.filter(t => getEntityTs(t, 'date') < cutoff);
+          await saveTransactions(filtered, 'delete', `ลบรายการเงินทดสอบ (${transactions.length - filtered.length} รายการ)`);
+        }
+        
+        if (selections.targets.customers) {
+          const filtered = customers.filter(c => getEntityTs(c, 'createdAt') < cutoff);
+          await saveCustomers(filtered, 'delete', `ลบลูกค้าทดสอบ (${customers.length - filtered.length} รายการ)`);
+        }
+      } else if (selections.mode === 'all') {
+        // ลบทั้งหมด (legacy behavior)
+        const promises = [];
+        if (selections.targets.jobs) promises.push(window.storage.delete('dd5:jobs', true));
+        if (selections.targets.stock) promises.push(window.storage.delete('dd5:stock', true));
+        if (selections.targets.partners) promises.push(window.storage.delete('dd5:partners', true));
+        if (selections.targets.transactions) promises.push(window.storage.delete('dd5:transactions', true));
+        if (selections.targets.customers) promises.push(window.storage.delete('dd5:customers', true));
+        if (selections.targets.documents) promises.push(window.storage.delete('dd5:documents', true));
+        if (selections.targets.activity) promises.push(window.storage.delete('dd5:activity', true));
+        if (selections.targets.salesCatalog) promises.push(window.storage.delete('dd5:salesCatalog', true));
+        await Promise.all(promises);
+        window.location.reload();
+        return;
+      }
+      
+      setShowResetModal(false);
+      alert('✅ ล้างข้อมูลเรียบร้อย!');
+    } catch (e) { 
+      console.error(e); 
+      alert('❌ เกิดข้อผิดพลาด: ' + e.message);
+    }
   };
 
   // === Export to Excel for Tax ===
@@ -1888,7 +2047,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
             <button onClick={onLogout} className="p-2 hover:bg-white/10 rounded-lg" title="ออกจากระบบ">
               <LogOut className="w-4 h-4" />
             </button>
-            <button onClick={resetData} className="text-stone-400 hover:text-red-400 p-2" title="รีเซ็ตข้อมูล">
+            <button onClick={resetData} className="text-stone-400 hover:text-red-400 p-2" title="ล้างข้อมูลทดสอบ">
               <Trash2 className="w-4 h-4" />
             </button>
           </div>
@@ -1989,6 +2148,87 @@ function DDSolutionManager({ currentUser, onLogout }) {
               <StatCard icon={TrendingDown} label="ต้นทุนรวม" value={fmt0(totalCost)} suffix="฿" color="rose" />
               <StatCard icon={TrendingUp} label="กำไรสุทธิ" value={fmt0(totalProfit)} suffix="฿" color="amber" highlight />
               <StatCard icon={Briefcase} label="งานเสร็จ" value={completedJobs} suffix="งาน" color="blue" />
+            </div>
+            
+            {/* === Quick Stats (4 KPIs) === */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-base">🎯</span>
+                <h2 className="display-font text-xl text-stone-800">ตัวชี้วัดสำคัญ</h2>
+                <span className="text-xs text-stone-400">— อัพเดทแบบ real-time</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {/* 1. กำไรเดือนนี้ */}
+                <QuickStatCard
+                  icon="📈"
+                  label="กำไรเดือนนี้"
+                  primary={`${fmt0(quickStats.profitThisMonth)} ฿`}
+                  secondary={
+                    quickStats.profitLastMonth !== 0 
+                      ? `${quickStats.profitChange >= 0 ? '▲' : '▼'} ${Math.abs(quickStats.profitChange).toFixed(0)}% เทียบเดือนที่แล้ว (${fmt0(quickStats.profitLastMonth)} ฿)`
+                      : 'ยังไม่มีข้อมูลเดือนที่แล้ว'
+                  }
+                  trend={quickStats.profitChange >= 0 ? 'up' : 'down'}
+                  color={quickStats.profitThisMonth >= 0 ? 'emerald' : 'rose'}
+                />
+                
+                {/* 2. Conversion Rate */}
+                <QuickStatCard
+                  icon="🎯"
+                  label="Conversion ใบเสนอ → งาน"
+                  primary={`${quickStats.conversionRate.toFixed(0)}%`}
+                  secondary={
+                    quickStats.conversionTotal > 0
+                      ? `${quickStats.conversionDone} จาก ${quickStats.conversionTotal} ใบเสนอ (90 วันล่าสุด) ปิดเป็นงานจริง`
+                      : 'ยังไม่มีใบเสนอใน 90 วันล่าสุด'
+                  }
+                  color={
+                    quickStats.conversionRate >= 50 ? 'emerald'
+                    : quickStats.conversionRate >= 25 ? 'amber'
+                    : 'rose'
+                  }
+                />
+                
+                {/* 3. Top Customer */}
+                <QuickStatCard
+                  icon="🏆"
+                  label="ลูกค้าสูงสุดปีนี้"
+                  primary={quickStats.topCustomer ? quickStats.topCustomer.name : '—'}
+                  secondary={
+                    quickStats.topCustomer 
+                      ? `มูลค่ารวม ${fmt0(quickStats.topCustomer.total)} ฿`
+                      : 'ยังไม่มีงานเสร็จในปีนี้'
+                  }
+                  color="blue"
+                  primaryClass="text-base md:text-lg truncate"
+                />
+                
+                {/* 4. Stock Health */}
+                <QuickStatCard
+                  icon={
+                    quickStats.stockHealth === 'good' ? '✅'
+                    : quickStats.stockHealth === 'warn' ? '⚠️'
+                    : '🚨'
+                  }
+                  label="สุขภาพสต๊อก"
+                  primary={
+                    quickStats.stockHealth === 'good' ? 'ปกติ'
+                    : `เหลือน้อย ${quickStats.lowStockItems.length} รายการ`
+                  }
+                  secondary={
+                    quickStats.stockHealth === 'good' 
+                      ? `มูลค่าสต๊อกรวม ${fmt0(totalStockValue)} ฿`
+                      : quickStats.lowStockItems.slice(0, 2).map(s => `${s.name} (${fmt0(s.qty)} ${s.unit || 'ชิ้น'})`).join(', ') 
+                        + (quickStats.lowStockItems.length > 2 ? ` และอีก ${quickStats.lowStockItems.length - 2} รายการ` : '')
+                  }
+                  color={
+                    quickStats.stockHealth === 'good' ? 'emerald'
+                    : quickStats.stockHealth === 'warn' ? 'amber'
+                    : 'rose'
+                  }
+                  onClick={quickStats.stockHealth !== 'good' ? () => setActiveTab('stock') : null}
+                />
+              </div>
             </div>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="bg-white rounded-2xl p-5 shadow-sm border border-stone-200">
@@ -2157,7 +2397,27 @@ function DDSolutionManager({ currentUser, onLogout }) {
               {jobs.map(job => (
                 <JobCard key={job.id} job={job} partners={partners} fmt={fmt} fmt0={fmt0}
                   onEdit={() => { setEditingItem(job); setShowJobModal(true); }}
-                  onDelete={() => { if (window.confirm(`ลบงาน ${job.customer}?`)) saveJobs(jobs.filter(j => j.id !== job.id), 'delete', `ลบงาน: ${job.customer}`); }}
+                  onDelete={() => {
+                    const hasDeductions = job.deductionLog && job.deductionLog.length > 0;
+                    let confirmMsg = `ลบงาน ${job.customer}?`;
+                    if (hasDeductions) {
+                      confirmMsg = `งานนี้เคยตัดสต๊อก ${job.deductionLog.length} รายการ\n\nลบงานแล้ว → ระบบจะคืนสต๊อกให้อัตโนมัติ\n\nยืนยันลบ ${job.customer}?`;
+                    }
+                    if (!window.confirm(confirmMsg)) return;
+                    
+                    // Restore stock if deducted
+                    if (hasDeductions) {
+                      const restoredStock = stock.map(s => {
+                        const refunds = job.deductionLog.filter(d => d.stockId === s.id);
+                        if (refunds.length === 0) return s;
+                        const totalRefund = refunds.reduce((sum, r) => sum + Number(r.qty || 0), 0);
+                        return { ...s, qty: Number(s.qty) + totalRefund };
+                      });
+                      saveStock(restoredStock, 'restore', `คืนสต๊อกจากงาน: ${job.customer} (${job.deductionLog.length} รายการ)`);
+                    }
+                    
+                    saveJobs(jobs.filter(j => j.id !== job.id), 'delete', `ลบงาน: ${job.customer}${hasDeductions ? ' (คืนสต๊อกแล้ว)' : ''}`);
+                  }}
                 />
               ))}
             </div>
@@ -3189,6 +3449,19 @@ function DDSolutionManager({ currentUser, onLogout }) {
         )}
       </main>
 
+      {showResetModal && (
+        <ResetDataModal
+          jobs={jobs}
+          documents={documents}
+          transactions={transactions}
+          customers={customers}
+          stock={stock}
+          partners={partners}
+          onClose={() => setShowResetModal(false)}
+          onReset={performReset}
+        />
+      )}
+
       {showJobModal && (
         <JobModal job={editingItem} partners={partners} stock={stock} documents={documents} onUpdateStock={saveStock}
           onClose={() => { setShowJobModal(false); setEditingItem(null); }}
@@ -3397,6 +3670,41 @@ function StatCard({ icon: Icon, label, value, suffix, color, highlight }) {
   );
 }
 
+// === QuickStatCard: KPI cards สำหรับ Dashboard ===
+function QuickStatCard({ icon, label, primary, secondary, color = 'blue', trend, onClick, primaryClass }) {
+  const colorMap = {
+    emerald: { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', accent: 'text-emerald-600' },
+    rose: { bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-700', accent: 'text-rose-600' },
+    amber: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', accent: 'text-amber-600' },
+    blue: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', accent: 'text-blue-600' },
+  };
+  const c = colorMap[color] || colorMap.blue;
+  const Wrapper = onClick ? 'button' : 'div';
+  
+  return (
+    <Wrapper
+      onClick={onClick}
+      className={`${c.bg} border-2 ${c.border} rounded-2xl p-4 text-left transition-all ${onClick ? 'hover:shadow-md hover:scale-[1.02] active:scale-[0.99] cursor-pointer' : ''}`}
+    >
+      <div className="flex items-start gap-3">
+        <div className="text-3xl flex-shrink-0">{icon}</div>
+        <div className="flex-1 min-w-0">
+          <div className={`text-xs font-medium ${c.text} mb-0.5`}>{label}</div>
+          <div className={`font-bold text-stone-800 ${primaryClass || 'text-xl md:text-2xl'}`}>
+            {primary}
+            {trend === 'up' && <span className="text-emerald-600 text-sm ml-1">↗</span>}
+            {trend === 'down' && <span className="text-rose-600 text-sm ml-1">↘</span>}
+          </div>
+          {secondary && (
+            <div className={`text-xs ${c.accent} mt-1 line-clamp-2`}>{secondary}</div>
+          )}
+        </div>
+        {onClick && <span className="text-stone-400 text-sm flex-shrink-0">→</span>}
+      </div>
+    </Wrapper>
+  );
+}
+
 function JobCard({ job, partners, fmt, fmt0, onEdit, onDelete }) {
   const investmentEntries = Object.entries(job.investments || {});
   return (
@@ -3408,6 +3716,11 @@ function JobCard({ job, partners, fmt, fmt0, onEdit, onDelete }) {
             <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${job.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
               {job.status === 'completed' ? '✓ เสร็จ' : '⏳ ดำเนินการ'}
             </span>
+            {job.stockDeducted && (
+              <span className="px-2 py-0.5 text-xs rounded-full font-medium bg-blue-100 text-blue-700" title="ระบบตัดสต๊อกอัตโนมัติแล้ว">
+                📦 ตัดสต๊อกแล้ว
+              </span>
+            )}
           </div>
           <p className="text-sm text-stone-500">{job.date} · {job.location}</p>
           <p className="text-sm text-amber-700 font-medium mt-1">{job.type}</p>
@@ -3459,6 +3772,21 @@ function JobCard({ job, partners, fmt, fmt0, onEdit, onDelete }) {
                 </div>
               );
             })}
+          </div>
+        </details>
+      )}
+      {job.deductionLog && job.deductionLog.length > 0 && (
+        <details className="text-sm mt-2">
+          <summary className="cursor-pointer text-blue-600 hover:text-blue-700 font-medium">
+            📦 ดูรายการตัดสต๊อก ({job.deductionLog.length} รายการ)
+          </summary>
+          <div className="mt-2 bg-blue-50 rounded-lg p-2 space-y-1">
+            {job.deductionLog.map((d, i) => (
+              <div key={i} className="flex justify-between text-xs border-b border-blue-100 last:border-0 pb-1 last:pb-0">
+                <span className="text-stone-700 truncate flex-1 mr-2">• {d.name} × {d.qty} {d.unit}</span>
+                <span className="font-mono text-blue-700 flex-shrink-0">{fmt0(d.totalCost)} ฿</span>
+              </div>
+            ))}
           </div>
         </details>
       )}
@@ -3517,6 +3845,639 @@ function StockRow({ item, fmt, fmt0, onEdit, onDelete }) {
         <button onClick={onDelete} className="p-2 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4 text-red-400" /></button>
       </div>
     </div>
+  );
+}
+
+// ============== STOCK DEDUCTION MODAL ==============
+// เปิดตอนปิดงาน (pending → completed) สำหรับงานที่ link กับใบเสนอราคา
+// User ติ๊กเลือกได้ว่าจะตัดอะไร + เพิ่มสายไฟ manual ได้
+function StockDeductionModal({ snapshot, stock, alreadyMovedIds = [], onConfirm, onSkip, onClose }) {
+  // === Build candidate rows from snapshot ===
+  // แต่ละ row: { key, label, hint, stockMatches: [{stock, score}], selected, stockId, qtyToDeduct, qtyNeeded }
+  const buildCandidates = () => {
+    const rows = [];
+    
+    // 1) แผง
+    if (snapshot?.panel) {
+      const p = snapshot.panel;
+      const matches = stock
+        .filter(s => s.category === 'panel' && Number(s.qty) > 0)
+        .map(s => {
+          // Match: id ตรงทุกอย่าง > brand+model > brand+watt > brand
+          let score = 0;
+          if (p.id && s.id === p.id) score = 100;
+          else if (p.brand && p.model && (s.name || '').toLowerCase().includes((p.model || '').toLowerCase()) && (s.name || '').toLowerCase().includes((p.brand || '').toLowerCase())) score = 80;
+          else if (p.brand && (s.name || '').toLowerCase().includes((p.brand || '').toLowerCase())) score = 50;
+          return { stock: s, score };
+        })
+        .filter(m => m.score > 0)
+        .sort((a, b) => b.score - a.score);
+      
+      const best = matches[0];
+      const blockedByManual = best ? alreadyMovedIds.includes(best.stock.id) : false;
+      rows.push({
+        key: 'panel',
+        label: `แผงโซล่า: ${p.brand || ''} ${p.model || ''} ${p.watt ? p.watt + 'W' : ''}`.trim(),
+        hint: `ใบเสนอ: ${p.qty} แผ่น`,
+        stockMatches: matches,
+        selected: !!best && !blockedByManual,
+        blockedByManual,
+        stockId: best?.stock.id || null,
+        qtyNeeded: Number(p.qty || 0),
+        qtyToDeduct: Number(p.qty || 0),
+      });
+    }
+    
+    // 2) อินเวอร์เตอร์
+    if (snapshot?.inverter) {
+      const inv = snapshot.inverter;
+      const matches = stock
+        .filter(s => s.category === 'inverter' && Number(s.qty) > 0)
+        .map(s => {
+          let score = 0;
+          if (inv.id && s.id === inv.id) score = 100;
+          else if (inv.brand && inv.model && (s.name || '').toLowerCase().includes((inv.model || '').toLowerCase()) && (s.name || '').toLowerCase().includes((inv.brand || '').toLowerCase())) score = 80;
+          else if (inv.brand && (s.name || '').toLowerCase().includes((inv.brand || '').toLowerCase())) score = 50;
+          return { stock: s, score };
+        })
+        .filter(m => m.score > 0)
+        .sort((a, b) => b.score - a.score);
+      
+      const best = matches[0];
+      const blockedByManual = best ? alreadyMovedIds.includes(best.stock.id) : false;
+      rows.push({
+        key: 'inverter',
+        label: `อินเวอร์เตอร์: ${inv.brand || ''} ${inv.model || ''} ${inv.size ? inv.size + 'kW' : ''}`.trim(),
+        hint: 'ใบเสนอ: 1 ตัว',
+        stockMatches: matches,
+        selected: !!best && !blockedByManual,
+        blockedByManual,
+        stockId: best?.stock.id || null,
+        qtyNeeded: 1,
+        qtyToDeduct: 1,
+      });
+    }
+    
+    // 3) แบตเตอรี่
+    if (snapshot?.battery) {
+      const b = snapshot.battery;
+      const matches = stock
+        .filter(s => s.category === 'battery' && Number(s.qty) > 0)
+        .map(s => {
+          let score = 0;
+          if (b.id && s.id === b.id) score = 100;
+          else if (b.brand && b.model && (s.name || '').toLowerCase().includes((b.model || '').toLowerCase()) && (s.name || '').toLowerCase().includes((b.brand || '').toLowerCase())) score = 80;
+          else if (b.brand && (s.name || '').toLowerCase().includes((b.brand || '').toLowerCase())) score = 50;
+          return { stock: s, score };
+        })
+        .filter(m => m.score > 0)
+        .sort((a, b) => b.score - a.score);
+      
+      const best = matches[0];
+      const blockedByManual = best ? alreadyMovedIds.includes(best.stock.id) : false;
+      rows.push({
+        key: 'battery',
+        label: `แบตเตอรี่: ${b.brand || ''} ${b.model || ''} ${b.capacity ? b.capacity + 'kWh' : ''}`.trim(),
+        hint: 'ใบเสนอ: 1 ลูก',
+        stockMatches: matches,
+        selected: !!best && !blockedByManual,
+        blockedByManual,
+        stockId: best?.stock.id || null,
+        qtyNeeded: 1,
+        qtyToDeduct: 1,
+      });
+    }
+    
+    return rows;
+  };
+  
+  const [rows, setRows] = useState(buildCandidates);
+  const [wireRows, setWireRows] = useState([]); // [{ id, stockId, usedMeters }]
+  
+  const updateRow = (idx, patch) => {
+    setRows(rows.map((r, i) => i === idx ? { ...r, ...patch } : r));
+  };
+  
+  const addWireRow = () => {
+    setWireRows([...wireRows, { id: `wire-${Date.now()}-${Math.random().toString(36).slice(2,5)}`, stockId: '', usedMeters: '' }]);
+  };
+  
+  const updateWireRow = (id, patch) => {
+    setWireRows(wireRows.map(w => w.id === id ? { ...w, ...patch } : w));
+  };
+  
+  const removeWireRow = (id) => {
+    setWireRows(wireRows.filter(w => w.id !== id));
+  };
+  
+  // === Compute summary ===
+  const wireStock = stock.filter(s => s.category === 'wire' && Number(s.qty) > 0);
+  
+  const deductions = useMemo(() => {
+    const list = [];
+    // Equipment rows
+    rows.forEach(r => {
+      if (!r.selected || !r.stockId) return;
+      const stk = stock.find(s => s.id === r.stockId);
+      if (!stk) return;
+      const qty = Number(r.qtyToDeduct || 0);
+      if (qty <= 0) return;
+      list.push({
+        stockId: r.stockId,
+        name: stk.name,
+        category: stk.category,
+        unit: stk.unit || 'ชิ้น',
+        qty,
+        availableQty: Number(stk.qty),
+        unitCost: Number(stk.unitCost || 0),
+        totalCost: qty * Number(stk.unitCost || 0),
+        shortage: qty > Number(stk.qty) ? qty - Number(stk.qty) : 0,
+      });
+    });
+    // Wire rows
+    wireRows.forEach(w => {
+      if (!w.stockId || !Number(w.usedMeters)) return;
+      const stk = stock.find(s => s.id === w.stockId);
+      if (!stk) return;
+      const qty = Number(w.usedMeters);
+      list.push({
+        stockId: w.stockId,
+        name: stk.name,
+        category: 'wire',
+        unit: 'm',
+        qty,
+        availableQty: Number(stk.qty),
+        unitCost: Number(stk.unitCost || 0),
+        totalCost: qty * Number(stk.unitCost || 0),
+        shortage: qty > Number(stk.qty) ? qty - Number(stk.qty) : 0,
+      });
+    });
+    return list;
+  }, [rows, wireRows, stock]);
+  
+  const totalValue = deductions.reduce((s, d) => s + d.totalCost, 0);
+  const hasShortage = deductions.some(d => d.shortage > 0);
+  
+  const handleConfirm = () => {
+    if (deductions.length === 0) {
+      if (!confirm('ไม่มีรายการที่จะตัดสต๊อก — ปิดงานเลยไหม?')) return;
+    } else if (hasShortage) {
+      const shortItems = deductions.filter(d => d.shortage > 0).map(d => `• ${d.name}: ขาด ${d.shortage} ${d.unit}`).join('\n');
+      if (!confirm(`⚠️ สต๊อกไม่พอบางรายการ:\n\n${shortItems}\n\nระบบจะตัดเท่าที่มี (ของส่วนเกินถือว่าใช้ของนอกสต๊อก)\nยืนยันปิดงาน?`)) return;
+    }
+    onConfirm(deductions);
+  };
+  
+  return (
+    <Modal title="📦 ตัดสต๊อกตอนปิดงาน" onClose={onClose} wide>
+      <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-3 mb-4">
+        <div className="text-sm font-bold text-amber-800 mb-1">🎉 กำลังจะปิดงาน!</div>
+        <div className="text-xs text-amber-700">
+          ติ๊กรายการที่ใช้จริง → ระบบจะหักออกจากสต๊อก<br />
+          (รายการที่เคยเบิก manual ไปแล้ว จะถูก uncheck อัตโนมัติเพื่อกันตัดซ้ำ)
+        </div>
+      </div>
+      
+      {/* === Section 1: Equipment from quotation === */}
+      <div className="mb-4">
+        <div className="text-sm font-bold text-stone-700 mb-2 flex items-center gap-1">
+          <span>🔧</span> อุปกรณ์จากใบเสนอราคา
+        </div>
+        {rows.length === 0 ? (
+          <div className="text-xs text-stone-400 italic p-3 bg-stone-50 rounded-lg">ไม่มีข้อมูลอุปกรณ์ใน snapshot</div>
+        ) : rows.map((r, idx) => {
+          const stk = r.stockId ? stock.find(s => s.id === r.stockId) : null;
+          const noMatch = r.stockMatches.length === 0;
+          
+          return (
+            <div key={r.key} className={`border-2 rounded-xl p-3 mb-2 ${r.selected ? 'border-emerald-300 bg-emerald-50/40' : 'border-stone-200 bg-stone-50/40'}`}>
+              <div className="flex items-start gap-2">
+                <input 
+                  type="checkbox" 
+                  checked={r.selected}
+                  disabled={noMatch}
+                  onChange={e => updateRow(idx, { selected: e.target.checked })}
+                  className="mt-1 w-5 h-5 accent-emerald-600 flex-shrink-0"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-stone-800 text-sm">{r.label}</div>
+                  <div className="text-xs text-stone-500 mt-0.5">{r.hint}</div>
+                  
+                  {r.blockedByManual && (
+                    <div className="mt-1 text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded inline-block">
+                      ⚠️ เคยเบิก manual ไปแล้วในงานนี้ — uncheck เพื่อกันตัดซ้ำ
+                    </div>
+                  )}
+                  
+                  {noMatch ? (
+                    <div className="mt-2 text-xs bg-red-50 text-red-600 px-2 py-1 rounded">
+                      ❌ ไม่เจอในสต๊อก (ต้องบันทึก manual ภายหลัง)
+                    </div>
+                  ) : r.selected && (
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] text-stone-500 block mb-0.5">เลือกจากสต๊อก</label>
+                        <select 
+                          value={r.stockId || ''} 
+                          onChange={e => updateRow(idx, { stockId: e.target.value })}
+                          className="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-xs bg-white"
+                        >
+                          {r.stockMatches.map(m => (
+                            <option key={m.stock.id} value={m.stock.id}>
+                              {m.stock.name} (มี {m.stock.qty})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-stone-500 block mb-0.5">จำนวนตัด</label>
+                        <div className="flex items-center gap-1">
+                          <input 
+                            type="number"
+                            value={r.qtyToDeduct}
+                            onChange={e => updateRow(idx, { qtyToDeduct: Number(e.target.value) })}
+                            className="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-xs bg-white"
+                            min="0"
+                            max={stk ? stk.qty : undefined}
+                          />
+                          <span className="text-xs text-stone-500 flex-shrink-0">{stk?.unit || 'ชิ้น'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {r.selected && stk && Number(r.qtyToDeduct) > Number(stk.qty) && (
+                    <div className="mt-1 text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">
+                      ⚠️ สต๊อกมี {stk.qty} {stk.unit} → ขาด {Number(r.qtyToDeduct) - Number(stk.qty)} {stk.unit}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      
+      {/* === Section 2: Wires (manual) === */}
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-sm font-bold text-stone-700 flex items-center gap-1">
+            <span>🔌</span> สายไฟที่ใช้จริง
+          </div>
+          <button 
+            onClick={addWireRow}
+            disabled={wireStock.length === 0}
+            className="text-xs bg-blue-500 hover:bg-blue-600 disabled:bg-stone-300 text-white px-3 py-1.5 rounded-lg font-medium flex items-center gap-1"
+          >
+            <Plus className="w-3 h-3" /> เพิ่มสาย
+          </button>
+        </div>
+        
+        {wireStock.length === 0 && (
+          <div className="text-xs text-stone-400 italic p-3 bg-stone-50 rounded-lg">
+            ไม่มีสายไฟในสต๊อก (จัดการที่หน้าสต๊อกก่อน)
+          </div>
+        )}
+        
+        {wireRows.length === 0 && wireStock.length > 0 && (
+          <div className="text-xs text-stone-400 italic p-3 bg-stone-50 rounded-lg">
+            กด "เพิ่มสาย" เพื่อระบุสายไฟที่ใช้จริง (เลือกได้หลายขนาด)
+          </div>
+        )}
+        
+        {wireRows.map(w => {
+          const stk = w.stockId ? stock.find(s => s.id === w.stockId) : null;
+          const used = Number(w.usedMeters || 0);
+          const shortage = stk && used > Number(stk.qty) ? used - Number(stk.qty) : 0;
+          
+          return (
+            <div key={w.id} className="border-2 border-blue-200 bg-blue-50/40 rounded-xl p-3 mb-2">
+              <div className="grid grid-cols-[1fr_auto] gap-2 mb-2">
+                <select 
+                  value={w.stockId} 
+                  onChange={e => updateWireRow(w.id, { stockId: e.target.value })}
+                  className="w-full px-2 py-2 border border-stone-300 rounded-lg text-sm bg-white"
+                >
+                  <option value="">-- เลือกสาย --</option>
+                  {wireStock.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} (มี {s.qty} m)
+                    </option>
+                  ))}
+                </select>
+                <button 
+                  onClick={() => removeWireRow(w.id)} 
+                  className="p-2 hover:bg-red-50 rounded-lg flex-shrink-0"
+                >
+                  <Trash2 className="w-4 h-4 text-red-400" />
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-stone-500 block mb-0.5">ใช้ (เมตร)</label>
+                  <input 
+                    type="number"
+                    value={w.usedMeters}
+                    onChange={e => updateWireRow(w.id, { usedMeters: e.target.value })}
+                    className="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-sm bg-white"
+                    placeholder="0"
+                    step="0.1"
+                  />
+                </div>
+                <div className="text-xs text-stone-600 flex flex-col justify-end pb-1">
+                  {stk && used > 0 && (
+                    <>
+                      <div>มูลค่า: <span className="font-bold text-stone-800">{(used * Number(stk.unitCost)).toFixed(2)} ฿</span></div>
+                      <div className="text-[10px] text-stone-400">@ {Number(stk.unitCost).toFixed(2)} ฿/m</div>
+                    </>
+                  )}
+                </div>
+              </div>
+              {shortage > 0 && (
+                <div className="mt-1 text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">
+                  ⚠️ สต๊อกมี {stk.qty} m → ขาด {shortage.toFixed(1)} m
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      
+      {/* === Section 3: Summary === */}
+      <div className="bg-stone-50 border border-stone-300 rounded-xl p-3 mb-4">
+        <div className="text-sm font-bold text-stone-700 mb-2">📊 สรุปการตัดสต๊อก</div>
+        {deductions.length === 0 ? (
+          <div className="text-xs text-stone-500 italic">ยังไม่มีรายการ</div>
+        ) : (
+          <>
+            <div className="space-y-1 mb-2">
+              {deductions.map((d, i) => (
+                <div key={i} className="flex justify-between text-xs">
+                  <span className="text-stone-600 truncate flex-1 mr-2">• {d.name} × {d.qty} {d.unit}</span>
+                  <span className="font-mono text-stone-700 flex-shrink-0">{d.totalCost.toFixed(2)} ฿</span>
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-stone-300 pt-2 flex justify-between items-center">
+              <span className="text-xs text-stone-500">รวม {deductions.length} รายการ</span>
+              <span className="text-base font-bold text-emerald-700">{totalValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} ฿</span>
+            </div>
+          </>
+        )}
+      </div>
+      
+      {/* === Action buttons === */}
+      <div className="grid grid-cols-2 gap-2 sticky bottom-0 bg-white pt-2">
+        <button 
+          onClick={onSkip}
+          className="px-4 py-3 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-xl font-bold text-sm"
+        >
+          ⏭ ข้าม (ปิดงานไม่ตัดสต๊อก)
+        </button>
+        <button 
+          onClick={handleConfirm}
+          className="px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm shadow-md"
+        >
+          ✓ ยืนยันตัดสต๊อก
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+// ============== RESET DATA MODAL ==============
+// ให้ user เลือกได้ว่าจะลบอะไร (ทั้งหมด หรือเฉพาะข้อมูลทดสอบหลังวันที่)
+function ResetDataModal({ jobs, documents, transactions, customers, stock, partners, onClose, onReset }) {
+  const today = new Date().toISOString().split('T')[0];
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  
+  const [mode, setMode] = useState('recent'); // 'recent' | 'all'
+  const [sinceDate, setSinceDate] = useState(sevenDaysAgo);
+  const [targets, setTargets] = useState({
+    jobs: true,
+    documents: true,
+    transactions: true,
+    customers: false,
+    stock: false,
+    partners: false,
+    activity: false,
+    salesCatalog: false,
+  });
+  
+  const toggle = (k) => setTargets({ ...targets, [k]: !targets[k] });
+  
+  // === Preview: how many items will be affected ===
+  // helper: ดึง timestamp จาก id format `prefix-1234567890` (anchored) หรือ field
+  const getEntityTs = (entity, dateField = 'date') => {
+    // Match: prefix-<10-13 digits> ที่ปลาย string เท่านั้น
+    const idMatch = String(entity.id || '').match(/-(\d{10,13})$/);
+    if (idMatch) {
+      const ts = Number(idMatch[1]);
+      // Sanity check: timestamp ต้องอยู่ในช่วง 2010-2050
+      if (ts > 1262304000000 && ts < 2524608000000) return ts;
+      if (ts > 1262304000 && ts < 2524608000) return ts * 1000; // 10-digit (sec)
+    }
+    const ts = new Date(entity[dateField] || entity.createdAt || 0).getTime();
+    return isNaN(ts) ? 0 : ts;
+  };
+  
+  const preview = useMemo(() => {
+    if (mode === 'all') {
+      return {
+        jobs: targets.jobs ? jobs.length : 0,
+        documents: targets.documents ? documents.length : 0,
+        transactions: targets.transactions ? transactions.length : 0,
+        customers: targets.customers ? customers.length : 0,
+        stock: targets.stock ? stock.length : 0,
+        partners: targets.partners ? partners.length : 0,
+      };
+    }
+    // mode === 'recent'
+    const cutoff = new Date(sinceDate).getTime();
+    return {
+      jobs: targets.jobs ? jobs.filter(j => getEntityTs(j, 'date') >= cutoff).length : 0,
+      documents: targets.documents ? documents.filter(d => getEntityTs(d, 'createdAt') >= cutoff).length : 0,
+      transactions: targets.transactions ? transactions.filter(t => getEntityTs(t, 'date') >= cutoff).length : 0,
+      customers: targets.customers ? customers.filter(c => getEntityTs(c, 'createdAt') >= cutoff).length : 0,
+    };
+  }, [mode, sinceDate, targets, jobs, documents, transactions, customers, stock, partners]);
+  
+  const totalItems = Object.values(preview).reduce((s, n) => s + n, 0);
+  const noTargets = !Object.values(targets).some(v => v);
+  
+  const handleConfirm = () => {
+    if (noTargets) {
+      alert('⚠️ กรุณาติ๊กอย่างน้อย 1 รายการ');
+      return;
+    }
+    if (mode === 'all') {
+      const danger = ['stock', 'partners', 'salesCatalog'].some(k => targets[k]);
+      const dangerMsg = danger ? '\n\n⚠️ คุณกำลังจะลบ: สต๊อก/ผู้ลงทุน/แคตตาล็อก ด้วย!\nรายการเหล่านี้กู้คืนไม่ได้' : '';
+      if (!confirm(`🚨 ยืนยันลบทั้งหมด!\n\nจะลบ ${totalItems} รายการที่ติ๊กไว้${dangerMsg}\n\nกด OK เพื่อลบ`)) return;
+    } else {
+      if (totalItems === 0) {
+        alert('ℹ️ ไม่มีข้อมูลที่จะลบ (ไม่มีรายการหลังจากวันที่ ' + sinceDate + ')');
+        return;
+      }
+      if (!confirm(`ยืนยันลบ ${totalItems} รายการที่สร้างหลัง ${sinceDate}?`)) return;
+    }
+    onReset({ mode, sinceDate, targets });
+  };
+  
+  const dangerKeys = ['stock', 'partners', 'salesCatalog'];
+  
+  return (
+    <Modal title="🗑 ล้างข้อมูล" onClose={onClose} wide>
+      {/* === Mode Selector === */}
+      <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-3 mb-4">
+        <div className="text-sm font-bold text-amber-800 mb-2">เลือกโหมดการล้าง</div>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => setMode('recent')}
+            className={`p-3 rounded-xl border-2 text-left transition-all ${mode === 'recent' ? 'border-emerald-500 bg-emerald-50' : 'border-stone-200 bg-white hover:border-stone-300'}`}
+          >
+            <div className="font-bold text-sm flex items-center gap-1">
+              {mode === 'recent' && '✓'} 🧪 เฉพาะข้อมูลทดสอบ
+            </div>
+            <div className="text-[11px] text-stone-500 mt-0.5">ลบของที่สร้างหลังวันที่ที่เลือก</div>
+          </button>
+          <button
+            onClick={() => setMode('all')}
+            className={`p-3 rounded-xl border-2 text-left transition-all ${mode === 'all' ? 'border-red-500 bg-red-50' : 'border-stone-200 bg-white hover:border-stone-300'}`}
+          >
+            <div className="font-bold text-sm flex items-center gap-1">
+              {mode === 'all' && '✓'} 🚨 ลบทั้งหมด
+            </div>
+            <div className="text-[11px] text-stone-500 mt-0.5">เริ่มจาก 0 (ไม่ใช้ตัวกรอง)</div>
+          </button>
+        </div>
+      </div>
+      
+      {/* === Date Picker (recent mode only) === */}
+      {mode === 'recent' && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 mb-4">
+          <label className="text-sm font-bold text-emerald-800 block mb-2">📅 ลบของที่สร้างหลังวันที่:</label>
+          <input
+            type="date"
+            value={sinceDate}
+            max={today}
+            onChange={e => setSinceDate(e.target.value)}
+            className="w-full px-3 py-2 border-2 border-emerald-300 rounded-lg text-sm bg-white"
+          />
+          <div className="text-[11px] text-emerald-700 mt-2">
+            💡 ของที่ <strong>สร้างก่อน</strong> วันที่นี้จะถูกเก็บไว้
+          </div>
+        </div>
+      )}
+      
+      {/* === Targets Checklist === */}
+      <div className="mb-4">
+        <div className="text-sm font-bold text-stone-700 mb-2">ติ๊กรายการที่จะลบ</div>
+        
+        {/* Safe items */}
+        <div className="space-y-2">
+          <label className="flex items-center gap-3 p-3 border-2 border-stone-200 rounded-xl hover:bg-stone-50 cursor-pointer">
+            <input type="checkbox" checked={targets.jobs} onChange={() => toggle('jobs')} className="w-5 h-5 accent-emerald-600 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="font-medium text-stone-800 text-sm">💼 งาน</div>
+              <div className="text-xs text-stone-500">มีทั้งหมด {jobs.length} รายการ {targets.jobs && preview.jobs > 0 && <span className="text-red-600 font-bold">→ จะลบ {preview.jobs} รายการ</span>}</div>
+            </div>
+          </label>
+          
+          <label className="flex items-center gap-3 p-3 border-2 border-stone-200 rounded-xl hover:bg-stone-50 cursor-pointer">
+            <input type="checkbox" checked={targets.documents} onChange={() => toggle('documents')} className="w-5 h-5 accent-emerald-600 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="font-medium text-stone-800 text-sm">📄 เอกสาร (ใบเสนอ/บิล/ใบรับเงิน)</div>
+              <div className="text-xs text-stone-500">มีทั้งหมด {documents.length} รายการ {targets.documents && preview.documents > 0 && <span className="text-red-600 font-bold">→ จะลบ {preview.documents} รายการ</span>}</div>
+            </div>
+          </label>
+          
+          <label className="flex items-center gap-3 p-3 border-2 border-stone-200 rounded-xl hover:bg-stone-50 cursor-pointer">
+            <input type="checkbox" checked={targets.transactions} onChange={() => toggle('transactions')} className="w-5 h-5 accent-emerald-600 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="font-medium text-stone-800 text-sm">💰 รายการการเงิน</div>
+              <div className="text-xs text-stone-500">มีทั้งหมด {transactions.length} รายการ {targets.transactions && preview.transactions > 0 && <span className="text-red-600 font-bold">→ จะลบ {preview.transactions} รายการ</span>}</div>
+            </div>
+          </label>
+          
+          <label className="flex items-center gap-3 p-3 border-2 border-stone-200 rounded-xl hover:bg-stone-50 cursor-pointer">
+            <input type="checkbox" checked={targets.customers} onChange={() => toggle('customers')} className="w-5 h-5 accent-emerald-600 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="font-medium text-stone-800 text-sm">👤 ลูกค้า</div>
+              <div className="text-xs text-stone-500">มีทั้งหมด {customers.length} รายการ {targets.customers && preview.customers > 0 && <span className="text-red-600 font-bold">→ จะลบ {preview.customers} รายการ</span>}</div>
+            </div>
+          </label>
+          
+          {mode === 'all' && (
+            <label className="flex items-center gap-3 p-3 border-2 border-stone-200 rounded-xl hover:bg-stone-50 cursor-pointer">
+              <input type="checkbox" checked={targets.activity} onChange={() => toggle('activity')} className="w-5 h-5 accent-emerald-600 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-stone-800 text-sm">📋 Activity Log</div>
+                <div className="text-xs text-stone-500">ประวัติการแก้ไขทั้งหมด</div>
+              </div>
+            </label>
+          )}
+        </div>
+        
+        {/* Danger zone (all mode only) */}
+        {mode === 'all' && (
+          <div className="mt-4">
+            <div className="text-xs font-bold text-red-700 mb-2 flex items-center gap-1">
+              ⚠️ Danger Zone — เก็บข้อมูลตั้งต้นไม่กลับมา!
+            </div>
+            <div className="space-y-2">
+              {dangerKeys.map(k => {
+                const labels = {
+                  stock: { icon: '📦', label: 'สต๊อก', count: stock.length },
+                  partners: { icon: '🤝', label: 'ผู้ลงทุน (พ่อ/โฟน/อาม)', count: partners.length },
+                  salesCatalog: { icon: '📚', label: 'แคตตาล็อกขาย (Inverter/Panel/Battery)', count: '~30+' },
+                };
+                const info = labels[k];
+                return (
+                  <label key={k} className={`flex items-center gap-3 p-3 border-2 rounded-xl cursor-pointer ${targets[k] ? 'border-red-400 bg-red-50' : 'border-stone-200 hover:bg-stone-50'}`}>
+                    <input type="checkbox" checked={targets[k]} onChange={() => toggle(k)} className="w-5 h-5 accent-red-600 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-stone-800 text-sm">{info.icon} {info.label}</div>
+                      <div className="text-xs text-red-600">มี {info.count} รายการ — ลบแล้วต้องตั้งใหม่</div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {/* === Summary === */}
+      <div className={`border-2 rounded-xl p-3 mb-4 ${mode === 'all' ? 'bg-red-50 border-red-300' : 'bg-emerald-50 border-emerald-300'}`}>
+        <div className="text-sm font-bold mb-1">
+          {mode === 'all' ? '🚨 จะลบทั้งหมด' : '🧪 จะลบเฉพาะข้อมูลทดสอบ'}
+        </div>
+        <div className="text-2xl font-bold text-stone-800">
+          {totalItems.toLocaleString()} รายการ
+        </div>
+        {mode === 'recent' && totalItems === 0 && (
+          <div className="text-xs text-stone-500 mt-1 italic">ไม่มีข้อมูลที่ตรงกับเงื่อนไข</div>
+        )}
+      </div>
+      
+      {/* === Action Buttons === */}
+      <div className="grid grid-cols-2 gap-2 sticky bottom-0 bg-white pt-2">
+        <button 
+          onClick={onClose}
+          className="px-4 py-3 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-xl font-bold text-sm"
+        >
+          ยกเลิก
+        </button>
+        <button 
+          onClick={handleConfirm}
+          disabled={noTargets || (mode === 'recent' && totalItems === 0)}
+          className={`px-4 py-3 text-white rounded-xl font-bold text-sm shadow-md disabled:bg-stone-300 disabled:cursor-not-allowed ${mode === 'all' ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}
+        >
+          {mode === 'all' ? '🚨 ลบทั้งหมด' : '🗑 ลบข้อมูลทดสอบ'}
+        </button>
+      </div>
+    </Modal>
   );
 }
 
@@ -3636,11 +4597,31 @@ function JobModal({ job, partners, stock = [], documents = [], onUpdateStock, on
   const [investments, setInvestments] = useState(form.investments || {});
   const [stockPicker, setStockPicker] = useState(null); // { catId, mode: 'pick' | 'qty', stockId }
   const [pickQty, setPickQty] = useState('');
-  // Track stock movements: { stockId: qtyUsed } - เก็บไว้เพื่อหักสต๊อกตอน save
-  const [stockMovements, setStockMovements] = useState(() => {
-    // ถ้าเป็นการแก้ไขงาน เริ่มจากของที่เคยเบิกแล้วเป็น 0 (ไม่หักซ้ำ)
-    return {};
-  });
+  // Track stock movements: { stockId: qtyUsed } - DELTA เทียบกับตอนเปิดงานครั้งล่าสุด
+  // ตอน save จะหักสต๊อกตาม delta นี้
+  const [stockMovements, setStockMovements] = useState({});
+  
+  // Snapshot ของรายการ stockId ตอนเปิดงาน — ใช้คำนวณ delta เวลา save
+  // (ถ้าเป็นงานใหม่จะเป็น {} → ทุก movement = บวก)
+  // (ถ้าเป็น edit งานเดิม จะเก็บ qty ที่ "เบิกไว้แล้ว" → ลบของเดิมที่ไม่มีจะ refund)
+  const initialStockUsage = useMemo(() => {
+    const usage = {};
+    if (job && job.costsByCategory) {
+      Object.values(job.costsByCategory).forEach(items => {
+        (items || []).forEach(it => {
+          if (it.stockId && it.qtyUsed) {
+            usage[it.stockId] = (usage[it.stockId] || 0) + Number(it.qtyUsed);
+          }
+        });
+      });
+    }
+    return usage;
+  }, []); // เก็บ snapshot ครั้งเดียว ตอน mount
+  
+  // === Auto Stock Deduction (Phase B) ===
+  // เปิด modal ตอนปิดงาน (pending → completed) สำหรับงานที่ link กับใบเสนอ
+  const [showStockDeduction, setShowStockDeduction] = useState(false);
+  const [pendingSaveData, setPendingSaveData] = useState(null); // เก็บ data ระหว่างรอ user ยืนยัน
 
   const update = (f, v) => setForm({...form, [f]: v});
   
@@ -3703,7 +4684,116 @@ function JobModal({ job, partners, stock = [], documents = [], onUpdateStock, on
       return acc;
     }, {});
     
-    // หักสต๊อกตามที่เบิก
+    const finalData = {...form, costsByCategory, investments: cleanInv, totalCost, profit};
+    
+    // === Auto Stock Deduction Trigger ===
+    // เงื่อนไข: 
+    // 1) status เป็น completed
+    // 2) งานเดิมเป็น pending (transition) หรือ งานใหม่ที่ตั้งเป็น completed เลย
+    // 3) มี quotationId (link กับใบเสนอ)
+    // 4) ยังไม่เคยตัดสต๊อก auto (stockDeducted !== true)
+    const wasCompleted = job?.status === 'completed';
+    const isNowCompleted = form.status === 'completed';
+    const justClosedJob = isNowCompleted && !wasCompleted;
+    const hasQuotation = !!form.quotationId;
+    const alreadyDeducted = !!form.stockDeducted;
+    
+    if (justClosedJob && hasQuotation && !alreadyDeducted) {
+      // หา snapshot
+      const quotation = documents.find(d => d.id === form.quotationId);
+      const snap = quotation?.equipmentSnapshot;
+      if (snap) {
+        // เก็บ data ไว้ → เปิด modal → user เลือก → ค่อย finalize
+        setPendingSaveData(finalData);
+        setShowStockDeduction(true);
+        return; // ⛔ หยุดที่นี่ — ให้ modal ทำต่อ
+      }
+    }
+    
+    // === Normal save (ไม่มี auto deduct) ===
+    // หักสต๊อกตามที่เบิก manual (logic เดิม)
+    // stockMovements = delta จากตอนเปิดงาน → หักออกจากสต๊อก
+    if (Object.keys(stockMovements).length > 0 && onUpdateStock) {
+      const newStock = stock.map(s => {
+        if (stockMovements[s.id]) {
+          // Negative movement (refund) จะ + qty, positive จะ -
+          return { ...s, qty: Math.max(0, Number(s.qty) - stockMovements[s.id]) };
+        }
+        return s;
+      });
+      onUpdateStock(newStock);
+    }
+    
+    onSave(finalData);
+  };
+  
+  // === ผู้ใช้ยืนยันการตัดสต๊อก (จาก StockDeductionModal) ===
+  const handleConfirmDeduction = (deductions) => {
+    // รวม deductions auto กับ stockMovements manual
+    const combinedMovements = { ...stockMovements };
+    deductions.forEach(d => {
+      combinedMovements[d.stockId] = (combinedMovements[d.stockId] || 0) + d.qty;
+    });
+    
+    // หักออกจากสต๊อก
+    if (Object.keys(combinedMovements).length > 0 && onUpdateStock) {
+      const newStock = stock.map(s => {
+        if (combinedMovements[s.id]) {
+          return { ...s, qty: Math.max(0, Number(s.qty) - combinedMovements[s.id]) };
+        }
+        return s;
+      });
+      onUpdateStock(newStock);
+    }
+    
+    // เพิ่ม deductionLog เข้า job + flag stockDeducted
+    // และ inject เข้า costsByCategory เพื่อให้ totalCost / profit ถูกต้อง
+    const newCostsByCategory = { ...(pendingSaveData.costsByCategory || {}) };
+    deductions.forEach(d => {
+      const catKey = d.category || 'other';
+      if (!newCostsByCategory[catKey]) newCostsByCategory[catKey] = [];
+      newCostsByCategory[catKey].push({
+        item: `${d.name} × ${d.qty} ${d.unit} (auto จากใบเสนอ)`,
+        amount: d.totalCost,
+        stockId: d.stockId,
+        qtyUsed: d.qty,
+        autoDeducted: true,
+      });
+    });
+    
+    // Recalc totalCost
+    const newTotalCost = Object.values(newCostsByCategory).reduce(
+      (sum, items) => sum + (items || []).reduce((s, it) => s + Number(it.amount || 0), 0), 0
+    );
+    const newProfit = Number(pendingSaveData.salePrice || 0) - newTotalCost;
+    
+    const enriched = {
+      ...pendingSaveData,
+      costsByCategory: newCostsByCategory,
+      totalCost: newTotalCost,
+      profit: newProfit,
+      stockDeducted: true,
+      stockDeductedAt: new Date().toISOString(),
+      deductionLog: deductions.map(d => ({
+        stockId: d.stockId,
+        name: d.name,
+        category: d.category,
+        qty: d.qty,
+        unit: d.unit,
+        unitCost: d.unitCost,
+        totalCost: d.totalCost,
+        ts: new Date().toISOString(),
+      })),
+    };
+    
+    setShowStockDeduction(false);
+    setPendingSaveData(null);
+    onSave(enriched);
+  };
+  
+  // === ผู้ใช้กด "ข้าม" (ปิดงานไม่ตัดสต๊อก) ===
+  const handleSkipDeduction = () => {
+    // หักเฉพาะ manual movements (logic เดิม)
     if (Object.keys(stockMovements).length > 0 && onUpdateStock) {
       const newStock = stock.map(s => {
         if (stockMovements[s.id]) {
@@ -3713,11 +4803,14 @@ function JobModal({ job, partners, stock = [], documents = [], onUpdateStock, on
       });
       onUpdateStock(newStock);
     }
-    
-    onSave({...form, costsByCategory, investments: cleanInv, totalCost, profit});
+    setShowStockDeduction(false);
+    const data = pendingSaveData;
+    setPendingSaveData(null);
+    onSave(data); // ไม่ตั้ง stockDeducted → user สามารถปิดงานครั้งหน้าได้ใหม่
   };
 
   return (
+    <>
     <Modal title={job ? 'แก้ไขงาน' : 'เพิ่มงานใหม่'} onClose={onClose} wide>
       {/* === Quotation Link Badge === */}
       {form.quotationId && (
@@ -4124,6 +5217,30 @@ function JobModal({ job, partners, stock = [], documents = [], onUpdateStock, on
         <Save className="w-4 h-4" /> บันทึกงาน
       </button>
     </Modal>
+    
+    {/* === Stock Deduction Modal (เปิดตอน pending → completed สำหรับงานที่ link ใบเสนอ) === */}
+    {showStockDeduction && pendingSaveData && (() => {
+      const quotation = documents.find(d => d.id === form.quotationId);
+      const snap = quotation?.equipmentSnapshot;
+      // stockId ที่ user เบิก manual ไปแล้วในงานนี้ (กันตัดซ้ำ)
+      const alreadyMovedIds = Object.keys(stockMovements).filter(id => stockMovements[id] > 0);
+      
+      return (
+        <StockDeductionModal
+          snapshot={snap}
+          stock={stock}
+          alreadyMovedIds={alreadyMovedIds}
+          onConfirm={handleConfirmDeduction}
+          onSkip={handleSkipDeduction}
+          onClose={() => {
+            // ปิด modal โดยไม่ทำอะไร = ยกเลิกการบันทึก, return ไป JobModal
+            setShowStockDeduction(false);
+            setPendingSaveData(null);
+          }}
+        />
+      );
+    })()}
+    </>
   );
 }
 
