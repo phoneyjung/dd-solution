@@ -1,5 +1,5 @@
-// D.D. Solution Service Worker v3
-const CACHE_VERSION = 'v3-' + new Date().toISOString().split('T')[0];
+// D.D. Solution Service Worker v7 (Phase B - Auto Stock + Reset + Quick Stats + Default Docs)
+const CACHE_VERSION = 'v7-' + new Date().toISOString().split('T')[0];
 const CACHE_NAME = 'dd-solution-' + CACHE_VERSION;
 const ASSETS = [
   './',
