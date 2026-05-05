@@ -3320,6 +3320,11 @@ function DDSolutionManager({ currentUser, onLogout }) {
             invoice: documents.filter(d => d.type === 'invoice' && getChainStatus(getChainId(d)) === 'active').length,
             'receipt-deposit': documents.filter(d => d.type === 'receipt-deposit' && getChainStatus(getChainId(d)) === 'active').length,
             'receipt-final': documents.filter(d => (d.type === 'receipt-final' || d.type === 'receipt') && getChainStatus(getChainId(d)) === 'active').length,
+            // === Total counts (รวม closed/cancelled) — สำหรับ KPI cards ===
+            quotationAll: documents.filter(d => d.type === 'quotation').length,
+            invoiceAll: documents.filter(d => d.type === 'invoice').length,
+            'receipt-depositAll': documents.filter(d => d.type === 'receipt-deposit').length,
+            'receipt-finalAll': documents.filter(d => d.type === 'receipt-final' || d.type === 'receipt').length,
           };
 
           return (
@@ -3343,25 +3348,25 @@ function DDSolutionManager({ currentUser, onLogout }) {
                   className="bg-white hover:bg-blue-50 border-2 border-blue-200 hover:border-blue-400 rounded-xl p-3 text-center transition-all active:scale-95">
                   <div className="text-2xl mb-1">📄</div>
                   <div className="text-xs font-bold text-blue-700">ใบเสนอราคา</div>
-                  <div className="text-xs text-stone-400 mt-1">{counts.quotation} ฉบับ</div>
+                  <div className="text-xs text-stone-400 mt-1">{counts.quotationAll} ฉบับ</div>
                 </button>
                 <button onClick={() => { setEditingItem(null); setDefaultDocType('invoice'); setShowDocumentModal(true); }}
                   className="bg-white hover:bg-amber-50 border-2 border-amber-200 hover:border-amber-400 rounded-xl p-3 text-center transition-all active:scale-95">
                   <div className="text-2xl mb-1">🧾</div>
                   <div className="text-xs font-bold text-amber-700">ใบแจ้งหนี้</div>
-                  <div className="text-xs text-stone-400 mt-1">{counts.invoice} ฉบับ</div>
+                  <div className="text-xs text-stone-400 mt-1">{counts.invoiceAll} ฉบับ</div>
                 </button>
                 <button onClick={() => { setEditingItem(null); setDefaultDocType('receipt-deposit'); setShowDocumentModal(true); }}
                   className="bg-white hover:bg-cyan-50 border-2 border-cyan-200 hover:border-cyan-400 rounded-xl p-3 text-center transition-all active:scale-95">
                   <div className="text-2xl mb-1">💰</div>
                   <div className="text-xs font-bold text-cyan-700">RC มัดจำ</div>
-                  <div className="text-xs text-stone-400 mt-1">{counts['receipt-deposit']} ฉบับ</div>
+                  <div className="text-xs text-stone-400 mt-1">{counts['receipt-depositAll']} ฉบับ</div>
                 </button>
                 <button onClick={() => { setEditingItem(null); setDefaultDocType('receipt-final'); setShowDocumentModal(true); }}
                   className="bg-white hover:bg-emerald-50 border-2 border-emerald-200 hover:border-emerald-400 rounded-xl p-3 text-center transition-all active:scale-95">
                   <div className="text-2xl mb-1">✅</div>
                   <div className="text-xs font-bold text-emerald-700">RC เต็ม</div>
-                  <div className="text-xs text-stone-400 mt-1">{counts['receipt-final']} ฉบับ</div>
+                  <div className="text-xs text-stone-400 mt-1">{counts['receipt-finalAll']} ฉบับ</div>
                 </button>
               </div>
             </div>

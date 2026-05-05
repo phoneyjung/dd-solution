@@ -1,5 +1,5 @@
-// D.D. Solution Service Worker v9 (Fix: Default Docs jobStatus + customerId)
-const CACHE_VERSION = 'v9-' + new Date().toISOString().split('T')[0];
+// D.D. Solution Service Worker v10 (Fix: KPI counts include closed docs)
+const CACHE_VERSION = 'v10-' + new Date().toISOString().split('T')[0];
 const CACHE_NAME = 'dd-solution-' + CACHE_VERSION;
 const ASSETS = [
   './',
