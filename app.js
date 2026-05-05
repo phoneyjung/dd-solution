@@ -1531,6 +1531,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
         if (!p) await window.storage.set('dd5:partners', JSON.stringify(DEFAULT_PARTNERS), true);
         if (!t) await window.storage.set('dd5:transactions', JSON.stringify(DEFAULT_TRANSACTIONS), true);
         if (!c) await window.storage.set('dd5:customers', JSON.stringify(DEFAULT_CUSTOMERS), true);
+        if (!d && DEFAULT_DOCUMENTS.length > 0) await window.storage.set('dd5:documents', JSON.stringify(DEFAULT_DOCUMENTS), true);
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
     };
@@ -1756,6 +1757,23 @@ function DDSolutionManager({ currentUser, onLogout }) {
     };
     
     try {
+      // === RESTORE DEFAULTS MODE ===
+      if (selections.mode === 'restore') {
+        // ลบ Firebase keys ทั้งหมด → reload → load() จะเอา DEFAULTS กลับมา
+        await Promise.all([
+          window.storage.delete('dd5:jobs', true),
+          window.storage.delete('dd5:stock', true),
+          window.storage.delete('dd5:partners', true),
+          window.storage.delete('dd5:transactions', true),
+          window.storage.delete('dd5:customers', true),
+          window.storage.delete('dd5:documents', true),
+          window.storage.delete('dd5:activity', true),
+          window.storage.delete('dd5:salesCatalog', true),
+        ]);
+        window.location.reload();
+        return;
+      }
+      
       if (selections.mode === 'recent' && selections.sinceDate) {
         // ลบเฉพาะที่ created/date หลังจาก sinceDate
         const cutoff = new Date(selections.sinceDate).getTime();
@@ -1802,6 +1820,11 @@ function DDSolutionManager({ currentUser, onLogout }) {
         }
       } else if (selections.mode === 'all') {
         // ลบทั้งหมด (legacy behavior)
+        const promises = [];
+        if (selections.targets.jobs) promises.push(window.storage.delete('dd5:jobs', true));
+      } else if (selections.mode === 'all') {
+        // ลบทั้งหมด (legacy behavior) — Firebase delete + reload จะโหลด default กลับมา
+        // แต่ documents/activity ไม่มี default save ตอน first load → ต้องลบ key ให้ Firebase ว่างจริง
         const promises = [];
         if (selections.targets.jobs) promises.push(window.storage.delete('dd5:jobs', true));
         if (selections.targets.stock) promises.push(window.storage.delete('dd5:stock', true));
@@ -4507,6 +4530,11 @@ function ResetDataModal({ jobs, documents, transactions, customers, stock, partn
   const noTargets = !Object.values(targets).some(v => v);
   
   const handleConfirm = () => {
+    if (mode === 'restore') {
+      if (!confirm('🔄 โหลดข้อมูลตัวอย่างกลับ?\n\nระบบจะ:\n1. ลบข้อมูล: งาน, เอกสาร, รายการเงิน, ลูกค้า, สต๊อก, ผู้ลงทุน, แคตตาล็อก\n2. โหลดข้อมูลตัวอย่างใหม่ (2 งาน + 6 เอกสาร + สต๊อก default)\n3. Reload หน้าเว็บ\n\nกด OK เพื่อยืนยัน')) return;
+      onReset({ mode: 'restore' });
+      return;
+    }
     if (noTargets) {
       alert('⚠️ กรุณาติ๊กอย่างน้อย 1 รายการ');
       return;
@@ -4532,24 +4560,33 @@ function ResetDataModal({ jobs, documents, transactions, customers, stock, partn
       {/* === Mode Selector === */}
       <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-3 mb-4">
         <div className="text-sm font-bold text-amber-800 mb-2">เลือกโหมดการล้าง</div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <button
             onClick={() => setMode('recent')}
-            className={`p-3 rounded-xl border-2 text-left transition-all ${mode === 'recent' ? 'border-emerald-500 bg-emerald-50' : 'border-stone-200 bg-white hover:border-stone-300'}`}
+            className={`p-2 rounded-xl border-2 text-left transition-all ${mode === 'recent' ? 'border-emerald-500 bg-emerald-50' : 'border-stone-200 bg-white hover:border-stone-300'}`}
           >
-            <div className="font-bold text-sm flex items-center gap-1">
-              {mode === 'recent' && '✓'} 🧪 เฉพาะข้อมูลทดสอบ
+            <div className="font-bold text-xs flex items-center gap-1">
+              {mode === 'recent' && '✓'} 🧪 ข้อมูลทดสอบ
             </div>
-            <div className="text-[11px] text-stone-500 mt-0.5">ลบของที่สร้างหลังวันที่ที่เลือก</div>
+            <div className="text-[10px] text-stone-500 mt-0.5">ลบของที่สร้างหลังวันที่</div>
           </button>
           <button
             onClick={() => setMode('all')}
-            className={`p-3 rounded-xl border-2 text-left transition-all ${mode === 'all' ? 'border-red-500 bg-red-50' : 'border-stone-200 bg-white hover:border-stone-300'}`}
+            className={`p-2 rounded-xl border-2 text-left transition-all ${mode === 'all' ? 'border-red-500 bg-red-50' : 'border-stone-200 bg-white hover:border-stone-300'}`}
           >
-            <div className="font-bold text-sm flex items-center gap-1">
+            <div className="font-bold text-xs flex items-center gap-1">
               {mode === 'all' && '✓'} 🚨 ลบทั้งหมด
             </div>
-            <div className="text-[11px] text-stone-500 mt-0.5">เริ่มจาก 0 (ไม่ใช้ตัวกรอง)</div>
+            <div className="text-[10px] text-stone-500 mt-0.5">เริ่มจาก 0</div>
+          </button>
+          <button
+            onClick={() => setMode('restore')}
+            className={`p-2 rounded-xl border-2 text-left transition-all ${mode === 'restore' ? 'border-blue-500 bg-blue-50' : 'border-stone-200 bg-white hover:border-stone-300'}`}
+          >
+            <div className="font-bold text-xs flex items-center gap-1">
+              {mode === 'restore' && '✓'} 🔄 โหลด Default
+            </div>
+            <div className="text-[10px] text-stone-500 mt-0.5">ลบ + โหลดตัวอย่างใหม่</div>
           </button>
         </div>
       </div>
@@ -4571,7 +4608,33 @@ function ResetDataModal({ jobs, documents, transactions, customers, stock, partn
         </div>
       )}
       
-      {/* === Targets Checklist === */}
+      {/* === Restore Default Info === */}
+      {mode === 'restore' && (
+        <div className="bg-blue-50 border-2 border-blue-300 rounded-xl p-4 mb-4">
+          <div className="text-sm font-bold text-blue-800 mb-2 flex items-center gap-1">
+            🔄 โหลดข้อมูลตัวอย่าง
+          </div>
+          <div className="text-xs text-blue-700 space-y-2">
+            <p>เหมาะกับเริ่มต้นใช้งานครั้งแรก หรือทดสอบฟีเจอร์ใหม่</p>
+            <div className="bg-white/60 rounded-lg p-2 space-y-1 text-stone-700">
+              <div className="font-bold text-blue-800 mb-1">ระบบจะโหลดข้อมูลตัวอย่างกลับมา:</div>
+              <div>📋 <strong>2 งานตัวอย่าง</strong> (พี่เกรียงศักดิ์ + งานที่ 2)</div>
+              <div>📄 <strong>6 เอกสาร</strong> (QT/INV/RC ของแต่ละงาน)</div>
+              <div>📦 <strong>สต๊อกเริ่มต้น</strong> (แผง/inv/แบต/สาย)</div>
+              <div>🤝 <strong>ผู้ลงทุน 3 คน</strong> (อาม/โฟน/พ่อ)</div>
+              <div>📚 <strong>แคตตาล็อกขายเริ่มต้น</strong></div>
+              <div>💰 <strong>รายการเงินตัวอย่าง</strong></div>
+            </div>
+            <div className="bg-amber-50 border border-amber-300 rounded-lg p-2 text-stone-700">
+              <div className="font-bold text-amber-800">⚠️ ข้อมูลปัจจุบันจะถูกลบทั้งหมด!</div>
+              <div>กรุณา Backup ก่อนถ้าจำเป็น</div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* === Targets Checklist (ซ่อนใน restore mode) === */}
+      {mode !== 'restore' && (
       <div className="mb-4">
         <div className="text-sm font-bold text-stone-700 mb-2">ติ๊กรายการที่จะลบ</div>
         
@@ -4648,8 +4711,10 @@ function ResetDataModal({ jobs, documents, transactions, customers, stock, partn
           </div>
         )}
       </div>
+      )}
       
-      {/* === Summary === */}
+      {/* === Summary (hide in restore mode) === */}
+      {mode !== 'restore' && (
       <div className={`border-2 rounded-xl p-3 mb-4 ${mode === 'all' ? 'bg-red-50 border-red-300' : 'bg-emerald-50 border-emerald-300'}`}>
         <div className="text-sm font-bold mb-1">
           {mode === 'all' ? '🚨 จะลบทั้งหมด' : '🧪 จะลบเฉพาะข้อมูลทดสอบ'}
@@ -4661,6 +4726,7 @@ function ResetDataModal({ jobs, documents, transactions, customers, stock, partn
           <div className="text-xs text-stone-500 mt-1 italic">ไม่มีข้อมูลที่ตรงกับเงื่อนไข</div>
         )}
       </div>
+      )}
       
       {/* === Action Buttons === */}
       <div className="grid grid-cols-2 gap-2 sticky bottom-0 bg-white pt-2">
@@ -4672,10 +4738,16 @@ function ResetDataModal({ jobs, documents, transactions, customers, stock, partn
         </button>
         <button 
           onClick={handleConfirm}
-          disabled={noTargets || (mode === 'recent' && totalItems === 0)}
-          className={`px-4 py-3 text-white rounded-xl font-bold text-sm shadow-md disabled:bg-stone-300 disabled:cursor-not-allowed ${mode === 'all' ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}
+          disabled={mode !== 'restore' && (noTargets || (mode === 'recent' && totalItems === 0))}
+          className={`px-4 py-3 text-white rounded-xl font-bold text-sm shadow-md disabled:bg-stone-300 disabled:cursor-not-allowed ${
+            mode === 'all' ? 'bg-red-600 hover:bg-red-700' 
+            : mode === 'restore' ? 'bg-blue-600 hover:bg-blue-700'
+            : 'bg-emerald-600 hover:bg-emerald-700'
+          }`}
         >
-          {mode === 'all' ? '🚨 ลบทั้งหมด' : '🗑 ลบข้อมูลทดสอบ'}
+          {mode === 'all' ? '🚨 ลบทั้งหมด' 
+            : mode === 'restore' ? '🔄 โหลด Default'
+            : '🗑 ลบข้อมูลทดสอบ'}
         </button>
       </div>
     </Modal>
