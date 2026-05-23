@@ -2509,6 +2509,130 @@ function DDSolutionManager({ currentUser, onLogout }) {
                 </div>
               </div>
             </div>
+
+            {/* === 🔧 Data Health Check (Migration) === */}
+            {(() => {
+              // ตรวจสอบ data issues
+              const issuesCapitalAsCost = transactions.filter(t => 
+                t.type === 'expense' && 
+                t.category === 'ต้นทุนงาน' && 
+                t.partnerId && 
+                (t.description.includes('ทุน') || t.description.includes('ค่าใช้จ่าย'))
+              );
+              
+              const issuesStockUse = transactions.filter(t => 
+                t.type === 'expense' && t.category === 'เบิกสต๊อก'
+              );
+              
+              const hasIssues = issuesCapitalAsCost.length > 0 || issuesStockUse.length > 0;
+              if (!hasIssues) return null;
+              
+              return (
+                <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4">
+                  <div className="flex items-start gap-3 mb-3">
+                    <AlertCircle className="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h3 className="font-bold text-amber-900 mb-1">🔧 ตรวจพบข้อมูลที่ควรแก้</h3>
+                      <p className="text-xs text-amber-800">
+                        ข้อมูลบางส่วนถูกบันทึกแบบเก่า ทำให้ตัวเลขใน "เงินสด" ไม่ตรงกับ Dashboard
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {issuesCapitalAsCost.length > 0 && (
+                    <div className="bg-white rounded-xl p-3 mb-2 border border-amber-200">
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div>
+                          <div className="font-bold text-sm text-stone-800">⚠️ "ทุน X" ถูกบันทึกเป็นรายจ่ายอย่างเดียว</div>
+                          <div className="text-xs text-stone-600 mt-1">
+                            พบ <strong>{issuesCapitalAsCost.length}</strong> รายการ ที่หุ้นส่วนใส่เงินซื้อของให้บริษัท แต่ระบบนับเป็น "ต้นทุนงาน" อย่างเดียว
+                            <br />→ ที่ถูก: ต้องสร้าง <strong>+income (เพิ่มทุน)</strong> และ <strong>-expense (ต้นทุนงาน)</strong> คู่กัน
+                          </div>
+                        </div>
+                      </div>
+                      <details className="mb-2">
+                        <summary className="text-xs text-amber-700 cursor-pointer hover:underline">ดูรายการที่จะแก้ ({issuesCapitalAsCost.length})</summary>
+                        <div className="mt-2 space-y-1 max-h-40 overflow-y-auto">
+                          {issuesCapitalAsCost.map(t => (
+                            <div key={t.id} className="text-xs text-stone-600 flex justify-between gap-2">
+                              <span className="truncate">{t.description}</span>
+                              <span className="font-mono">-{Number(t.amount).toLocaleString()} ฿</span>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                      <button
+                        onClick={() => {
+                          if (!window.confirm(`จะแยก ${issuesCapitalAsCost.length} รายการ "ทุน X" ออกเป็น 2 transactions:\n\n` +
+                            `1. + เพิ่มทุน (income) — เงินหุ้นส่วนเข้าบริษัท\n` +
+                            `2. - ต้นทุนงาน (expense) — บริษัทจ่ายค่าของ\n\n` +
+                            `ผลลัพธ์: "เงินสด" จะตรงกับ Dashboard\n\nดำเนินการ?`)) return;
+                          
+                          const newTxs = [...transactions];
+                          issuesCapitalAsCost.forEach(t => {
+                            // เพิ่ม income (เพิ่มทุน) คู่กับ expense เดิม
+                            const partner = partners.find(p => p.id === t.partnerId);
+                            const incomeTx = {
+                              id: `t-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+                              date: t.date,
+                              type: 'income',
+                              category: 'เพิ่มทุน',
+                              amount: t.amount,
+                              description: `เพิ่มทุน ${partner?.name || ''} (สำหรับ ${t.description})`,
+                              jobId: t.jobId,
+                              partnerId: t.partnerId,
+                              _migration: 'capital-split',
+                            };
+                            newTxs.push(incomeTx);
+                          });
+                          saveTransactions(newTxs, 'add', 
+                            `🔧 Migration: แยก ${issuesCapitalAsCost.length} รายการ "ทุน" เป็น income+expense`);
+                          alert(`✅ แก้เรียบร้อย!\n\nเพิ่ม ${issuesCapitalAsCost.length} รายการ "เพิ่มทุน" คู่กับรายการเดิม\n\nลองดู Tab "💵 เงินสด" ตอนนี้น่าจะตรงกับ Dashboard แล้ว`);
+                        }}
+                        className="w-full bg-amber-500 hover:bg-amber-600 text-white py-2 rounded-lg text-sm font-medium"
+                      >
+                        🔧 แยกเป็น income + expense ({issuesCapitalAsCost.length} รายการ)
+                      </button>
+                    </div>
+                  )}
+                  
+                  {issuesStockUse.length > 0 && (
+                    <div className="bg-white rounded-xl p-3 border border-amber-200">
+                      <div className="font-bold text-sm text-stone-800 mb-2">⚠️ "เบิกสต๊อก" ถูกนับซ้ำ</div>
+                      <div className="text-xs text-stone-600 mb-2">
+                        พบ <strong>{issuesStockUse.length}</strong> รายการ "เบิกสต๊อก" — ของถูกซื้อตอนเข้าสต๊อกแล้ว ไม่ควรนับ Cash Flow อีก
+                        <br />→ ทางออก: <strong>ลบทิ้ง</strong> (สต๊อกหักลงเองอยู่แล้วเวลาใช้)
+                      </div>
+                      <details className="mb-2">
+                        <summary className="text-xs text-amber-700 cursor-pointer hover:underline">ดูรายการ ({issuesStockUse.length})</summary>
+                        <div className="mt-2 space-y-1 max-h-40 overflow-y-auto">
+                          {issuesStockUse.map(t => (
+                            <div key={t.id} className="text-xs text-stone-600 flex justify-between gap-2">
+                              <span className="truncate">{t.description}</span>
+                              <span className="font-mono">-{Number(t.amount).toLocaleString()} ฿</span>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                      <button
+                        onClick={() => {
+                          if (!window.confirm(`ลบ ${issuesStockUse.length} รายการ "เบิกสต๊อก" ทิ้ง?\n\n(การลบนี้ไม่กระทบกับสต๊อก)\n\nผลลัพธ์: Cash Flow ตรงกับ Dashboard`)) return;
+                          
+                          const idsToDelete = new Set(issuesStockUse.map(t => t.id));
+                          const newTxs = transactions.filter(t => !idsToDelete.has(t.id));
+                          saveTransactions(newTxs, 'delete', 
+                            `🔧 Migration: ลบ ${issuesStockUse.length} รายการ "เบิกสต๊อก" (double-count)`);
+                          alert(`✅ ลบเรียบร้อย!\n\nลบ ${issuesStockUse.length} รายการ "เบิกสต๊อก" ที่นับซ้ำ`);
+                        }}
+                        className="w-full bg-rose-500 hover:bg-rose-600 text-white py-2 rounded-lg text-sm font-medium"
+                      >
+                        🗑️ ลบ "เบิกสต๊อก" ({issuesStockUse.length} รายการ)
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
           );
         })()}
@@ -3388,11 +3512,30 @@ function DDSolutionManager({ currentUser, onLogout }) {
       {showStockModal && (
         <StockModal item={editingItem}
           onClose={() => { setShowStockModal(false); setEditingItem(null); }}
-          onSave={(data) => {
-            if (editingItem) {
+          onSave={(data, txOptions) => {
+            const isEdit = !!editingItem;
+            if (isEdit) {
               saveStock(stock.map(s => s.id === editingItem.id ? data : s), 'edit', `แก้ไข: ${data.name}`);
             } else {
-              saveStock([...stock, { ...data, id: `stk-${Date.now()}` }], 'add', `เพิ่ม: ${data.name} (${data.qty} ${data.unit})`);
+              const newStockId = `stk-${Date.now()}`;
+              saveStock([...stock, { ...data, id: newStockId }], 'add', `เพิ่ม: ${data.name} (${data.qty} ${data.unit})`);
+              
+              // ถ้าเลือก "บันทึกเป็นรายการการเงินด้วย" → สร้าง transaction
+              if (txOptions && txOptions.createTransaction) {
+                const totalCost = Number(data.qty || 0) * Number(data.unitCost || 0);
+                const newTx = {
+                  id: `t-${Date.now()}`,
+                  date: data.purchaseDate || new Date().toISOString().split('T')[0],
+                  type: 'expense',
+                  category: 'ต้นทุนสต๊อก',
+                  amount: totalCost,
+                  description: `ซื้อ ${data.name} ${data.qty} ${data.unit}${txOptions.note ? ' - ' + txOptions.note : ''}`,
+                  jobId: '',
+                  partnerId: txOptions.partnerId || data.partner || '',
+                };
+                saveTransactions([...transactions, newTx], 'add',
+                  `บันทึกซื้อ ${data.name} ${totalCost.toLocaleString()} ฿ เข้ารายการการเงิน`);
+              }
             }
             setShowStockModal(false); setEditingItem(null);
           }}
@@ -4403,7 +4546,51 @@ function StockModal({ item, onClose, onSave }) {
         </div>
       )}
 
-      <button onClick={() => onSave(form)} className="w-full bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-xl font-medium mt-4 flex items-center justify-center gap-2">
+      {/* === Auto-create Transaction (เฉพาะตอนเพิ่มใหม่) === */}
+      {!item && Number(form.qty) > 0 && Number(form.unitCost) > 0 && (
+        <div className="bg-gradient-to-br from-blue-50 to-cyan-50 border border-blue-200 rounded-xl p-3 my-3">
+          <label className="flex items-center gap-2 cursor-pointer mb-2">
+            <input type="checkbox" 
+              checked={form.createTransaction !== false} 
+              onChange={e => update('createTransaction', e.target.checked)}
+              className="w-5 h-5 rounded text-blue-500" />
+            <span className="text-sm font-bold text-blue-700">
+              💰 บันทึกเป็นรายการการเงินด้วย
+            </span>
+          </label>
+          {form.createTransaction !== false && (
+            <div className="pl-7 space-y-2">
+              <div className="text-xs text-blue-600">
+                ระบบจะสร้างรายการ <strong>"ต้นทุนสต๊อก"</strong> มูลค่า{' '}
+                <strong>{(Number(form.qty || 0) * Number(form.unitCost || 0)).toLocaleString(undefined, {maximumFractionDigits: 2})} ฿</strong>{' '}
+                ในรายรับ-รายจ่าย
+              </div>
+              <Field label="ใครเป็นคนจ่าย">
+                <select value={form.txPartnerId || ''} onChange={e => update('txPartnerId', e.target.value)} className={inputCls}>
+                  <option value="">-- เลือก --</option>
+                  <option value="p-aam">อาม</option>
+                  <option value="p-phone">โฟน</option>
+                  <option value="p-pa">พ่อ</option>
+                  <option value="company">บริษัท (กำไรสะสม)</option>
+                </select>
+              </Field>
+              <Field label="หมายเหตุ"><input value={form.txNote || ''} onChange={e => update('txNote', e.target.value)} className={inputCls} placeholder="เช่น ตุนไว้ขาย / ของสำหรับงาน X" /></Field>
+            </div>
+          )}
+        </div>
+      )}
+
+      <button onClick={() => {
+        // ส่ง txOptions ออกไปด้วย (ถ้าเลือก)
+        const txOptions = (!item && form.createTransaction !== false && Number(form.qty) > 0 && Number(form.unitCost) > 0) ? {
+          createTransaction: true,
+          partnerId: form.txPartnerId === 'company' ? '' : form.txPartnerId,
+          note: form.txNote || '',
+        } : null;
+        // ลบ field ชั่วคราวออกก่อน save
+        const {createTransaction, txPartnerId, txNote, ...cleanData} = form;
+        onSave(cleanData, txOptions);
+      }} className="w-full bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-xl font-medium mt-4 flex items-center justify-center gap-2">
         <Save className="w-4 h-4" /> บันทึก
       </button>
     </Modal>
