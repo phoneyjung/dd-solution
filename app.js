@@ -1094,82 +1094,89 @@ function migrateTransactions(transactions) {
     changes.push(`ลบ "เบิกสต๊อก" ${beforeLen - txs.length} รายการ`);
   }
   
-  // 2. หา expense "ต้นทุนงาน" ที่มี partnerId + ขึ้นต้น "ทุน" → เพิ่ม income "เพิ่มทุน" คู่
+  // 2. Deduplicate: ลบ income "เพิ่มทุน" ที่ซ้ำ (ผูก partnerId + jobId + amount เดียวกัน)
+  // เก็บแค่ตัวแรก
+  const capitalKeys = new Set();
+  const beforeDedup = txs.length;
+  txs = txs.filter(t => {
+    if (t.type === 'income' && (t.category === 'เพิ่มทุน' || t.category === 'ทุน')) {
+      const key = `${t.partnerId}|${t.jobId || ''}|${Number(t.amount).toFixed(2)}`;
+      if (capitalKeys.has(key)) {
+        return false; // ซ้ำ - ลบ
+      }
+      capitalKeys.add(key);
+    }
+    return true;
+  });
+  if (txs.length < beforeDedup) {
+    changes.push(`ลบ "เพิ่มทุน" ซ้ำ ${beforeDedup - txs.length} รายการ`);
+  }
+  
+  // 3. หา expense "ต้นทุนงาน" ที่มี partnerId + ขึ้นต้น "ทุน" → เพิ่ม income "เพิ่มทุน" คู่ (ถ้ายังไม่มี)
   const issuesCapitalAsCost = txs.filter(t => 
     t.type === 'expense' && 
     t.category === 'ต้นทุนงาน' && 
     t.partnerId && 
-    (t.description.includes('ทุน') || t.description.includes('ค่าใช้จ่าย')) &&
-    !t._migrationFor  // ไม่ใช่ tx ที่ migration สร้างขึ้น
+    (t.description.includes('ทุน') || t.description.includes('ค่าใช้จ่าย'))
   );
   
   let addedCapital = 0;
   issuesCapitalAsCost.forEach(t => {
-    // เช็คว่ามี income "เพิ่มทุน" คู่กับ tx นี้แล้วหรือไม่
-    const hasMatchingIncome = txs.some(t2 =>
-      t2.type === 'income' &&
-      (t2.category === 'เพิ่มทุน' || t2.category === 'ทุน') &&
-      t2.partnerId === t.partnerId &&
-      t2.jobId === t.jobId &&
-      Math.abs(Number(t2.amount) - Number(t.amount)) < 1 &&
-      (t2._migrationFor === t.id || t2._migrationFor === 'capital-split')
-    );
+    // เช็คว่ามี income "เพิ่มทุน" คู่กัน (partnerId + jobId + amount) แล้วหรือไม่
+    const key = `${t.partnerId}|${t.jobId || ''}|${Number(t.amount).toFixed(2)}`;
+    if (capitalKeys.has(key)) return; // มีคู่แล้ว
     
-    if (!hasMatchingIncome) {
-      txs.push({
-        id: `t-mig-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        date: t.date,
-        type: 'income',
-        category: 'เพิ่มทุน',
-        amount: t.amount,
-        description: `เพิ่มทุน (auto-mig: ${t.description})`,
-        jobId: t.jobId,
-        partnerId: t.partnerId,
-        _migrationFor: t.id,
-      });
-      addedCapital++;
-    }
+    txs.push({
+      id: `t-mig-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      date: t.date,
+      type: 'income',
+      category: 'เพิ่มทุน',
+      amount: t.amount,
+      description: `เพิ่มทุน ${t.description}`,
+      jobId: t.jobId,
+      partnerId: t.partnerId,
+    });
+    capitalKeys.add(key);
+    addedCapital++;
   });
   if (addedCapital > 0) {
-    changes.push(`เพิ่ม "เพิ่มทุน" คู่กับ "ทุน X" จำนวน ${addedCapital} รายการ`);
+    changes.push(`เพิ่ม "เพิ่มทุน" คู่กับ "ทุน X" ${addedCapital} รายการ`);
   }
   
-  // 3. หา "ต้นทุนสต๊อก" ที่มี partnerId แต่ไม่มี income "เพิ่มทุน" คู่
+  // 4. หา "ต้นทุนสต๊อก" ที่มี partnerId → เพิ่ม income "เพิ่มทุน" คู่ (ถ้ายังไม่มี)
   const issuesStockCapital = txs.filter(t =>
     t.type === 'expense' &&
     t.category === 'ต้นทุนสต๊อก' &&
-    t.partnerId &&
-    !t._migrationFor
+    t.partnerId
   );
   
   let addedStockCapital = 0;
   issuesStockCapital.forEach(t => {
-    const hasMatchingIncome = txs.some(t2 =>
-      t2.type === 'income' &&
-      (t2.category === 'เพิ่มทุน' || t2.category === 'ทุน') &&
-      t2.partnerId === t.partnerId &&
-      !t2.jobId &&
-      Math.abs(Number(t2.amount) - Number(t.amount)) < 1
-    );
+    const key = `${t.partnerId}||${Number(t.amount).toFixed(2)}`;
+    if (capitalKeys.has(key)) return;
     
-    if (!hasMatchingIncome) {
-      txs.push({
-        id: `t-mig-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        date: t.date,
-        type: 'income',
-        category: 'เพิ่มทุน',
-        amount: t.amount,
-        description: `เพิ่มทุน (auto-mig: ${t.description})`,
-        jobId: '',
-        partnerId: t.partnerId,
-        _migrationFor: t.id,
-      });
-      addedStockCapital++;
-    }
+    txs.push({
+      id: `t-mig-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      date: t.date,
+      type: 'income',
+      category: 'เพิ่มทุน',
+      amount: t.amount,
+      description: `เพิ่มทุน ${t.description}`,
+      jobId: '',
+      partnerId: t.partnerId,
+    });
+    capitalKeys.add(key);
+    addedStockCapital++;
   });
   if (addedStockCapital > 0) {
     changes.push(`เพิ่ม "เพิ่มทุน" คู่กับซื้อสต๊อก ${addedStockCapital} รายการ`);
   }
+  
+  // 5. ลบ flags `_migration*` ออก (clean up)
+  txs = txs.map(t => {
+    const { _migration, _migrationFor, ...rest } = t;
+    return rest;
+  });
   
   return {
     transactions: txs,
