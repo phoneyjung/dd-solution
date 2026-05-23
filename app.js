@@ -367,20 +367,48 @@ const DEFAULT_JOBS = [
 ];
 
 const DEFAULT_TRANSACTIONS = [
-  // งานที่ 1
+  // ========================================
+  // งานที่ 1 - พี่เกรียงศักดิ์
+  // ========================================
+  // รายได้จากลูกค้า
   { id: 't-1', date: '2026-04-08', type: 'income', category: 'รายได้จากงาน', amount: 108000, description: 'งานพี่เกรียงศักดิ์ - 5kW Hybrid', jobId: 'job-1', partnerId: '' },
-  { id: 't-2', date: '2026-04-08', type: 'expense', category: 'ต้นทุนงาน', amount: 55447.20, description: 'ทุนอาม งานที่ 1', jobId: 'job-1', partnerId: 'p-aam' },
-  { id: 't-3', date: '2026-04-08', type: 'expense', category: 'ต้นทุนงาน', amount: 33500, description: 'ทุนโฟน งานที่ 1 (Inverter 5kW)', jobId: 'job-1', partnerId: 'p-phone' },
-  { id: 't-4', date: '2026-04-08', type: 'expense', category: 'ต้นทุนงาน', amount: 8870, description: 'ทุนพ่อ งานที่ 1 (สาย+ตู้+ค่าแรง)', jobId: 'job-1', partnerId: 'p-pa' },
-  // ซื้อสต๊อก (Longi) - ใช้เงินบริษัท ไม่ใช่ของอาม
+  
+  // ทุนหุ้นส่วน (income) - หุ้นส่วนใส่เงินส่วนตัวซื้อของให้บริษัท
+  { id: 't-c1a', date: '2026-04-08', type: 'income', category: 'เพิ่มทุน', amount: 55447.20, description: 'อาม ลงทุน งาน 1', jobId: 'job-1', partnerId: 'p-aam' },
+  { id: 't-c1b', date: '2026-04-08', type: 'income', category: 'เพิ่มทุน', amount: 33500, description: 'โฟน ลงทุน งาน 1 (Inverter 5kW)', jobId: 'job-1', partnerId: 'p-phone' },
+  { id: 't-c1c', date: '2026-04-08', type: 'income', category: 'เพิ่มทุน', amount: 8870, description: 'พ่อ ลงทุน งาน 1 (สาย+ตู้+ค่าแรง)', jobId: 'job-1', partnerId: 'p-pa' },
+  
+  // ต้นทุนงาน (expense) - บริษัทจ่ายค่าของ
+  { id: 't-2', date: '2026-04-08', type: 'expense', category: 'ต้นทุนงาน', amount: 55447.20, description: 'ค่าของ+ค่าแรง งาน 1 (อาม)', jobId: 'job-1', partnerId: 'p-aam' },
+  { id: 't-3', date: '2026-04-08', type: 'expense', category: 'ต้นทุนงาน', amount: 33500, description: 'ค่าของ งาน 1 (Inverter โฟน)', jobId: 'job-1', partnerId: 'p-phone' },
+  { id: 't-4', date: '2026-04-08', type: 'expense', category: 'ต้นทุนงาน', amount: 8870, description: 'ค่าของ+ค่าแรง งาน 1 (พ่อ)', jobId: 'job-1', partnerId: 'p-pa' },
+  
+  // ========================================
+  // สต๊อก - ซื้อของตุน
+  // ========================================
+  // ซื้อ Longi 36 แผ่น - บริษัทจ่าย (เงินจากกำไรงาน 1 + ทุน)
   { id: 't-5', date: '2026-04-08', type: 'expense', category: 'ต้นทุนสต๊อก', amount: 104796, description: 'ซื้อแผง Longi 640W × 36 แผ่น (เงินจากกำไรงาน 1+ทุน)', jobId: '', partnerId: '' },
-  // ซื้อสต๊อก Inverter 10kW - โฟนซื้อ
-  { id: 't-6', date: '2026-04-26', type: 'expense', category: 'ต้นทุนสต๊อก', amount: 59000, description: 'โฟนซื้อ Inverter Hybrid 10kW (ตุนไว้)', jobId: '', partnerId: 'p-phone' },
-  // งานที่ 2
+  
+  // โฟนซื้อ Inverter Hybrid 10kW ตุนไว้ - เพิ่มทุน + ซื้อของ
+  { id: 't-c2a', date: '2026-04-26', type: 'income', category: 'เพิ่มทุน', amount: 59000, description: 'โฟน ลงทุน (ซื้อ Inverter Hybrid 10kW ตุน)', jobId: '', partnerId: 'p-phone' },
+  { id: 't-6', date: '2026-04-26', type: 'expense', category: 'ต้นทุนสต๊อก', amount: 59000, description: 'ซื้อ Inverter Hybrid 10kW ตุน (โฟน)', jobId: '', partnerId: 'p-phone' },
+  
+  // ========================================
+  // งานที่ 2 - หลักสี่
+  // ========================================
+  // รายได้จากลูกค้า
   { id: 't-7', date: '2026-05-02', type: 'income', category: 'รายได้จากงาน', amount: 190000, description: 'งานที่ 2 - 5kW Hybrid + แบต 16kW', jobId: 'job-2', partnerId: '' },
-  { id: 't-8', date: '2026-05-02', type: 'expense', category: 'ต้นทุนงาน', amount: 127460, description: 'ทุนอาม งานที่ 2 (Inverter Deye+แบต+อื่นๆ)', jobId: 'job-2', partnerId: 'p-aam' },
-  { id: 't-9', date: '2026-05-02', type: 'expense', category: 'ต้นทุนงาน', amount: 3200, description: 'ทุนพ่อ งานที่ 2 (ค่าช่าง 1,700 + น้ำมัน 1,000 + ค่าข้าว 500)', jobId: 'job-2', partnerId: 'p-pa' },
-  { id: 't-10', date: '2026-05-02', type: 'expense', category: 'เบิกสต๊อก', amount: 26199, description: 'เบิกแผง Longi 9 แผ่นจากสต๊อก', jobId: 'job-2', partnerId: '' },
+  
+  // ทุนหุ้นส่วน (income)
+  { id: 't-c3a', date: '2026-05-02', type: 'income', category: 'เพิ่มทุน', amount: 127460, description: 'อาม ลงทุน งาน 2 (Inverter Deye+แบต+อื่นๆ)', jobId: 'job-2', partnerId: 'p-aam' },
+  { id: 't-c3b', date: '2026-05-02', type: 'income', category: 'เพิ่มทุน', amount: 3200, description: 'พ่อ ลงทุน งาน 2 (ค่าช่าง+น้ำมัน+ข้าว)', jobId: 'job-2', partnerId: 'p-pa' },
+  
+  // ต้นทุนงาน (expense)
+  { id: 't-8', date: '2026-05-02', type: 'expense', category: 'ต้นทุนงาน', amount: 127460, description: 'ค่าของ งาน 2 (Inverter Deye+แบต+อื่นๆ)', jobId: 'job-2', partnerId: 'p-aam' },
+  { id: 't-9', date: '2026-05-02', type: 'expense', category: 'ต้นทุนงาน', amount: 3200, description: 'ค่าช่าง+น้ำมัน+ข้าว งาน 2 (พ่อ)', jobId: 'job-2', partnerId: 'p-pa' },
+  
+  // Longi 9 แผ่นจากสต๊อก - ใช้ของในสต๊อก ไม่ใช่ Cash transaction
+  // (ไม่นับ "เบิกสต๊อก" เป็น expense - ของซื้อจ่ายไปแล้วตอนเข้าสต๊อก)
 ];
 
 const DEFAULT_CUSTOMERS = [
