@@ -1076,6 +1076,108 @@ function getDocTypeInfo(type) {
 }
 
 // Migration: เพิ่ม jobChainId, jobStatus ให้เอกสารเก่า
+// ============== Auto-Migration: Transactions ==============
+// แก้ปัญหา data ที่ logic ไม่ถูก:
+// 1. "ทุน X" ถูกบันทึกเป็น expense 'ต้นทุนงาน' อย่างเดียว (ขาด income 'เพิ่มทุน' คู่)
+// 2. "เบิกสต๊อก" ถูกนับเป็น expense (double-count)
+// 3. ซื้อสต๊อกที่มี partnerId แต่ไม่มี income 'เพิ่มทุน' คู่
+function migrateTransactions(transactions) {
+  if (!Array.isArray(transactions)) return { transactions: [], changed: false, summary: '' };
+  
+  let txs = [...transactions];
+  let changes = [];
+  
+  // 1. ลบ "เบิกสต๊อก" (double-count)
+  const beforeLen = txs.length;
+  txs = txs.filter(t => !(t.type === 'expense' && t.category === 'เบิกสต๊อก'));
+  if (txs.length < beforeLen) {
+    changes.push(`ลบ "เบิกสต๊อก" ${beforeLen - txs.length} รายการ`);
+  }
+  
+  // 2. หา expense "ต้นทุนงาน" ที่มี partnerId + ขึ้นต้น "ทุน" → เพิ่ม income "เพิ่มทุน" คู่
+  const issuesCapitalAsCost = txs.filter(t => 
+    t.type === 'expense' && 
+    t.category === 'ต้นทุนงาน' && 
+    t.partnerId && 
+    (t.description.includes('ทุน') || t.description.includes('ค่าใช้จ่าย')) &&
+    !t._migrationFor  // ไม่ใช่ tx ที่ migration สร้างขึ้น
+  );
+  
+  let addedCapital = 0;
+  issuesCapitalAsCost.forEach(t => {
+    // เช็คว่ามี income "เพิ่มทุน" คู่กับ tx นี้แล้วหรือไม่
+    const hasMatchingIncome = txs.some(t2 =>
+      t2.type === 'income' &&
+      (t2.category === 'เพิ่มทุน' || t2.category === 'ทุน') &&
+      t2.partnerId === t.partnerId &&
+      t2.jobId === t.jobId &&
+      Math.abs(Number(t2.amount) - Number(t.amount)) < 1 &&
+      (t2._migrationFor === t.id || t2._migrationFor === 'capital-split')
+    );
+    
+    if (!hasMatchingIncome) {
+      txs.push({
+        id: `t-mig-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        date: t.date,
+        type: 'income',
+        category: 'เพิ่มทุน',
+        amount: t.amount,
+        description: `เพิ่มทุน (auto-mig: ${t.description})`,
+        jobId: t.jobId,
+        partnerId: t.partnerId,
+        _migrationFor: t.id,
+      });
+      addedCapital++;
+    }
+  });
+  if (addedCapital > 0) {
+    changes.push(`เพิ่ม "เพิ่มทุน" คู่กับ "ทุน X" จำนวน ${addedCapital} รายการ`);
+  }
+  
+  // 3. หา "ต้นทุนสต๊อก" ที่มี partnerId แต่ไม่มี income "เพิ่มทุน" คู่
+  const issuesStockCapital = txs.filter(t =>
+    t.type === 'expense' &&
+    t.category === 'ต้นทุนสต๊อก' &&
+    t.partnerId &&
+    !t._migrationFor
+  );
+  
+  let addedStockCapital = 0;
+  issuesStockCapital.forEach(t => {
+    const hasMatchingIncome = txs.some(t2 =>
+      t2.type === 'income' &&
+      (t2.category === 'เพิ่มทุน' || t2.category === 'ทุน') &&
+      t2.partnerId === t.partnerId &&
+      !t2.jobId &&
+      Math.abs(Number(t2.amount) - Number(t.amount)) < 1
+    );
+    
+    if (!hasMatchingIncome) {
+      txs.push({
+        id: `t-mig-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        date: t.date,
+        type: 'income',
+        category: 'เพิ่มทุน',
+        amount: t.amount,
+        description: `เพิ่มทุน (auto-mig: ${t.description})`,
+        jobId: '',
+        partnerId: t.partnerId,
+        _migrationFor: t.id,
+      });
+      addedStockCapital++;
+    }
+  });
+  if (addedStockCapital > 0) {
+    changes.push(`เพิ่ม "เพิ่มทุน" คู่กับซื้อสต๊อก ${addedStockCapital} รายการ`);
+  }
+  
+  return {
+    transactions: txs,
+    changed: changes.length > 0,
+    summary: changes.join(', '),
+  };
+}
+
 function migrateDocuments(docs) {
   if (!Array.isArray(docs)) return [];
   return docs.map(d => {
@@ -1305,7 +1407,17 @@ function DDSolutionManager({ currentUser, onLogout }) {
         setJobs(j ? JSON.parse(j.value) : DEFAULT_JOBS);
         setStock(s ? JSON.parse(s.value) : DEFAULT_STOCK);
         setPartners(p ? JSON.parse(p.value) : DEFAULT_PARTNERS);
-        setTransactions(t ? JSON.parse(t.value) : DEFAULT_TRANSACTIONS);
+        
+        // ✨ Transactions: รัน auto-migration แบบเงียบ ๆ
+        let txData = t ? JSON.parse(t.value) : DEFAULT_TRANSACTIONS;
+        const migrated = migrateTransactions(txData);
+        if (migrated.changed) {
+          txData = migrated.transactions;
+          await window.storage.set('dd5:transactions', JSON.stringify(txData), true);
+          console.log(`[Auto-Migration] แก้ ${migrated.summary}`);
+        }
+        setTransactions(txData);
+        
         setCustomers(c ? JSON.parse(c.value) : DEFAULT_CUSTOMERS);
         setActivityLog(a ? JSON.parse(a.value) : []);
         setDocuments(d ? migrateDocuments(JSON.parse(d.value)) : DEFAULT_DOCUMENTS);
@@ -2585,193 +2697,6 @@ function DDSolutionManager({ currentUser, onLogout }) {
               </div>
             </div>
 
-            {/* === 🔧 Data Health Check (Migration) === */}
-            {(() => {
-              // ตรวจสอบ data issues
-              const issuesCapitalAsCost = transactions.filter(t => 
-                t.type === 'expense' && 
-                t.category === 'ต้นทุนงาน' && 
-                t.partnerId && 
-                (t.description.includes('ทุน') || t.description.includes('ค่าใช้จ่าย'))
-              );
-              
-              const issuesStockUse = transactions.filter(t => 
-                t.type === 'expense' && t.category === 'เบิกสต๊อก'
-              );
-              
-              // ตรวจ: ซื้อสต๊อก (expense) ที่มี partnerId แต่ไม่มี income "เพิ่มทุน" คู่กัน
-              const issuesStockCapital = transactions.filter(t => {
-                if (t.type !== 'expense' || t.category !== 'ต้นทุนสต๊อก' || !t.partnerId) return false;
-                // เช็คว่ามี income "เพิ่มทุน" ของ partner คนนี้ ที่ amount ≥ ของรายจ่ายนี้ ไหม
-                const matchingIncome = transactions.find(t2 =>
-                  t2.type === 'income' &&
-                  (t2.category === 'เพิ่มทุน' || t2.category === 'ทุน') &&
-                  t2.partnerId === t.partnerId &&
-                  Math.abs(Number(t2.amount) - Number(t.amount)) < 1 &&
-                  !t2.jobId  // ไม่ผูกงาน (ลงทุนสต๊อก)
-                );
-                return !matchingIncome;
-              });
-              
-              const hasIssues = issuesCapitalAsCost.length > 0 || issuesStockUse.length > 0 || issuesStockCapital.length > 0;
-              if (!hasIssues) return null;
-              
-              return (
-                <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4">
-                  <div className="flex items-start gap-3 mb-3">
-                    <AlertCircle className="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <h3 className="font-bold text-amber-900 mb-1">🔧 ตรวจพบข้อมูลที่ควรแก้</h3>
-                      <p className="text-xs text-amber-800">
-                        ข้อมูลบางส่วนถูกบันทึกแบบเก่า ทำให้ตัวเลขใน "เงินสด" ไม่ตรงกับ Dashboard
-                      </p>
-                    </div>
-                  </div>
-                  
-                  {issuesCapitalAsCost.length > 0 && (
-                    <div className="bg-white rounded-xl p-3 mb-2 border border-amber-200">
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <div>
-                          <div className="font-bold text-sm text-stone-800">⚠️ "ทุน X" ถูกบันทึกเป็นรายจ่ายอย่างเดียว</div>
-                          <div className="text-xs text-stone-600 mt-1">
-                            พบ <strong>{issuesCapitalAsCost.length}</strong> รายการ ที่หุ้นส่วนใส่เงินซื้อของให้บริษัท แต่ระบบนับเป็น "ต้นทุนงาน" อย่างเดียว
-                            <br />→ ที่ถูก: ต้องสร้าง <strong>+income (เพิ่มทุน)</strong> และ <strong>-expense (ต้นทุนงาน)</strong> คู่กัน
-                          </div>
-                        </div>
-                      </div>
-                      <details className="mb-2">
-                        <summary className="text-xs text-amber-700 cursor-pointer hover:underline">ดูรายการที่จะแก้ ({issuesCapitalAsCost.length})</summary>
-                        <div className="mt-2 space-y-1 max-h-40 overflow-y-auto">
-                          {issuesCapitalAsCost.map(t => (
-                            <div key={t.id} className="text-xs text-stone-600 flex justify-between gap-2">
-                              <span className="truncate">{t.description}</span>
-                              <span className="font-mono">-{Number(t.amount).toLocaleString()} ฿</span>
-                            </div>
-                          ))}
-                        </div>
-                      </details>
-                      <button
-                        onClick={() => {
-                          if (!window.confirm(`จะแยก ${issuesCapitalAsCost.length} รายการ "ทุน X" ออกเป็น 2 transactions:\n\n` +
-                            `1. + เพิ่มทุน (income) — เงินหุ้นส่วนเข้าบริษัท\n` +
-                            `2. - ต้นทุนงาน (expense) — บริษัทจ่ายค่าของ\n\n` +
-                            `ผลลัพธ์: "เงินสด" จะตรงกับ Dashboard\n\nดำเนินการ?`)) return;
-                          
-                          const newTxs = [...transactions];
-                          issuesCapitalAsCost.forEach(t => {
-                            // เพิ่ม income (เพิ่มทุน) คู่กับ expense เดิม
-                            const partner = partners.find(p => p.id === t.partnerId);
-                            const incomeTx = {
-                              id: `t-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
-                              date: t.date,
-                              type: 'income',
-                              category: 'เพิ่มทุน',
-                              amount: t.amount,
-                              description: `เพิ่มทุน ${partner?.name || ''} (สำหรับ ${t.description})`,
-                              jobId: t.jobId,
-                              partnerId: t.partnerId,
-                              _migration: 'capital-split',
-                            };
-                            newTxs.push(incomeTx);
-                          });
-                          saveTransactions(newTxs, 'add', 
-                            `🔧 Migration: แยก ${issuesCapitalAsCost.length} รายการ "ทุน" เป็น income+expense`);
-                          alert(`✅ แก้เรียบร้อย!\n\nเพิ่ม ${issuesCapitalAsCost.length} รายการ "เพิ่มทุน" คู่กับรายการเดิม\n\nลองดู Tab "💵 เงินสด" ตอนนี้น่าจะตรงกับ Dashboard แล้ว`);
-                        }}
-                        className="w-full bg-amber-500 hover:bg-amber-600 text-white py-2 rounded-lg text-sm font-medium"
-                      >
-                        🔧 แยกเป็น income + expense ({issuesCapitalAsCost.length} รายการ)
-                      </button>
-                    </div>
-                  )}
-                  
-                  {issuesStockUse.length > 0 && (
-                    <div className="bg-white rounded-xl p-3 border border-amber-200">
-                      <div className="font-bold text-sm text-stone-800 mb-2">⚠️ "เบิกสต๊อก" ถูกนับซ้ำ</div>
-                      <div className="text-xs text-stone-600 mb-2">
-                        พบ <strong>{issuesStockUse.length}</strong> รายการ "เบิกสต๊อก" — ของถูกซื้อตอนเข้าสต๊อกแล้ว ไม่ควรนับ Cash Flow อีก
-                        <br />→ ทางออก: <strong>ลบทิ้ง</strong> (สต๊อกหักลงเองอยู่แล้วเวลาใช้)
-                      </div>
-                      <details className="mb-2">
-                        <summary className="text-xs text-amber-700 cursor-pointer hover:underline">ดูรายการ ({issuesStockUse.length})</summary>
-                        <div className="mt-2 space-y-1 max-h-40 overflow-y-auto">
-                          {issuesStockUse.map(t => (
-                            <div key={t.id} className="text-xs text-stone-600 flex justify-between gap-2">
-                              <span className="truncate">{t.description}</span>
-                              <span className="font-mono">-{Number(t.amount).toLocaleString()} ฿</span>
-                            </div>
-                          ))}
-                        </div>
-                      </details>
-                      <button
-                        onClick={() => {
-                          if (!window.confirm(`ลบ ${issuesStockUse.length} รายการ "เบิกสต๊อก" ทิ้ง?\n\n(การลบนี้ไม่กระทบกับสต๊อก)\n\nผลลัพธ์: Cash Flow ตรงกับ Dashboard`)) return;
-                          
-                          const idsToDelete = new Set(issuesStockUse.map(t => t.id));
-                          const newTxs = transactions.filter(t => !idsToDelete.has(t.id));
-                          saveTransactions(newTxs, 'delete', 
-                            `🔧 Migration: ลบ ${issuesStockUse.length} รายการ "เบิกสต๊อก" (double-count)`);
-                          alert(`✅ ลบเรียบร้อย!\n\nลบ ${issuesStockUse.length} รายการ "เบิกสต๊อก" ที่นับซ้ำ`);
-                        }}
-                        className="w-full bg-rose-500 hover:bg-rose-600 text-white py-2 rounded-lg text-sm font-medium"
-                      >
-                        🗑️ ลบ "เบิกสต๊อก" ({issuesStockUse.length} รายการ)
-                      </button>
-                    </div>
-                  )}
-                  
-                  {issuesStockCapital.length > 0 && (
-                    <div className="bg-white rounded-xl p-3 border border-amber-200 mt-2">
-                      <div className="font-bold text-sm text-stone-800 mb-2">⚠️ "ซื้อสต๊อก" ไม่มี "เพิ่มทุน" คู่</div>
-                      <div className="text-xs text-stone-600 mb-2">
-                        พบ <strong>{issuesStockCapital.length}</strong> รายการ ที่หุ้นส่วนซื้อของเข้าสต๊อก (เช่น โฟนซื้อ Inverter ตุน) แต่ไม่มี income "เพิ่มทุน" คู่กัน
-                        <br />→ ที่ถูก: ต้องสร้าง <strong>+income (เพิ่มทุน)</strong> เพื่อ Cash Flow ถูก
-                      </div>
-                      <details className="mb-2">
-                        <summary className="text-xs text-amber-700 cursor-pointer hover:underline">ดูรายการที่จะแก้ ({issuesStockCapital.length})</summary>
-                        <div className="mt-2 space-y-1 max-h-40 overflow-y-auto">
-                          {issuesStockCapital.map(t => (
-                            <div key={t.id} className="text-xs text-stone-600 flex justify-between gap-2">
-                              <span className="truncate">{t.description}</span>
-                              <span className="font-mono">-{Number(t.amount).toLocaleString()} ฿</span>
-                            </div>
-                          ))}
-                        </div>
-                      </details>
-                      <button
-                        onClick={() => {
-                          if (!window.confirm(`จะเพิ่ม ${issuesStockCapital.length} รายการ "เพิ่มทุน" คู่กับการซื้อสต๊อก:\n\n` +
-                            `ผลลัพธ์: Cash Flow จะรวมทุนนี้ด้วย\n\nดำเนินการ?`)) return;
-                          
-                          const newTxs = [...transactions];
-                          issuesStockCapital.forEach(t => {
-                            const partner = partners.find(p => p.id === t.partnerId);
-                            const incomeTx = {
-                              id: `t-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
-                              date: t.date,
-                              type: 'income',
-                              category: 'เพิ่มทุน',
-                              amount: t.amount,
-                              description: `${partner?.name || ''} ลงทุน (${t.description})`,
-                              jobId: '',
-                              partnerId: t.partnerId,
-                              _migration: 'stock-capital',
-                            };
-                            newTxs.push(incomeTx);
-                          });
-                          saveTransactions(newTxs, 'add',
-                            `🔧 Migration: เพิ่ม ${issuesStockCapital.length} รายการ "เพิ่มทุน" สำหรับซื้อสต๊อก`);
-                          alert(`✅ แก้เรียบร้อย!\n\nเพิ่ม ${issuesStockCapital.length} รายการ "เพิ่มทุน" สำหรับซื้อสต๊อก`);
-                        }}
-                        className="w-full bg-amber-500 hover:bg-amber-600 text-white py-2 rounded-lg text-sm font-medium"
-                      >
-                        🔧 เพิ่ม "เพิ่มทุน" ({issuesStockCapital.length} รายการ)
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
           </div>
           );
         })()}
