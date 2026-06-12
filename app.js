@@ -177,7 +177,7 @@ const STOCK_CATEGORIES = [
 const JOB_WORKFLOW_STEPS = [
   { id: 1, icon: '💬', label: 'ตกลงขาย', hint: 'คุยปิดดีล · เก็บข้อมูลบ้าน รูปหลังคา ทิศ บิลไฟ' },
   { id: 2, icon: '📋', label: 'ใบเสนอราคา', optional: true, hint: 'ออกที่ Tab เสนอขาย (ลูกค้าเชื่อใจสั่งเลย = ข้ามได้)' },
-  { id: 3, icon: '💰', label: 'รับมัดจำ', optional: true, hint: 'เลือกได้ ไม่บังคับ — ลูกค้าเชื่อใจจ่ายทีเดียวก็ข้ามได้ · ถ้ารับ: แนะนำ 30-50% ก่อนสั่งของหลัก กันจมทุน · ออกใบเสร็จมัดจำที่งานเอกสาร (รายได้บันทึกอัตโนมัติ)' },
+  { id: 3, icon: '💰', label: 'รับมัดจำ', optional: true, hint: 'เลือกได้ ไม่บังคับ — ลูกค้าเชื่อใจจ่ายทีเดียวก็ข้ามได้ · ถ้ารับ: แนะนำ 30-50% ก่อนสั่งของหลัก กันจมทุน · ออกใบเสร็จมัดจำให้ลูกค้าได้ที่งานเอกสาร' },
   { id: 4, icon: '🛒', label: 'สั่งของหลัก', hint: 'Inverter / แบต / แผง ตามออเดอร์ · บันทึกที่ Tab สต็อก "+ เพิ่มสินค้า" (รายจ่ายอัตโนมัติ)' },
   { id: 5, icon: '📐', label: 'สำรวจหน้างาน', hint: 'วัดหลังคา จุดติด Inverter ระยะเดินสาย ตู้ไฟ มิเตอร์ · ☑ ทำ Checklist ของในขั้นถัดไป · ⚡ ยื่นขนานไฟ PEA/MEA ถ้าต้อง' },
   { id: 6, icon: '📦', label: 'เตรียมของ', hint: 'ติ๊ก Checklist ด้านล่าง · ของขาดซื้อเพิ่มที่ Tab สต็อก หรือใส่ต้นทุนงานตรงนี้' },
@@ -1136,6 +1136,53 @@ function migrateJobs(jobsList, stockList) {
     return job;
   });
   return { jobs, changed };
+}
+
+// ============== Sync เงินจากงาน (เซฟงาน = บันทึกเงินทันที) ==============
+// หลัก: ยอด income ของงาน = salePrice เสมอ / expense จ่ายจริง = cashCost เสมอ
+// ใช้ tx id ตายตัวต่องาน (t-jobinc-X / t-jobcost-X) → update แทนสร้างซ้ำ, กันซ้ำ 100%
+// ใบเสร็จ/รายการมือที่มีอยู่ = นับรวมก่อน เหลือเท่าไหร่ auto เติมเท่านั้น
+function syncJobFinanceTxs(job, txs, userName) {
+  if (!job || !job.id) return { txs, changes: [] };
+  const changes = [];
+  let list = [...txs];
+  const now = new Date().toISOString();
+  const today = now.split('T')[0];
+
+  const upsert = (kind, type, category, target, desc) => {
+    const autoId = `t-job${kind}-${job.id}`;
+    const others = list.filter(t => t.type === type && t.category === category && t.jobId === job.id && !t.isService && t.id !== autoId)
+      .reduce((s, t) => s + Number(t.amount || 0), 0);
+    const need = Math.round((target - others) * 100) / 100;
+    const existing = list.find(t => t.id === autoId);
+    if (need > 0.5) {
+      if (!existing) {
+        list.push({
+          id: autoId, date: job.date || today, type, category, amount: need,
+          description: desc, jobId: job.id, partnerId: '', auto: true,
+          createdBy: `${userName} (บันทึกจากงาน)`, createdAt: now,
+        });
+        changes.push(`${type === 'income' ? '+' : '−'}${need.toLocaleString()} ${category}`);
+      } else if (Math.abs(Number(existing.amount) - need) > 0.5) {
+        list = list.map(t => t.id === autoId ? { ...t, amount: need, description: desc, editedBy: `${userName} (sync จากงาน)`, editedAt: now, editCount: (t.editCount || 0) + 1 } : t);
+        changes.push(`ปรับ${category}เป็น ${need.toLocaleString()}`);
+      }
+    } else if (existing) {
+      list = list.filter(t => t.id !== autoId);
+      changes.push(`ตัด${category}อัตโนมัติ (มีรายการอื่นครบแล้ว)`);
+    }
+    return list;
+  };
+
+  // รายได้ = ราคาขาย
+  const salePrice = Number(job.salePrice || 0);
+  if (salePrice > 0) list = upsert('inc', 'income', 'รายได้จากงาน', salePrice, `${job.customer} - ${job.type || 'งานติดตั้ง'} (บันทึกจากงาน)`);
+  // ต้นทุนจ่ายจริง (ไม่รวมเบิกสต๊อก — จ่ายไปแล้วตอนซื้อเข้า)
+  let cashCost = 0;
+  Object.values(job.costsByCategory || {}).forEach(items => (items || []).forEach(it => { if (!it.stockId) cashCost += Number(it.amount || 0); }));
+  list = upsert('cost', 'expense', 'ต้นทุนงาน', cashCost, `ต้นทุนงาน ${job.customer} - จ่ายจริง (บันทึกจากงาน)`);
+
+  return { txs: list, changes };
 }
 
 function migrateTransactions(transactions) {
@@ -2438,7 +2485,17 @@ function DDSolutionManager({ currentUser, onLogout }) {
               {jobs.map(job => (
                 <JobCard key={job.id} job={job} partners={partners} fmt={fmt} fmt0={fmt0}
                   onEdit={() => { setEditingItem(job); setShowJobModal(true); }}
-                  onDelete={() => { if (window.confirm(`ลบงาน ${job.customer}?`)) saveJobs(jobs.filter(j => j.id !== job.id), 'delete', `ลบงาน: ${job.customer}`); }}
+                  onDelete={() => {
+                    const autoTxs = transactions.filter(t => t.id === `t-jobinc-${job.id}` || t.id === `t-jobcost-${job.id}` || (t.jobId === job.id && t.isService));
+                    const txWarn = autoTxs.length > 0 ? `\n\n💰 รายการเงินอัตโนมัติของงานนี้ ${autoTxs.length} รายการจะถูกลบด้วย` : '';
+                    if (window.confirm(`ลบงาน ${job.customer}?${txWarn}`)) {
+                      saveJobs(jobs.filter(j => j.id !== job.id), 'delete', `ลบงาน: ${job.customer}`);
+                      if (autoTxs.length > 0) {
+                        const ids = new Set(autoTxs.map(t => t.id));
+                        saveTransactions(transactions.filter(t => !ids.has(t.id)), 'delete', `🗑️ ลบรายการเงินของงาน ${job.customer} (${autoTxs.length} รายการ)`);
+                      }
+                    }
+                  }}
                 />
               ))}
             </div>
@@ -2779,7 +2836,21 @@ function DDSolutionManager({ currentUser, onLogout }) {
                           {x.costGap > 0.5 && <> · ค้างบันทึกจ่าย {fmt0(x.costGap)} ฿</>}
                         </div>
                       ))}
-                      <div className="pl-3 text-orange-600">→ ออกใบเสร็จที่งานเอกสาร (รายได้เข้าเอง) แล้วกด "✅ จบงาน" (เก็บที่เหลือให้)</div>
+                      <button onClick={() => {
+                        let txList = [...transactions];
+                        const allChanges = [];
+                        jobs.forEach(j => {
+                          const r = syncJobFinanceTxs(j, txList, currentUser.name);
+                          txList = r.txs;
+                          if (r.changes.length > 0) allChanges.push(`${j.customer}: ${r.changes.join(', ')}`);
+                        });
+                        if (allChanges.length === 0) { alert('✅ ไม่มีอะไรค้าง'); return; }
+                        saveTransactions(txList, 'add', `💰 บันทึกเงินค้างจากงาน: ${allChanges.join(' / ')}`);
+                        alert(`💰 บันทึกให้เรียบร้อย!\n\n${allChanges.join('\n')}\n\nยอดจะตรงแดชบอร์ดแล้ว ✅`);
+                      }}
+                        className="mt-1 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg">
+                        💰 บันทึกเงินที่ค้างให้เลย (กดครั้งเดียวจบ)
+                      </button>
                     </div>
                   );
                 })()}
@@ -3900,7 +3971,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
                 <div className="flex items-center gap-2"><span className="bg-amber-200 text-amber-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">3</span> เสนอราคา → <strong>เสนอขาย</strong> สร้างใบเสนอราคา</div>
                 <div className="flex items-center gap-2"><span className="bg-amber-200 text-amber-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">4</span> ลูกค้าตกลง → <strong>งานเอกสาร</strong> กด "🚀 สร้างงาน"</div>
                 <div className="flex items-center gap-2"><span className="bg-amber-200 text-amber-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">5</span> ทำงาน + กรอกต้นทุน → <strong>งาน</strong> (เบิกสต๊อก / ซื้อหน้างาน)</div>
-                <div className="flex items-center gap-2"><span className="bg-amber-200 text-amber-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">6</span> เก็บเงิน → ออกใบเสร็จที่ <strong>งานเอกสาร</strong> (รายได้บันทึกเข้าการเงินอัตโนมัติ ✨)</div>
+                <div className="flex items-center gap-2"><span className="bg-amber-200 text-amber-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">6</span> เก็บเงิน → เงินบันทึกแล้วตั้งแต่เซฟงาน ✨ ออกใบเสร็จให้ลูกค้าที่ <strong>งานเอกสาร</strong> (ยอดไม่ซ้ำ)</div>
                 <div className="flex items-center gap-2"><span className="bg-amber-200 text-amber-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">7</span> ปิดงาน → กด "✅ จบงาน" (ระบบสรุป + บันทึกการเงินให้)</div>
               </div>
             </div>
@@ -4011,7 +4082,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
                   { q: 'ตัวเลข Dashboard กับ Excel ไม่ตรงกัน?', a: 'เปิด Tab "การเงิน" → ดูแถบใต้สรุป: ✅ เขียว = ตรงแดชบอร์ด ข้อมูลครบ / ⚠️ แดง = บอกเลยว่าต่างกี่บาท ขาดฝั่งไหน → ไปดู "ประวัติ" ว่าใครแก้อะไรล่าสุด' },
                   { q: 'หุ้นส่วนเอาเงินส่วนตัวซื้อของ ต้องทำยังไง?', a: 'โครงสร้างใหม่: ห้ามจ่ายแทนตรงๆ! ให้ทำ 2 ขั้น → ① แดชบอร์ด กด "เพิ่มทุน" ใส่จำนวนเงิน (ทุนหุ้นส่วนเพิ่ม + เงินบริษัทเพิ่ม) → ② ค่อยซื้อของตามปกติ (ตัดจากเงินบริษัท) — แบบนี้ทุนกับการซื้อแยกขาด ตรวจสอบง่าย ไม่งง' },
                   { q: 'เบิกของจากสต๊อกไปใช้งาน นับเป็นรายจ่ายไหม?', a: 'ไม่นับ! เงินจ่ายไปแล้วตอนซื้อเข้าสต๊อก ระบบจะหักสต๊อกและใส่เป็นต้นทุนงานให้เอง (เห็นใน P&L แต่ไม่อยู่ใน Cash Flow)' },
-                  { q: 'รับเงินลูกค้า ต้องบันทึกการเงินเองไหม?', a: 'ไม่ต้อง! แค่ออกใบเสร็จ (มัดจำ/เต็ม) ที่งานเอกสาร → รายได้เข้า Tab การเงินอัตโนมัติทันที ผูกกับงานให้ด้วย • ถ้ารับเงินสดไม่ออกใบเสร็จ ตอน "✅ จบงาน" ระบบจะเช็คยอดที่ขาดและสร้างให้' },
+                  { q: 'รับเงินลูกค้า ต้องบันทึกการเงินเองไหม?', a: 'ไม่ต้อง! แค่เซฟงาน (มีราคาขาย+ต้นทุน) → รายได้และต้นทุนจ่ายจริงเข้า Tab การเงินทันที 🔒 อัตโนมัติ • แก้ตัวเลขในงาน → การเงินปรับตามเอง • ใบเสร็จเป็นแค่เอกสารให้ลูกค้า (ออก/ไม่ออก ยอดไม่ซ้ำแน่นอน) • มัดจำที่เคยออกใบเสร็จไว้ ระบบหักให้เอง เหลือเท่าไหร่บันทึกเท่านั้น' },
                   { q: 'อยากดูว่าใครแก้ตัวเลข?', a: 'Tab "ประวัติ" เก็บทุกการเพิ่ม/แก้/ลบ 500 รายการล่าสุด พร้อมชื่อและเวลา • แต่ละรายการการเงินก็แสดง "สร้างโดย/แก้โดย" ด้วย' },
                   { q: 'ต้องกรอกลูกค้าซ้ำใน Tab ลูกค้าไหม?', a: 'ไม่ต้อง! บันทึกงาน → ระบบสร้างลูกค้าให้อัตโนมัติ (ชื่อ เบอร์ ที่อยู่ วันติดตั้ง ระบบ ผูกงานให้) → ไป Tab ลูกค้า เติมข้อมูลเพิ่ม (รูป, แผนที่, ประกัน) ทีหลังได้ • ถ้าลูกค้ามีอยู่แล้ว ระบบเติมเฉพาะช่องว่าง ไม่ทับของเดิม' },
                   { q: 'ลูกค้าถามวิธีดูแอป Deye Cloud ทำยังไง?', a: 'Tab งานเอกสาร → ที่งานนั้นกดปุ่ม "📱 คู่มือลูกค้า" → ได้คู่มือ 1 หน้า (ติดตั้งแอป, อ่านหน้าจอแบบดูลูกศร, เช็คประจำสัปดาห์, ปัญหาพบบ่อย, ช่องทางติดต่อเรา) → กด "🖨️ พิมพ์/บันทึก PDF" แนบให้ลูกค้าได้ทั้งกระดาษและอีเมล' },
@@ -4090,9 +4161,14 @@ function DDSolutionManager({ currentUser, onLogout }) {
               }
             }
             
-            if (newSvcTxs.length > 0) {
-              saveTransactions([...transactions, ...newSvcTxs], 'add',
-                `📋 บันทึกบริการ ${data.customer}: สร้าง ${newSvcTxs.length} รายการการเงิน`);
+            // ✨ เซฟงาน = บันทึกเงินทันที (รายได้ตามราคาขาย + ต้นทุนจ่ายจริง) — ใบเสร็จเป็นแค่เอกสาร
+            const syncResult = syncJobFinanceTxs({ ...jobData, id: jobId }, [...transactions, ...newSvcTxs], currentUser.name);
+            if (newSvcTxs.length > 0 || syncResult.changes.length > 0) {
+              const parts = [];
+              if (syncResult.changes.length > 0) parts.push(syncResult.changes.join(' · '));
+              if (newSvcTxs.length > 0) parts.push(`บริการ ${newSvcTxs.length} รายการ`);
+              saveTransactions(syncResult.txs, 'add',
+                `💰 บันทึกเงินจากงาน ${data.customer}: ${parts.join(' · ')}`);
             }
             
             // ✨ Auto-sync ลูกค้าจากงาน → Tab ลูกค้า (เพิ่มข้อมูลทีหลังได้)
@@ -4376,26 +4452,36 @@ function DDSolutionManager({ currentUser, onLogout }) {
               saveDocuments([...documents, data], 'add',
                 `สร้างเอกสาร ${data.docNumber} (${data.customerName})`);
               
-              // ✨ ใบเสร็จใหม่ = เงินเข้าจริง → สร้าง income 'รายได้จากงาน' อัตโนมัติ
+              // ✨ ใบเสร็จ = เอกสารให้ลูกค้า — เงินบันทึกจากงานอยู่แล้ว ไม่สร้างซ้ำ
               if (isReceipt(data) && Number(data.totalAmount || 0) > 0) {
-                const alreadyExists = transactions.some(t => t.sourceDocId === data.id);
-                if (!alreadyExists) {
-                  const linkedJob = findLinkedJob(data);
-                  const newTx = {
-                    id: `t-rc-${Date.now()}`,
-                    date: data.date || new Date().toISOString().split('T')[0],
-                    type: 'income',
-                    category: 'รายได้จากงาน',
-                    amount: Number(data.totalAmount || 0),
-                    description: `รับเงินตามใบเสร็จ ${data.docNumber} (${data.customerName})${data.type === 'receipt-deposit' ? ' — มัดจำ' : ''}`,
-                    jobId: linkedJob?.id || '',
-                    partnerId: '',
-                    sourceDocId: data.id,
-                    createdBy: `${currentUser.name} (ใบเสร็จอัตโนมัติ)`,
-                    createdAt: new Date().toISOString(),
-                  };
-                  saveTransactions([...transactions, newTx], 'add',
-                    `💰 รับเงินอัตโนมัติจากใบเสร็จ ${data.docNumber}: +${Number(data.totalAmount).toLocaleString()} ฿`);
+                const linkedJob = findLinkedJob(data);
+                if (linkedJob) {
+                  // งานนี้มีระบบเงินจากงานแล้ว → แค่ sync ให้ครบยอด (กันงานเก่าที่ยังไม่ sync) ไม่มีทางซ้ำ
+                  const sr = syncJobFinanceTxs(linkedJob, transactions, currentUser.name);
+                  if (sr.changes.length > 0) {
+                    saveTransactions(sr.txs, 'add', `💰 บันทึกเงินงาน ${linkedJob.customer} (ตอนออกใบเสร็จ ${data.docNumber})`);
+                  }
+                } else {
+                  // ใบเสร็จไม่ผูกงาน (ขายของ/บริการนอกระบบงาน) → สร้างรายได้ตามเดิม
+                  const alreadyExists = transactions.some(t => t.sourceDocId === data.id);
+                  if (!alreadyExists) {
+                    const newTx = {
+                      id: `t-rc-${Date.now()}`,
+                      date: data.date || new Date().toISOString().split('T')[0],
+                      type: 'income',
+                      category: 'รายได้จากงาน',
+                      amount: Number(data.totalAmount || 0),
+                      description: `รับเงินตามใบเสร็จ ${data.docNumber} (${data.customerName})${data.type === 'receipt-deposit' ? ' — มัดจำ' : ''}`,
+                      jobId: '',
+                      partnerId: '',
+                      sourceDocId: data.id,
+                      auto: true,
+                      createdBy: `${currentUser.name} (ใบเสร็จอัตโนมัติ)`,
+                      createdAt: new Date().toISOString(),
+                    };
+                    saveTransactions([...transactions, newTx], 'add',
+                      `💰 รับเงินจากใบเสร็จ ${data.docNumber}: +${Number(data.totalAmount).toLocaleString()} ฿`);
+                  }
                 }
               }
             }
