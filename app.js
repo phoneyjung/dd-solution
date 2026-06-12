@@ -2639,7 +2639,14 @@ function DDSolutionManager({ currentUser, onLogout }) {
           
           // P&L calculations
           const pnlIncome = transactions.filter(isCustomerIncome).reduce((s, t) => s + Number(t.amount || 0), 0);
-          const pnlExpense = transactions.filter(t => isJobCost(t) || isStockUse(t)).reduce((s, t) => s + Number(t.amount || 0), 0);
+          const pnlCashCost = transactions.filter(t => isJobCost(t) || isStockUse(t)).reduce((s, t) => s + Number(t.amount || 0), 0);
+          // ของที่เบิกจากสต๊อกไปใช้ในงาน (ไม่มี tx เพราะจ่ายตอนซื้อเข้า) — ต้องนับเป็นต้นทุนเพื่อกำไรตรง Dashboard
+          const pnlStockUsed = jobs.reduce((s, j) => {
+            let v = 0;
+            Object.values(j.costsByCategory || {}).forEach(items => (items || []).forEach(it => { if (it.stockId) v += Number(it.amount || 0); }));
+            return s + v;
+          }, 0);
+          const pnlExpense = pnlCashCost + pnlStockUsed;
           const pnlProfit = pnlIncome - pnlExpense;
           
           // Cash Flow calculations
@@ -2724,22 +2731,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
               </div>
             )}
 
-            {/* ✓ พิสูจน์ยอด: ส่วนต่างต้องตรง "เงินสดในมือ" Dashboard เสมอ */}
-            {financeTab === 'all' && (() => {
-              const totalInv = Object.values(actualInvestments.inv).reduce((s, v) => s + v, 0);
-              const expectedCash = totalInv + totalProfit - dividendStats.total - totalStockValue;
-              const diff = (allIncome - allExpense) - expectedCash;
-              const ok = Math.abs(diff) < 1;
-              return (
-                <div className={`rounded-xl px-3 py-2 text-xs flex items-center justify-between border ${ok ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-rose-50 border-rose-300 text-rose-700'}`}>
-                  {ok ? (
-                    <span>✅ ยอดตรงกับ "เงินสดในมือ" หน้าแดชบอร์ด ({fmt0(expectedCash)} ฿) — ข้อมูลครบถูกต้อง</span>
-                  ) : (
-                    <span>⚠️ ไม่ตรงแดชบอร์ด! ต่างกัน <strong>{fmt0(Math.abs(diff))} ฿</strong> ({diff > 0 ? 'รายการเกิน/ขาดรายจ่าย' : 'ขาดรายการรับ'}) — เช็ค "ประวัติ" ว่าใครแก้อะไรล่าสุด</span>
-                  )}
-                </div>
-              );
-            })()}
+            
 
             {financeTab === 'pnl' && (
               <>
@@ -2754,19 +2746,21 @@ function DDSolutionManager({ currentUser, onLogout }) {
                   <div className="bg-rose-500 text-white rounded-2xl p-4">
                     <div className="flex items-center gap-2 mb-1">
                       <ArrowUpRight className="w-4 h-4" />
-                      <span className="text-xs">ต้นทุนงาน</span>
+                      <span className="text-xs">ต้นทุนงานรวม</span>
                     </div>
                     <div className="display-font text-2xl">{fmt0(pnlExpense)}</div>
+                    <div className="text-[10px] opacity-80 mt-0.5">จ่ายจริง {fmt0(pnlCashCost)} · จากสต๊อก {fmt0(pnlStockUsed)}</div>
                   </div>
                   <div className={`text-white rounded-2xl p-4 ${pnlProfit >= 0 ? 'bg-emerald-600' : 'bg-rose-600'}`}>
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-xs">💰 กำไรสุทธิ</span>
                     </div>
                     <div className="display-font text-2xl">{fmt0(pnlProfit)}</div>
+                    {Math.abs(pnlProfit - totalProfit) < 1 && <div className="text-[10px] opacity-80 mt-0.5">✓ ตรงแดชบอร์ด</div>}
                   </div>
                 </div>
                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-800">
-                  <strong>💡 มุมมองกำไร/ขาดทุน (P&L):</strong> นับเฉพาะ "เงินจริง" ที่บันทึกแล้ว: รายได้จากลูกค้า − ต้นทุนงานที่จ่ายเงิน. <strong>ไม่รวมของที่เบิกจากสต๊อก</strong> (จ่ายไปแล้วตอนซื้อเข้า). กำไรเต็มรวมของจากสต๊อก ดูที่ Dashboard.
+                  <strong>💡 มุมมองกำไร/ขาดทุน (P&L):</strong> รายได้จากลูกค้า − ต้นทุนงานครบ (จ่ายจริง + ของที่เบิกจากสต๊อก). กำไรสุทธิตรงกับแดชบอร์ดเสมอ. ไม่นับทุนหุ้นส่วน/ปันผล/ซื้อของเข้าสต๊อก.
                 </div>
               </>
             )}
@@ -2801,11 +2795,15 @@ function DDSolutionManager({ currentUser, onLogout }) {
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
                   <strong>💡 มุมมองเงินสด (Cash Flow):</strong> ทุน + รายได้ลูกค้า - ซื้อสต๊อก - ค่าใช้จ่าย. <strong>ไม่นับเบิกสต๊อก</strong> (ของอยู่แล้ว ไม่ได้จ่ายเงินใหม่).
                 </div>
-                {/* ✓ พิสูจน์ยอด + วิเคราะห์สาเหตุอัตโนมัติ */}
-                {(() => {
+                
+              </>
+            )}
+
+            {(financeTab === 'all' || financeTab === 'cash') && (() => {
                   const totalInv = Object.values(actualInvestments.inv).reduce((s, v) => s + v, 0);
                   const expectedCash = totalInv + totalProfit - dividendStats.total - totalStockValue;
-                  const diff = cashBalance - expectedCash;
+                  const shownBalance = financeTab === 'cash' ? cashBalance : (allIncome - allExpense);
+                  const diff = shownBalance - expectedCash;
                   if (Math.abs(diff) < 1) {
                     return (
                       <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 text-xs text-emerald-700">
@@ -2854,8 +2852,6 @@ function DDSolutionManager({ currentUser, onLogout }) {
                     </div>
                   );
                 })()}
-              </>
-            )}
 
             {/* 🎨 Legend - ประเภทรายการ */}
             <div className="bg-white rounded-xl border border-stone-200 p-2.5 flex flex-wrap gap-2 text-[11px]">
