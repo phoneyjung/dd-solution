@@ -1112,38 +1112,11 @@ function migrateTransactions(transactions) {
     changes.push(`ลบ "เพิ่มทุน" ซ้ำ ${beforeDedup - txs.length} รายการ`);
   }
   
-  // 3. หา expense "ต้นทุนงาน" ที่มี partnerId + ขึ้นต้น "ทุน" → เพิ่ม income "เพิ่มทุน" คู่ (ถ้ายังไม่มี)
-  const issuesCapitalAsCost = txs.filter(t => 
-    t.type === 'expense' && 
-    t.category === 'ต้นทุนงาน' && 
-    t.partnerId && 
-    (t.description.includes('ทุน') || t.description.includes('ค่าใช้จ่าย'))
-  );
+  // ✨ โครงสร้างใหม่: ไม่ auto-gen "เพิ่มทุน" คู่กับรายจ่ายอีกแล้ว
+  // เพิ่มทุน = ทำผ่านปุ่ม "เพิ่มทุน" ใน Dashboard เท่านั้น
+  // (migration เก่าสร้าง tx ครบแล้ว ข้อมูลเก่าปลอดภัย)
   
-  let addedCapital = 0;
-  issuesCapitalAsCost.forEach(t => {
-    // เช็คว่ามี income "เพิ่มทุน" คู่กัน (partnerId + jobId + amount) แล้วหรือไม่
-    const key = `${t.partnerId}|${t.jobId || ''}|${Number(t.amount).toFixed(2)}`;
-    if (capitalKeys.has(key)) return; // มีคู่แล้ว
-    
-    txs.push({
-      id: `t-mig-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      date: t.date,
-      type: 'income',
-      category: 'เพิ่มทุน',
-      amount: t.amount,
-      description: `เพิ่มทุน ${t.description}`,
-      jobId: t.jobId,
-      partnerId: t.partnerId,
-    });
-    capitalKeys.add(key);
-    addedCapital++;
-  });
-  if (addedCapital > 0) {
-    changes.push(`เพิ่ม "เพิ่มทุน" คู่กับ "ทุน X" ${addedCapital} รายการ`);
-  }
-  
-  // 4. ลบ flags `_migration*` ออก (clean up)
+  // 3. ลบ flags `_migration*` ออก (clean up)
   txs = txs.map(t => {
     const { _migration, _migrationFor, ...rest } = t;
     return rest;
@@ -1519,10 +1492,13 @@ function DDSolutionManager({ currentUser, onLogout }) {
   const totalStockValue = stock.filter(s => Number(s.qty) > 0).reduce((sum, s) => sum + Number(s.qty || 0) * Number(s.unitCost || 0), 0);
 
   const actualInvestments = useMemo(() => {
+    // ✨ โครงสร้างใหม่: ทุน = transactions 'เพิ่มทุน'/'ถอนทุน' เท่านั้น (source เดียว)
+    // - เพิ่มทุน ทำผ่านปุ่ม "เพิ่มทุน" ใน Dashboard เท่านั้น (แยกขาดจากการซื้อของ)
+    // - การซื้อของทุกอย่างใช้เงินบริษัท (ไม่ผูกหุ้นส่วน)
     const inv = {};
-    const fromJobs = {};
-    const fromStock = {};
-    const fromDeposit = {};  // เพิ่ม/ถอนทุนผ่านปุ่ม
+    const fromJobs = {};      // ทุนที่ระบุ jobId (data เก่า)
+    const fromStock = {};     // (legacy - ไม่ใช้แล้ว คงไว้กัน UI พัง)
+    const fromDeposit = {};   // ทุนทั่วไป (ผ่านปุ่มเพิ่มทุน)
     partners.forEach(p => {
       inv[p.id] = 0;
       fromJobs[p.id] = 0;
@@ -1530,25 +1506,18 @@ function DDSolutionManager({ currentUser, onLogout }) {
       fromDeposit[p.id] = 0;
     });
     
-    // ✨ ใช้ transactions เป็น source of truth สำหรับการลงทุน
-    // 1. เพิ่ม/ถอนทุนผ่านปุ่ม + ทุนจากงาน (income category = 'เพิ่มทุน' / 'ทุน')
     transactions.forEach(t => {
       if (!t.partnerId) return;
       
-      // ทุนเข้า (income)
+      // ทุนเข้า
       if (t.type === 'income' && (t.category === 'เพิ่มทุน' || t.category === 'ทุน')) {
         const amt = Number(t.amount || 0);
-        if (t.jobId) {
-          // ลงทุนสำหรับงานนี้
-          fromJobs[t.partnerId] = (fromJobs[t.partnerId] || 0) + amt;
-        } else {
-          // ลงทุนทั่วไป (สต๊อก / ทุนเริ่มต้น)
-          fromDeposit[t.partnerId] = (fromDeposit[t.partnerId] || 0) + amt;
-        }
+        if (t.jobId) fromJobs[t.partnerId] = (fromJobs[t.partnerId] || 0) + amt;
+        else fromDeposit[t.partnerId] = (fromDeposit[t.partnerId] || 0) + amt;
         inv[t.partnerId] = (inv[t.partnerId] || 0) + amt;
       }
       
-      // ถอนทุน (expense)
+      // ถอนทุน
       if (t.type === 'expense' && (t.category === 'ถอนทุน' || t.category === 'คืนทุน')) {
         const amt = Number(t.amount || 0);
         fromDeposit[t.partnerId] = (fromDeposit[t.partnerId] || 0) - amt;
@@ -1556,61 +1525,8 @@ function DDSolutionManager({ currentUser, onLogout }) {
       }
     });
     
-    // 2. Fallback: ถ้างานไหนไม่มี transaction "เพิ่มทุน" แต่มี job.investments
-    //    (สำหรับ data เก่าก่อน migration)
-    jobs.forEach(job => {
-      if (!job.investments) return;
-      
-      // เช็คว่ามี transaction "เพิ่มทุน" สำหรับงานนี้แล้วหรือยัง
-      const hasCapitalTx = transactions.some(t => 
-        t.type === 'income' && 
-        (t.category === 'เพิ่มทุน' || t.category === 'ทุน') && 
-        t.jobId === job.id
-      );
-      
-      if (!hasCapitalTx) {
-        // ใช้ job.investments เป็น fallback
-        Object.entries(job.investments).forEach(([pid, amt]) => {
-          fromJobs[pid] = (fromJobs[pid] || 0) + Number(amt || 0);
-          inv[pid] = (inv[pid] || 0) + Number(amt || 0);
-        });
-      }
-    });
-    
-    // 3. มูลค่าสต๊อกที่ตุนไว้ในชื่อตัวเอง (qty > 0) - เฉพาะถ้าไม่มี tx เพิ่มทุนสำหรับ stock
-    stock.forEach(item => {
-      if (Number(item.qty) > 0 && item.owner) {
-        const partner = partners.find(p => p.name === item.owner);
-        if (partner) {
-          // เช็คว่ามี transaction ที่จับคู่กับ stock owner นี้แล้วหรือยัง
-          const stockValue = Number(item.qty) * Number(item.unitCost);
-          
-          // เช็คว่ามี tx "เพิ่มทุน" สำหรับ partner นี้ที่ตรงกับ stock value หรือไม่
-          // หา transaction เพิ่มทุนที่ไม่มี jobId (= ลงทุนสต๊อก)
-          const stockCapitalTx = transactions.filter(t => 
-            t.type === 'income' && 
-            (t.category === 'เพิ่มทุน' || t.category === 'ทุน') && 
-            t.partnerId === partner.id &&
-            !t.jobId
-          );
-          const existingStockCapital = stockCapitalTx.reduce((s, t) => s + Number(t.amount || 0), 0);
-          
-          if (existingStockCapital >= stockValue) {
-            // มี tx เพิ่มทุนครอบคลุม stock แล้ว — ไม่ต้องเพิ่มซ้ำ
-            // ย้ายจาก fromDeposit → fromStock เพื่อจัดหมวด
-            fromStock[partner.id] = (fromStock[partner.id] || 0) + stockValue;
-            fromDeposit[partner.id] = (fromDeposit[partner.id] || 0) - stockValue;
-          } else {
-            // ยังไม่มี tx — ใช้ stock value เป็นทุน
-            fromStock[partner.id] = (fromStock[partner.id] || 0) + (stockValue - existingStockCapital);
-            inv[partner.id] = (inv[partner.id] || 0) + (stockValue - existingStockCapital);
-          }
-        }
-      }
-    });
-    
     return { inv, fromJobs, fromStock, fromDeposit };
-  }, [jobs, partners, stock, transactions]);
+  }, [partners, transactions]);
 
   const fmt = (n) => new Intl.NumberFormat('th-TH', { maximumFractionDigits: 2 }).format(Number(n) || 0);
   const fmt0 = (n) => new Intl.NumberFormat('th-TH', { maximumFractionDigits: 0 }).format(Math.round(Number(n) || 0));
@@ -3661,7 +3577,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
                   <span className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">🏦</span>
                   <div className="text-sm">
                     <strong className="text-blue-700">ทุนเข้า</strong> — หุ้นส่วนใส่เงินเข้าบริษัท
-                    <div className="text-xs text-stone-500">เช่น ตั้งต้นบริษัท, หุ้นส่วนออกเงินซื้อของแทน</div>
+                    <div className="text-xs text-stone-500">ทำผ่านปุ่ม "เพิ่มทุน" ที่แดชบอร์ดเท่านั้น — แยกขาดจากการซื้อของ</div>
                   </div>
                 </div>
                 <div className="flex items-start gap-3 p-2 bg-emerald-50 rounded-lg">
@@ -3714,7 +3630,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
                   { icon: '💲', title: 'แคตตาล็อกขาย', desc: 'รายการสินค้าสำหรับขาย (inverter/แผง/แบต/สายไฟ) • ตั้งราคาตลาด • ใช้ตอนสร้างใบเสนอราคา' },
                   { icon: '💼', title: 'งาน', desc: 'รายการงานทั้งหมด • กรอกต้นทุน: "📦 เบิกจากสต๊อก" (ของที่มี) หรือ "+ เพิ่มรายการ" (ซื้อใหม่) • สายไฟม้วนใหม่กรอก ม้วน×ใช้ ระบบคิดเฉพาะที่ใช้ • งานที่ปิดแล้วจะล็อก 🔒' },
                   { icon: '👥', title: 'ลูกค้า', desc: 'ฐานข้อมูลลูกค้า • เก็บที่อยู่ เบอร์โทร ประวัติงาน' },
-                  { icon: '📦', title: 'สต็อก', desc: '"+ เพิ่มสินค้า" → ☑ บันทึกรายจ่ายอัตโนมัติ (ดึงจากเงินบริษัท) • ถ้าหุ้นส่วนออกเงินเอง กด "▶ ใช้เงินหุ้นส่วน" ระบบจะ +ทุนให้' },
+                  { icon: '📦', title: 'สต็อก', desc: '"+ เพิ่มสินค้า" → ☑ บันทึกรายจ่ายอัตโนมัติ (เงินบริษัทเสมอ) • ถ้าเงินบริษัทไม่พอ ให้หุ้นส่วนกด "เพิ่มทุน" ที่แดชบอร์ดก่อน แล้วค่อยซื้อ' },
                   { icon: '🤝', title: 'ผู้ลงทุน', desc: 'ทุนของแต่ละคน คำนวณจากรายการ "เพิ่มทุน" ในการเงิน • % สัดส่วนใช้แบ่งกำไร' },
                   { icon: '💵', title: 'การเงิน', desc: '3 มุมมอง: 📊 ทั้งหมด (ทุกรายการ) • 💰 กำไร/ขาดทุน (เฉพาะธุรกิจ) • 💵 เงินสด (เงินจริงในมือ) • ทุกรายการมีชื่อคนสร้าง/แก้' },
                   { icon: '📄', title: 'งานเอกสาร', desc: 'ใบเสนอราคา → ใบแจ้งหนี้ → ใบเสร็จ (มัดจำ/เต็ม) • "🚀 สร้างงาน" จากใบเสนอ • "✅ จบงาน" = ระบบสรุปทุกอย่าง + บันทึกการเงินอัตโนมัติ + ล็อกงาน' },
@@ -3750,7 +3666,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
               <div className="space-y-2">
                 {[
                   { q: 'ตัวเลข Dashboard กับ Excel ไม่ตรงกัน?', a: 'เช็ค Tab "การเงิน" → "💵 เงินสด" ว่าตรงกับ Dashboard ไหม ถ้าไม่ตรงแปลว่ามีรายการการเงินขาด/เกิน ดูใน "ประวัติ" ว่าใครแก้อะไรล่าสุด' },
-                  { q: 'หุ้นส่วนเอาเงินส่วนตัวซื้อของ ต้องทำยังไง?', a: 'เพิ่มสินค้าในสต๊อก → กด "▶ ใช้เงินหุ้นส่วน" → เลือกชื่อ → ระบบสร้าง "เพิ่มทุน" + "ต้นทุนสต๊อก" ให้ครบ' },
+                  { q: 'หุ้นส่วนเอาเงินส่วนตัวซื้อของ ต้องทำยังไง?', a: 'โครงสร้างใหม่: ห้ามจ่ายแทนตรงๆ! ให้ทำ 2 ขั้น → ① แดชบอร์ด กด "เพิ่มทุน" ใส่จำนวนเงิน (ทุนหุ้นส่วนเพิ่ม + เงินบริษัทเพิ่ม) → ② ค่อยซื้อของตามปกติ (ตัดจากเงินบริษัท) — แบบนี้ทุนกับการซื้อแยกขาด ตรวจสอบง่าย ไม่งง' },
                   { q: 'เบิกของจากสต๊อกไปใช้งาน นับเป็นรายจ่ายไหม?', a: 'ไม่นับ! เงินจ่ายไปแล้วตอนซื้อเข้าสต๊อก ระบบจะหักสต๊อกและใส่เป็นต้นทุนงานให้เอง (เห็นใน P&L แต่ไม่อยู่ใน Cash Flow)' },
                   { q: 'ลืมบันทึกรายได้ตอนรับเงิน?', a: 'ไม่เป็นไร ตอนกด "✅ จบงาน" ระบบจะตรวจและสร้างรายการที่ขาดให้อัตโนมัติ พร้อมแสดงสรุปก่อนยืนยัน' },
                   { q: 'อยากดูว่าใครแก้ตัวเลข?', a: 'Tab "ประวัติ" เก็บทุกการเพิ่ม/แก้/ลบ 500 รายการล่าสุด พร้อมชื่อและเวลา • แต่ละรายการการเงินก็แสดง "สร้างโดย/แก้โดย" ด้วย' },
@@ -3848,42 +3764,26 @@ function DDSolutionManager({ currentUser, onLogout }) {
               const newStockId = `stk-${Date.now()}`;
               saveStock([...stock, { ...data, id: newStockId }], 'add', `เพิ่ม: ${data.name} (${data.qty} ${data.unit})`);
               
-              // ถ้าเลือก "บันทึกเป็นรายการการเงินด้วย" → สร้าง transactions
+              // ถ้าเลือก "บันทึกเป็นรายจ่าย" → สร้าง expense จากเงินบริษัท (โครงสร้างใหม่: ไม่ผูกหุ้นส่วน)
               if (txOptions && txOptions.createTransaction) {
                 const totalCost = Number(data.qty || 0) * Number(data.unitCost || 0);
-                const partnerId = txOptions.partnerId || '';
-                const isPartnerCapital = txOptions.isPartnerCapital || false;
                 const baseDate = data.purchaseDate || new Date().toISOString().split('T')[0];
-                const newTxs = [];
                 
-                // ถ้าหุ้นส่วนใส่เงินส่วนตัว → สร้าง income "เพิ่มทุน" ก่อน
-                if (isPartnerCapital && partnerId) {
-                  newTxs.push({
-                    id: `t-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
-                    date: baseDate,
-                    type: 'income',
-                    category: 'เพิ่มทุน',
-                    amount: totalCost,
-                    description: `เพิ่มทุน (ซื้อ ${data.name})${txOptions.note ? ' - ' + txOptions.note : ''}`,
-                    jobId: '',
-                    partnerId: partnerId,
-                  });
-                }
-                
-                // รายจ่าย: ต้นทุนสต๊อก
-                newTxs.push({
-                  id: `t-${Date.now()}-${Math.random().toString(36).slice(2,7) + 'b'}`,
+                const newTx = {
+                  id: `t-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
                   date: baseDate,
                   type: 'expense',
                   category: 'ต้นทุนสต๊อก',
                   amount: totalCost,
                   description: `ซื้อ ${data.name} ${data.qty} ${data.unit}${txOptions.note ? ' - ' + txOptions.note : ''}`,
                   jobId: '',
-                  partnerId: partnerId,
-                });
+                  partnerId: '',
+                  createdBy: currentUser.name,
+                  createdAt: new Date().toISOString(),
+                };
                 
-                saveTransactions([...transactions, ...newTxs], 'add',
-                  `บันทึกซื้อ ${data.name} ${totalCost.toLocaleString()} ฿${isPartnerCapital ? ' (+เพิ่มทุน)' : ''}`);
+                saveTransactions([...transactions, newTx], 'add',
+                  `บันทึกซื้อ ${data.name} ${totalCost.toLocaleString()} ฿ (เงินบริษัท)`);
               }
             }
             setShowStockModal(false); setEditingItem(null);
@@ -4082,7 +3982,7 @@ function JobCard({ job, partners, fmt, fmt0, onEdit, onDelete }) {
       </div>
       {investmentEntries.length > 0 && (
         <div className="mb-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
-          <div className="text-xs font-medium text-blue-700 mb-1">💰 ใครออกเงินทุน</div>
+          <div className="text-xs font-medium text-blue-700 mb-1">💰 ใครออกเงินทุน <span className="text-stone-400 font-normal">(ข้อมูลเก่า — ปัจจุบันใช้เงินบริษัท)</span></div>
           <div className="flex flex-wrap gap-2">
             {investmentEntries.map(([pid, amt]) => {
               const partner = partners.find(p => p.id === pid);
@@ -4291,7 +4191,8 @@ function JobModal({ job, partners, stock = [], documents = [], onUpdateStock, on
     totalCost: 0, profit: 0, note: ''
   });
   const [costsByCategory, setCostsByCategory] = useState(form.costsByCategory || {});
-  const [investments, setInvestments] = useState(form.investments || {});
+  // ✨ investments = data เก่า (read-only) — โครงสร้างใหม่ไม่กรอกแล้ว เก็บไว้เพื่อ backward compat
+  const investments = form.investments || {};
   const [stockPicker, setStockPicker] = useState(null); // { catId, mode: 'pick' | 'qty', stockId }
   const [pickQty, setPickQty] = useState('');
   // Track stock movements: { stockId: qtyUsed } - เก็บไว้เพื่อหักสต๊อกตอน save
@@ -4351,11 +4252,9 @@ function JobModal({ job, partners, stock = [], documents = [], onUpdateStock, on
     return Object.values(costsByCategory).reduce((sum, items) => sum + (items || []).reduce((s, it) => s + Number(it.amount || 0), 0), 0);
   }, [costsByCategory]);
 
-  const totalInvestment = Object.values(investments).reduce((s, v) => s + Number(v || 0), 0);
-  const investmentBalance = totalCost - totalInvestment;
-
   const handleSave = () => {
     const profit = Number(form.salePrice || 0) - totalCost;
+    // ✨ โครงสร้างใหม่: เงินบริษัทจ่ายทุกอย่าง — investments เก็บแค่ data เก่า (read-only legacy)
     const cleanInv = Object.entries(investments).reduce((acc, [k, v]) => {
       if (Number(v) > 0) acc[k] = Number(v);
       return acc;
@@ -4946,42 +4845,11 @@ function StockModal({ item, onClose, onSave }) {
           {form.createTransaction !== false && (
             <div className="pl-7 space-y-2">
               <div className="text-xs text-blue-600">
-                มูลค่า <strong>{(Number(form.qty || 0) * Number(form.unitCost || 0)).toLocaleString(undefined, {maximumFractionDigits: 2})} ฿</strong>
-                {!form.useAdvanced && ' (ดึงจากเงินบริษัท)'}
+                มูลค่า <strong>{(Number(form.qty || 0) * Number(form.unitCost || 0)).toLocaleString(undefined, {maximumFractionDigits: 2})} ฿</strong> — ดึงจากเงินบริษัท
               </div>
-              
-              {/* Advanced toggle */}
-              <button 
-                type="button"
-                onClick={() => update('useAdvanced', !form.useAdvanced)}
-                className="text-[11px] text-blue-700 hover:underline flex items-center gap-1"
-              >
-                {form.useAdvanced ? '▼' : '▶'} ใช้เงินหุ้นส่วน? (กรณีหุ้นส่วนเอาเงินส่วนตัวซื้อ)
-              </button>
-              
-              {form.useAdvanced && (
-                <div className="bg-white/60 rounded-lg p-2 space-y-2">
-                  <Field label="ใครเป็นคนจ่ายเงิน">
-                    <select 
-                      value={form.txPartnerId || 'company'} 
-                      onChange={e => update('txPartnerId', e.target.value)} 
-                      className={inputCls}>
-                      <option value="company">🏢 บริษัท (เงินบริษัท)</option>
-                      <option value="p-aam">👤 อาม (เงินส่วนตัว → +ทุน)</option>
-                      <option value="p-phone">👤 โฟน (เงินส่วนตัว → +ทุน)</option>
-                      <option value="p-pa">👤 พ่อ (เงินส่วนตัว → +ทุน)</option>
-                    </select>
-                  </Field>
-                  {form.txPartnerId && form.txPartnerId !== 'company' && (
-                    <div className="text-[11px] text-amber-700 bg-amber-50 p-2 rounded">
-                      👤 หุ้นส่วนใส่เงินส่วนตัว → จะสร้าง 2 รายการ:
-                      <br />→ <strong>เพิ่มทุน</strong> (income)
-                      <br />→ <strong>ต้นทุนสต๊อก</strong> (expense)
-                    </div>
-                  )}
-                </div>
-              )}
-              
+              <div className="text-[11px] text-stone-500 bg-stone-100 p-2 rounded">
+                💡 การซื้อของใช้เงินบริษัทเสมอ — ถ้าเงินไม่พอ ให้หุ้นส่วนกด <strong>"เพิ่มทุน"</strong> ที่แดชบอร์ดก่อน
+              </div>
               <Field label="หมายเหตุ (ไม่บังคับ)">
                 <input value={form.txNote || ''} onChange={e => update('txNote', e.target.value)} className={inputCls} placeholder="เช่น ตุนไว้ขาย / ของสำหรับงาน X" />
               </Field>
@@ -4991,12 +4859,9 @@ function StockModal({ item, onClose, onSave }) {
       )}
 
       <button onClick={() => {
-        // ส่ง txOptions ออกไปด้วย (ถ้าเลือก)
-        const partnerSelection = form.useAdvanced ? (form.txPartnerId || 'company') : 'company';
+        // โครงสร้างใหม่: ซื้อของ = เงินบริษัทเสมอ (ไม่มี partnerId)
         const txOptions = (!item && form.createTransaction !== false && Number(form.qty) > 0 && Number(form.unitCost) > 0) ? {
           createTransaction: true,
-          partnerId: (partnerSelection === 'company' || partnerSelection === '') ? '' : partnerSelection,
-          isPartnerCapital: (partnerSelection !== 'company' && partnerSelection !== ''),
           note: form.txNote || '',
         } : null;
         // ลบ field ชั่วคราวออกก่อน save
@@ -5037,9 +4902,14 @@ function TransactionModal({ tx, partners, jobs, onClose, onSave }) {
   });
   const update = (f, v) => setForm({...form, [f]: v});
 
-  const incomeCategories = ['รายได้จากงาน', 'เงินกู้/ยืม', 'เงินคืน', 'อื่นๆ (รายรับ)'];
-  const expenseCategories = ['ต้นทุนงาน', 'ปันผล', 'ค่าใช้จ่ายทั่วไป', 'จ่ายคืนเงินกู้', 'อื่นๆ (รายจ่าย)'];
+  const incomeCategories = ['รายได้จากงาน', 'เพิ่มทุน', 'เงินกู้/ยืม', 'เงินคืน', 'อื่นๆ (รายรับ)'];
+  const expenseCategories = ['ต้นทุนงาน', 'ต้นทุนสต๊อก', 'ถอนทุน', 'ปันผล', 'ค่าใช้จ่ายทั่วไป', 'จ่ายคืนเงินกู้', 'อื่นๆ (รายจ่าย)'];
   const categories = form.type === 'income' ? incomeCategories : expenseCategories;
+  
+  // ✨ โครงสร้างใหม่: "ผูกกับคน" เฉพาะหมวดที่เกี่ยวกับหุ้นส่วนโดยตรง
+  // หมวดซื้อของ/ต้นทุน = เงินบริษัท ไม่ต้องเลือกคน
+  const partnerCategories = ['เพิ่มทุน', 'ทุน', 'ถอนทุน', 'คืนทุน', 'ปันผล'];
+  const needsPartner = partnerCategories.includes(form.category);
 
   return (
     <Modal title={tx ? 'แก้ไขรายการ' : 'เพิ่มรายการ'} onClose={onClose}>
@@ -5059,7 +4929,15 @@ function TransactionModal({ tx, partners, jobs, onClose, onSave }) {
       </Field>
 
       <Field label="หมวดหมู่">
-        <select value={form.category} onChange={e => update('category', e.target.value)} className={inputCls}>
+        <select value={form.category} onChange={e => {
+          const newCat = e.target.value;
+          // เปลี่ยนหมวด: ถ้าไม่ใช่หมวดทุน → เคลียร์ partnerId (เงินบริษัท)
+          if (!partnerCategories.includes(newCat)) {
+            setForm({...form, category: newCat, partnerId: ''});
+          } else {
+            setForm({...form, category: newCat});
+          }
+        }} className={inputCls}>
           <option value="">-- เลือกหมวด --</option>
           {categories.map(c => <option key={c}>{c}</option>)}
         </select>
@@ -5069,12 +4947,21 @@ function TransactionModal({ tx, partners, jobs, onClose, onSave }) {
 
       <Field label="รายละเอียด"><textarea value={form.description} onChange={e => update('description', e.target.value)} className={inputCls} rows={2} placeholder="เช่น โอนทุนให้พ่อ, ค่าน้ำมันลงเสนอราคา" /></Field>
 
-      <Field label="ผูกกับคน (optional)" hint="ใครเป็นเจ้าของรายการนี้">
-        <select value={form.partnerId} onChange={e => update('partnerId', e.target.value)} className={inputCls}>
-          <option value="">-- ไม่ระบุ --</option>
-          {partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-      </Field>
+      {/* ผูกกับคน — เฉพาะหมวดทุน/ปันผล (หมวดอื่นเป็นเงินบริษัท) */}
+      {needsPartner ? (
+        <Field label="หุ้นส่วน (จำเป็น)" hint="หมวดนี้ต้องระบุว่าเป็นทุน/ปันผลของใคร">
+          <select value={form.partnerId} onChange={e => update('partnerId', e.target.value)} className={inputCls}>
+            <option value="">-- เลือกหุ้นส่วน --</option>
+            {partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </Field>
+      ) : (
+        form.category && (
+          <div className="text-[11px] text-stone-500 bg-stone-100 p-2 rounded-lg mb-3">
+            🏢 หมวดนี้ใช้เงินบริษัท — ไม่ต้องเลือกหุ้นส่วน
+          </div>
+        )
+      )}
 
       <Field label="ผูกกับงาน (optional)" hint="ถ้าเป็นรายการของงานใดงานหนึ่ง">
         <select value={form.jobId} onChange={e => update('jobId', e.target.value)} className={inputCls}>
@@ -5083,7 +4970,14 @@ function TransactionModal({ tx, partners, jobs, onClose, onSave }) {
         </select>
       </Field>
 
-      <button onClick={() => onSave(form)} className="w-full bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-xl font-medium mt-4 flex items-center justify-center gap-2">
+      <button onClick={() => {
+        // Validation: หมวดทุนต้องเลือกหุ้นส่วน
+        if (needsPartner && !form.partnerId) {
+          alert(`หมวด "${form.category}" ต้องเลือกหุ้นส่วน`);
+          return;
+        }
+        onSave(form);
+      }} className="w-full bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-xl font-medium mt-4 flex items-center justify-center gap-2">
         <Save className="w-4 h-4" /> บันทึก
       </button>
     </Modal>
