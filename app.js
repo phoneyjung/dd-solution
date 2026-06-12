@@ -2910,10 +2910,52 @@ function DDSolutionManager({ currentUser, onLogout }) {
                 <h2 className="display-font text-3xl text-stone-800">ลูกค้า</h2>
                 <p className="text-sm text-stone-500">{customers.length} ราย · ติดตั้งสะสม {customers.length} ระบบ</p>
               </div>
-              <button onClick={() => { setEditingItem(null); setShowCustomerModal(true); }}
-                className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl font-medium shadow-sm">
-                <Plus className="w-4 h-4" /> เพิ่มลูกค้า
-              </button>
+              <div className="flex gap-2">
+                <button onClick={() => {
+                  // 🔄 ดึงลูกค้าจากงานทั้งหมด (ย้อนหลัง) — สร้างที่ยังไม่มี + เติมช่องว่างที่มีแล้ว
+                  let created = 0, updated = 0;
+                  let newList = [...customers];
+                  const createdNames = [];
+                  jobs.forEach(j => {
+                    const name = (j.customer || '').trim();
+                    if (!name) return;
+                    const existing = newList.find(cu => cu.name.trim() === name || (cu.jobId && cu.jobId === j.id));
+                    if (!existing) {
+                      newList.push({
+                        id: `cust-${Date.now()}-${Math.random().toString(36).slice(2,5)}`,
+                        name, phone: j.phone || '', address: j.location || '', mapLink: '',
+                        installDate: j.date || '', system: j.type || '', warranty: '',
+                        jobId: j.id, note: '', photos: [],
+                      });
+                      created++; createdNames.push(name);
+                    } else {
+                      const patch = {};
+                      if (!existing.phone && j.phone) patch.phone = j.phone;
+                      if (!existing.address && j.location) patch.address = j.location;
+                      if (!existing.system && j.type) patch.system = j.type;
+                      if (!existing.installDate && j.date) patch.installDate = j.date;
+                      if (!existing.jobId) patch.jobId = j.id;
+                      if (Object.keys(patch).length > 0) {
+                        newList = newList.map(cu => cu.id === existing.id ? { ...cu, ...patch } : cu);
+                        updated++;
+                      }
+                    }
+                  });
+                  if (created === 0 && updated === 0) {
+                    alert('✅ ลูกค้าจากทุกงานมีครบแล้ว ไม่มีอะไรต้องดึงเพิ่ม');
+                    return;
+                  }
+                  saveCustomers(newList, 'add', `🔄 ดึงลูกค้าจากงาน: สร้างใหม่ ${created} ราย, เติมข้อมูล ${updated} ราย`);
+                  alert(`🔄 ดึงจากงานเรียบร้อย!\n\n✨ สร้างใหม่ ${created} ราย${createdNames.length ? ':\n• ' + createdNames.join('\n• ') : ''}\n📝 เติมข้อมูลเพิ่ม ${updated} ราย\n\n💡 กดแก้ไขเพื่อเติมรูป/แผนที่/ประกัน หรือแก้ชื่อได้`);
+                }}
+                  className="flex items-center gap-2 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 px-3 py-2 rounded-xl font-medium text-sm">
+                  🔄 ดึงจากงาน
+                </button>
+                <button onClick={() => { setEditingItem(null); setShowCustomerModal(true); }}
+                  className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl font-medium shadow-sm">
+                  <Plus className="w-4 h-4" /> เพิ่มลูกค้า
+                </button>
+              </div>
             </div>
             
             <div className="grid md:grid-cols-2 gap-4">
