@@ -173,6 +173,31 @@ const STOCK_CATEGORIES = [
   { id: 'panel_box', label: 'ตู้คอนโทรล' },
 ];
 
+// ============== JOB WORKFLOW (11 ขั้นตอนงาน) ==============
+const JOB_WORKFLOW_STEPS = [
+  { id: 1, icon: '💬', label: 'ตกลงขาย', hint: 'คุยปิดดีล · เก็บข้อมูลบ้าน รูปหลังคา ทิศ บิลไฟ' },
+  { id: 2, icon: '📋', label: 'ใบเสนอราคา', optional: true, hint: 'ออกที่ Tab เสนอขาย (ลูกค้าเชื่อใจสั่งเลย = ข้ามได้)' },
+  { id: 3, icon: '💰', label: 'รับมัดจำ', optional: true, hint: 'เลือกได้ ไม่บังคับ — ลูกค้าเชื่อใจจ่ายทีเดียวก็ข้ามได้ · ถ้ารับ: แนะนำ 30-50% ก่อนสั่งของหลัก กันจมทุน · ออกใบเสร็จมัดจำที่งานเอกสาร (รายได้บันทึกอัตโนมัติ)' },
+  { id: 4, icon: '🛒', label: 'สั่งของหลัก', hint: 'Inverter / แบต / แผง ตามออเดอร์ · บันทึกที่ Tab สต็อก "+ เพิ่มสินค้า" (รายจ่ายอัตโนมัติ)' },
+  { id: 5, icon: '📐', label: 'สำรวจหน้างาน', hint: 'วัดหลังคา จุดติด Inverter ระยะเดินสาย ตู้ไฟ มิเตอร์ · ☑ ทำ Checklist ของในขั้นถัดไป · ⚡ ยื่นขนานไฟ PEA/MEA ถ้าต้อง' },
+  { id: 6, icon: '📦', label: 'เตรียมของ', hint: 'ติ๊ก Checklist ด้านล่าง · ของขาดซื้อเพิ่มที่ Tab สต็อก หรือใส่ต้นทุนงานตรงนี้' },
+  { id: 7, icon: '🔧', label: 'ติดตั้ง', hint: 'ถ่ายรูป Before/After เก็บไว้ (การตลาด + อ้างอิงประกัน) · บันทึกค่าแรง/ของซื้อหน้างานในต้นทุน' },
+  { id: 8, icon: '✅', label: 'ทดสอบ + ตั้งระบบ', hint: 'Megger test · ตั้ง Zero-export / CT clamp ให้ถูกทิศ · เชื่อม WiFi logger · สอนลูกค้าใช้แอป Deye Cloud' },
+  { id: 9, icon: '🧾', label: 'เก็บเงิน + เอกสาร', hint: 'ใบแจ้งหนี้ (ถ้าลูกค้าต้องการ) → ใบเสร็จเต็ม + ใบรับประกัน + นามบัตร (กระดาษ+อีเมล) ที่งานเอกสาร' },
+  { id: 10, icon: '🔒', label: 'ปิดงาน', hint: 'กด "✅ จบงาน" ที่งานเอกสาร — ระบบสรุปกำไร เก็บเงินที่ขาด ของเหลือเข้าสต๊อก แล้วล็อกงาน' },
+  { id: 11, icon: '📞', label: 'ติดตามผล', optional: true, hint: 'นัด 1 เดือน เช็คผลผลิตจากแอป · ขอรีวิว/แนะนำต่อ — ลูกค้าประทับใจ งานใหม่ตามมา' },
+];
+
+// Checklist ของติดตั้งมาตรฐาน (งาน solar 1 หลัง)
+const DEFAULT_INSTALL_CHECKLIST = [
+  { group: 'ของหลัก', items: ['แผงโซล่า (ครบจำนวน)', 'Inverter', 'แบตเตอรี่ (ถ้ามี)'] },
+  { group: 'โครงยึด', items: ['Rail อลูมิเนียม', 'Rail splice (ข้อต่อราง)', 'Mid clamp', 'End clamp', 'Roof hook / L-feet', 'สกรู+พุก'] },
+  { group: 'ไฟฟ้า DC', items: ['สาย PV (DC) ดำ+แดง', 'หัว MC4', 'ท่อร้อยสาย + แคลมป์จับท่อ'] },
+  { group: 'ไฟฟ้า AC + กราวด์', items: ['สาย AC', 'เบรคเกอร์', 'ตู้ Combiner + SPD', 'แท่งกราวด์ + สายกราวด์ + Grounding lug', 'แผ่นกราวด์แผง'] },
+  { group: 'Monitoring', items: ['WiFi/4G Logger', 'CT Clamp (เช็คทิศลูกศร!)'] },
+  { group: 'อื่นๆ', items: ['ซิลิโคนกันรั่ว', 'Cable tie / Cable clip', 'เครื่องมือ + บันได + อุปกรณ์เซฟตี้'] },
+];
+
 // ============== IMGBB CONFIG ==============
 const IMGBB_API_KEY = 'a1fd3c5abb27a3efc0683a282c97860a';
 const MAX_PHOTOS_PER_CUSTOMER = 10;
@@ -343,7 +368,7 @@ const DEFAULT_JOBS = [
     status: 'completed',
     investments: { 'p-aam': 127460, 'p-pa': 3200 },
     costsByCategory: {
-      panel: [{ item: 'Longi 640W × 9 (จากสต๊อก)', amount: 26199 }],
+      panel: [{ item: 'Longi 640W × 9 (จากสต๊อก)', amount: 26199, stockId: 'stk-longi', qtyUsed: 9 }],
       inverter: [{ item: 'Inverter Deye 5kW Hybrid (รวม VAT 7%)', amount: 33705 }],
       battery: [{ item: 'Deye แบต 51.2V 314Ah 16kWh (รวม VAT 7%)', amount: 67303 }],
       panel_box: [{ item: 'Combiner', amount: 3462 }],
@@ -1081,6 +1106,38 @@ function getDocTypeInfo(type) {
 // 1. "ทุน X" ถูกบันทึกเป็น expense 'ต้นทุนงาน' อย่างเดียว (ขาด income 'เพิ่มทุน' คู่)
 // 2. "เบิกสต๊อก" ถูกนับเป็น expense (double-count)
 // 3. ซื้อสต๊อกที่มี partnerId แต่ไม่มี income 'เพิ่มทุน' คู่
+// ============== Auto-Migration: Jobs ==============
+// ใส่ stockId + qtyUsed ให้ item เก่าที่เบิกจากสต๊อกแต่ไม่ได้ track
+// (match เฉพาะกรณีชัดเจน: item มีคำ "สต๊อก" + ชื่อตรงกับ stock ตัวเดียว)
+function migrateJobs(jobsList, stockList) {
+  if (!Array.isArray(jobsList)) return { jobs: [], changed: false };
+  let changed = false;
+  const jobs = jobsList.map(job => {
+    if (!job.costsByCategory) return job;
+    let jobChanged = false;
+    const newCats = {};
+    Object.entries(job.costsByCategory).forEach(([cat, items]) => {
+      newCats[cat] = (items || []).map(item => {
+        if (item.stockId || !item.item || !item.item.includes('สต๊อก')) return item;
+        // ดึงชื่อหลัก (ตัด "× N (จากสต๊อก)" ออก) + จำนวนจาก "× N"
+        const qtyMatch = item.item.match(/[×x]\s*(\d+)/);
+        const baseName = item.item.replace(/\s*[×x]\s*\d+.*$/, '').trim();
+        const matches = (stockList || []).filter(s => 
+          s.name.includes(baseName) || baseName.includes(s.name.replace(/^แผง\s*/, ''))
+        );
+        if (matches.length === 1 && qtyMatch) {
+          jobChanged = true;
+          return { ...item, stockId: matches[0].id, qtyUsed: Number(qtyMatch[1]) };
+        }
+        return item;
+      });
+    });
+    if (jobChanged) { changed = true; return { ...job, costsByCategory: newCats }; }
+    return job;
+  });
+  return { jobs, changed };
+}
+
 function migrateTransactions(transactions) {
   if (!Array.isArray(transactions)) return { transactions: [], changed: false, summary: '' };
   
@@ -1332,6 +1389,8 @@ function DDSolutionManager({ currentUser, onLogout }) {
   const [showHistory, setShowHistory] = useState(false);
   const [showCapitalModal, setShowCapitalModal] = useState(false);
   const [capitalMode, setCapitalMode] = useState('deposit'); // 'deposit' | 'withdraw'
+  const [showDividendModal, setShowDividendModal] = useState(false);
+  const [customerGuide, setCustomerGuide] = useState(null); // { customerName, systemType }
   const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [defaultDocType, setDefaultDocType] = useState('quotation');
   const [docFilter, setDocFilter] = useState('active'); // 'active' | 'quotation' | 'invoice' | 'receipt' | 'closed'
@@ -1355,8 +1414,17 @@ function DDSolutionManager({ currentUser, onLogout }) {
           window.storage.get('dd5:company', true).catch(() => null),
           window.storage.get('dd5:salesCatalog', true).catch(() => null),
         ]);
-        setJobs(j ? JSON.parse(j.value) : DEFAULT_JOBS);
-        setStock(s ? JSON.parse(s.value) : DEFAULT_STOCK);
+        // ✨ Jobs: migration ใส่ stockId ให้ item เบิกสต๊อกเก่า (เพื่อ track ซื้อ/ใช้/เหลือ)
+        const stockData = s ? JSON.parse(s.value) : DEFAULT_STOCK;
+        let jobsData = j ? JSON.parse(j.value) : DEFAULT_JOBS;
+        const jobMig = migrateJobs(jobsData, stockData);
+        if (jobMig.changed) {
+          jobsData = jobMig.jobs;
+          await window.storage.set('dd5:jobs', JSON.stringify(jobsData), true);
+          console.log('[Auto-Migration] ใส่ stockId ให้รายการเบิกสต๊อกเก่า');
+        }
+        setJobs(jobsData);
+        setStock(stockData);
         setPartners(p ? JSON.parse(p.value) : DEFAULT_PARTNERS);
         
         // ✨ Transactions: รัน auto-migration แบบเงียบ ๆ
@@ -1487,7 +1555,9 @@ function DDSolutionManager({ currentUser, onLogout }) {
 
   const totalRevenue = jobs.reduce((s, j) => s + (Number(j.salePrice) || 0), 0);
   const totalCost = jobs.reduce((s, j) => s + (Number(j.totalCost) || 0), 0);
-  const totalProfit = totalRevenue - totalCost;
+  // กำไรสะสม = กำไรติดตั้ง + บริการหลังการขายสุทธิ (ล้างแผง/ซ่อม) — ตรงกับ tx ในการเงิน
+  const totalServiceNet = jobs.reduce((s, j) => s + (Array.isArray(j.serviceLog) ? j.serviceLog.reduce((x, l) => x + Number(l.income || 0) - Number(l.cost || 0), 0) : 0), 0);
+  const totalProfit = totalRevenue - totalCost + totalServiceNet;
   const completedJobs = jobs.filter(j => j.status === 'completed').length;
   const totalStockValue = stock.filter(s => Number(s.qty) > 0).reduce((sum, s) => sum + Number(s.qty || 0) * Number(s.unitCost || 0), 0);
 
@@ -1526,6 +1596,21 @@ function DDSolutionManager({ currentUser, onLogout }) {
     });
     
     return { inv, fromJobs, fromStock, fromDeposit };
+  }, [partners, transactions]);
+
+  // 💜 ปันผลสะสม — คำนวณจาก tx 'ปันผล' (source เดียว ตรวจสอบได้)
+  const dividendStats = useMemo(() => {
+    const byPartner = {};
+    partners.forEach(p => { byPartner[p.id] = 0; });
+    let total = 0;
+    transactions.forEach(t => {
+      if (t.type === 'expense' && t.category === 'ปันผล') {
+        const amt = Number(t.amount || 0);
+        total += amt;
+        if (t.partnerId) byPartner[t.partnerId] = (byPartner[t.partnerId] || 0) + amt;
+      }
+    });
+    return { total, byPartner };
   }, [partners, transactions]);
 
   const fmt = (n) => new Intl.NumberFormat('th-TH', { maximumFractionDigits: 2 }).format(Number(n) || 0);
@@ -1628,7 +1713,31 @@ function DDSolutionManager({ currentUser, onLogout }) {
       const totalStock = stockRemaining.reduce((s, i) => s + Number(i.qty) * Number(i.unitCost), 0);
       setCell(overview, `B${r}`, 'มูลค่าสต๊อกรวม', { ...styles.total, alignment: { horizontal: 'left' } });
       setCell(overview, `C${r}`, totalStock, styles.total);
+      r += 2;
     }
+
+    // Section: 💵 เงินสดในมือ (สมการเต็มตาม Dashboard)
+    const ovStockVal = stock.filter(s => Number(s.qty) > 0).reduce((s, i) => s + Number(i.qty) * Number(i.unitCost), 0);
+    const ovCash = totalInv + totalProfit - dividendStats.total - ovStockVal;
+    setCell(overview, `B${r}`, '💵 เงินสดในมือ', styles.sectionHeader);
+    setCell(overview, `C${r}`, '', styles.sectionHeader);
+    r++;
+    setCell(overview, `B${r}`, 'เงินทุนรวม', styles.cell);
+    setCell(overview, `C${r}`, totalInv, styles.cellMoney);
+    r++;
+    setCell(overview, `B${r}`, '+ กำไรสะสม', styles.cell);
+    setCell(overview, `C${r}`, totalProfit, styles.income);
+    r++;
+    if (dividendStats.total > 0) {
+      setCell(overview, `B${r}`, '− ปันผลจ่ายแล้ว', styles.cell);
+      setCell(overview, `C${r}`, dividendStats.total, styles.expense);
+      r++;
+    }
+    setCell(overview, `B${r}`, '− มูลค่าสต๊อก', styles.cell);
+    setCell(overview, `C${r}`, ovStockVal, styles.expense);
+    r++;
+    setCell(overview, `B${r}`, 'เงินสดคงเหลือ', { ...styles.profit, alignment: { horizontal: 'left' } });
+    setCell(overview, `C${r}`, ovCash, styles.profit);
 
     overview['!ref'] = 'A1:D' + (r + 2);
     overview['!cols'] = [{ wch: 2 }, { wch: 35 }, { wch: 18 }, { wch: 15 }];
@@ -1781,21 +1890,34 @@ function DDSolutionManager({ currentUser, onLogout }) {
     let sr = 6;
     let totalStockValue = 0;
     
+    // คำนวณ "ใช้ไป" จริง: รวม qtyUsed จากทุกงานที่เบิก stockId นี้
+    const usedByStockId = {};
+    jobs.forEach(job => {
+      Object.values(job.costsByCategory || {}).forEach(items => {
+        (items || []).forEach(item => {
+          if (item.stockId) {
+            usedByStockId[item.stockId] = (usedByStockId[item.stockId] || 0) + Number(item.qtyUsed || item.qty || 0);
+          }
+        });
+      });
+    });
+    
     // Active stock first
     [...stock].sort((a, b) => Number(b.qty) - Number(a.qty)).forEach(item => {
       const remaining = Number(item.qty);
+      const used = usedByStockId[item.id] || 0;
+      const bought = remaining + used;
       const value = remaining * Number(item.unitCost);
       const isHistory = remaining === 0;
       
       const cellStyle = isHistory ? { ...styles.cell, font: { sz: 9, color: { rgb: 'A8A29E' } } } : styles.cell;
       const moneyStyle = isHistory ? { ...styles.cellMoney, font: { sz: 9, color: { rgb: 'A8A29E' } } } : styles.cellMoney;
       
-      setCell(stockWs, `B${sr}`, item.owner || '-', cellStyle);
+      setCell(stockWs, `B${sr}`, item.owner || 'บริษัท', cellStyle);
       setCell(stockWs, `C${sr}`, item.name, cellStyle);
       setCell(stockWs, `D${sr}`, (STOCK_CATEGORIES.find(c => c.id === item.category) || { label: item.category }).label, cellStyle);
-      // ซื้อ = qty + qtyUsed (rough estimate)
-      setCell(stockWs, `E${sr}`, '-', { ...styles.cellCenter, font: { sz: 9 } });
-      setCell(stockWs, `F${sr}`, '-', { ...styles.cellCenter, font: { sz: 9 } });
+      setCell(stockWs, `E${sr}`, bought, { ...styles.cellCenter, font: { sz: 10 } });
+      setCell(stockWs, `F${sr}`, used, used > 0 ? { ...styles.cellCenter, font: { sz: 10, color: { rgb: '991B1B' } } } : { ...styles.cellCenter, font: { sz: 9, color: { rgb: 'A8A29E' } } });
       setCell(stockWs, `G${sr}`, remaining, isHistory ? { ...styles.cellCenter, font: { sz: 9, color: { rgb: 'A8A29E' } } } : { ...styles.cellCenter, font: { bold: true, sz: 10, color: { rgb: '059669' } } });
       setCell(stockWs, `H${sr}`, item.unit || 'ชิ้น', styles.cellCenter);
       setCell(stockWs, `I${sr}`, Number(item.unitCost), moneyStyle);
@@ -1823,7 +1945,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
     const partnerWs = {};
     partnerWs['B2'] = { v: '👥 ผู้ลงทุน', t: 's', s: { font: { bold: true, sz: 16, color: { rgb: 'D97706' } } } };
 
-    const partnerHeaders = ['ชื่อ', 'บทบาท', 'ลงทุนจากงาน', 'ลงทุนจากสต๊อก', 'รวมสะสม', '% สัดส่วน', 'บัญชี'];
+    const partnerHeaders = ['ชื่อ', 'บทบาท', 'ลงทุนจากงาน', 'ลงทุนทั่วไป', 'รวมสะสม', '% สัดส่วน', 'ปันผลรับแล้ว', 'บัญชี'];
     partnerHeaders.forEach((h, i) => {
       setCell(partnerWs, XLSX.utils.encode_cell({ r: 3, c: i + 1 }), h, styles.tableHeader);
     });
@@ -1832,30 +1954,94 @@ function DDSolutionManager({ currentUser, onLogout }) {
     const totalAllInv = partners.reduce((s, p) => s + (actualInvestments.inv[p.id] || 0), 0);
     partners.forEach(p => {
       const fromJobs = actualInvestments.fromJobs[p.id] || 0;
-      const fromStock = actualInvestments.fromStock[p.id] || 0;
+      const fromDeposit = actualInvestments.fromDeposit[p.id] || 0;
       const total = actualInvestments.inv[p.id] || 0;
       const pct = totalAllInv > 0 ? (total / totalAllInv * 100) : 0;
+      const divReceived = dividendStats.byPartner[p.id] || 0;
 
       setCell(partnerWs, `B${pr}`, p.name, { ...styles.cell, font: { bold: true, sz: 11 } });
       setCell(partnerWs, `C${pr}`, p.role || '', { ...styles.cell, font: { sz: 9 } });
       setCell(partnerWs, `D${pr}`, fromJobs, styles.cellMoney);
-      setCell(partnerWs, `E${pr}`, fromStock, styles.cellMoney);
+      setCell(partnerWs, `E${pr}`, fromDeposit, styles.cellMoney);
       setCell(partnerWs, `F${pr}`, total, { ...styles.cellMoney, font: { bold: true, sz: 11, color: { rgb: 'D97706' } } });
       setCell(partnerWs, `G${pr}`, pct / 100, { ...styles.cellMoney, numFmt: '0.0%' });
-      setCell(partnerWs, `H${pr}`, p.bankAccount || '-', { ...styles.cell, font: { sz: 9 } });
+      setCell(partnerWs, `H${pr}`, divReceived, { ...styles.cellMoney, font: { sz: 10, color: { rgb: '7C3AED' } } });
+      setCell(partnerWs, `I${pr}`, p.bankAccount || '-', { ...styles.cell, font: { sz: 9 } });
       pr++;
     });
     setCell(partnerWs, `B${pr}`, 'รวม', { ...styles.total, alignment: { horizontal: 'left' } });
     setCell(partnerWs, `D${pr}`, partners.reduce((s, p) => s + (actualInvestments.fromJobs[p.id] || 0), 0), styles.total);
-    setCell(partnerWs, `E${pr}`, partners.reduce((s, p) => s + (actualInvestments.fromStock[p.id] || 0), 0), styles.total);
+    setCell(partnerWs, `E${pr}`, partners.reduce((s, p) => s + (actualInvestments.fromDeposit[p.id] || 0), 0), styles.total);
     setCell(partnerWs, `F${pr}`, totalAllInv, styles.total);
     setCell(partnerWs, `G${pr}`, 1, { ...styles.total, numFmt: '0.0%' });
+    setCell(partnerWs, `H${pr}`, dividendStats.total, styles.total);
 
     partnerWs['!ref'] = 'A1:I' + (pr + 1);
     partnerWs['!cols'] = [
-      { wch: 2 }, { wch: 12 }, { wch: 28 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 35 },
+      { wch: 2 }, { wch: 12 }, { wch: 28 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 35 },
     ];
     XLSX.utils.book_append_sheet(wb, partnerWs, 'ผู้ลงทุน');
+
+    // ============== Sheet: การเงิน (ทุกรายการ — ตรวจสอบได้) ==============
+    const finWs = {};
+    finWs['B2'] = { v: '💵 รายรับ-รายจ่าย ทั้งหมด', t: 's', s: { font: { bold: true, sz: 16, color: { rgb: 'D97706' } } } };
+    finWs['B3'] = { v: `${transactions.length} รายการ · Export โดย ${currentUser.name} · ${new Date().toLocaleDateString('th-TH')}`, t: 's', s: { font: { sz: 9, italic: true, color: { rgb: '78716C' } } } };
+
+    const finHeaders = ['วันที่', 'ประเภท', 'หมวด', 'รายละเอียด', 'หุ้นส่วน', 'งาน', 'รายรับ (฿)', 'รายจ่าย (฿)', 'สร้างโดย'];
+    finHeaders.forEach((h, i) => {
+      setCell(finWs, XLSX.utils.encode_cell({ r: 4, c: i + 1 }), h, styles.tableHeader);
+    });
+
+    // สีพื้นตามประเภท (ตรงกับในแอป)
+    const finCatFill = (t) => {
+      if (t.type === 'income' && t.category === 'รายได้จากงาน') return 'D1FAE5';      // เขียว
+      if (t.type === 'income' && (t.category === 'เพิ่มทุน' || t.category === 'ทุน')) return 'DBEAFE'; // น้ำเงิน
+      if (t.type === 'expense' && t.category === 'ต้นทุนสต๊อก') return 'FEF3C7';      // เหลือง
+      if (t.type === 'expense' && t.category === 'ต้นทุนงาน') return 'FEE2E2';        // แดง
+      if (t.type === 'expense' && t.category === 'ปันผล') return 'EDE9FE';            // ม่วง violet
+      if (t.type === 'expense' && (t.category === 'ถอนทุน' || t.category === 'คืนทุน')) return 'F3E8FF'; // ม่วง
+      return 'FFFFFF';
+    };
+    const thinB = { top: { style: 'thin', color: { rgb: 'CCCCCC' } }, bottom: { style: 'thin', color: { rgb: 'CCCCCC' } }, left: { style: 'thin', color: { rgb: 'CCCCCC' } }, right: { style: 'thin', color: { rgb: 'CCCCCC' } } };
+
+    let fr = 6;
+    let finIn = 0, finOut = 0;
+    [...transactions].sort((a, b) => (b.date || '').localeCompare(a.date || '')).forEach(t => {
+      const fill = { fgColor: { rgb: finCatFill(t) } };
+      const base = { font: { sz: 10 }, fill, border: thinB, alignment: { vertical: 'center' } };
+      const partner = partners.find(p => p.id === t.partnerId);
+      const job = jobs.find(j => j.id === t.jobId);
+      const amt = Number(t.amount || 0);
+      if (t.type === 'income') finIn += amt; else finOut += amt;
+
+      setCell(finWs, `B${fr}`, t.date || '', { ...base, alignment: { horizontal: 'center', vertical: 'center' } });
+      setCell(finWs, `C${fr}`, t.type === 'income' ? '↙ รับ' : '↗ จ่าย', { ...base, alignment: { horizontal: 'center', vertical: 'center' }, font: { sz: 10, bold: true, color: { rgb: t.type === 'income' ? '065F46' : '991B1B' } } });
+      setCell(finWs, `D${fr}`, t.category || '', base);
+      setCell(finWs, `E${fr}`, t.description || '', { ...base, alignment: { wrapText: true, vertical: 'center' } });
+      setCell(finWs, `F${fr}`, partner?.name || '-', { ...base, alignment: { horizontal: 'center', vertical: 'center' } });
+      setCell(finWs, `G${fr}`, job?.customer || '-', { ...base, font: { sz: 9 } });
+      setCell(finWs, `H${fr}`, t.type === 'income' ? amt : '', { ...base, alignment: { horizontal: 'right', vertical: 'center' }, numFmt: '#,##0.00', font: { sz: 10, bold: true, color: { rgb: '065F46' } } });
+      setCell(finWs, `I${fr}`, t.type === 'expense' ? amt : '', { ...base, alignment: { horizontal: 'right', vertical: 'center' }, numFmt: '#,##0.00', font: { sz: 10, bold: true, color: { rgb: '991B1B' } } });
+      setCell(finWs, `J${fr}`, t.createdBy || '-', { ...base, font: { sz: 8, color: { rgb: '78716C' } } });
+      fr++;
+    });
+
+    // สรุปท้ายตาราง
+    fr++;
+    setCell(finWs, `B${fr}`, 'รวมทั้งหมด', { ...styles.total, alignment: { horizontal: 'left' } });
+    for (let c = 2; c <= 6; c++) setCell(finWs, XLSX.utils.encode_cell({ r: fr - 1, c }), '', styles.total);
+    setCell(finWs, `H${fr}`, finIn, { ...styles.total, font: { bold: true, sz: 11, color: { rgb: '065F46' } } });
+    setCell(finWs, `I${fr}`, finOut, { ...styles.total, font: { bold: true, sz: 11, color: { rgb: '991B1B' } } });
+    setCell(finWs, `J${fr}`, '', styles.total);
+    fr++;
+    setCell(finWs, `B${fr}`, 'ส่วนต่าง (เข้า − ออก)', { ...styles.profit, alignment: { horizontal: 'left' } });
+    setCell(finWs, `H${fr}`, finIn - finOut, styles.profit);
+
+    finWs['!ref'] = 'A1:K' + (fr + 1);
+    finWs['!cols'] = [
+      { wch: 2 }, { wch: 11 }, { wch: 8 }, { wch: 13 }, { wch: 45 }, { wch: 9 }, { wch: 20 }, { wch: 13 }, { wch: 13 }, { wch: 16 },
+    ];
+    XLSX.utils.book_append_sheet(wb, finWs, 'การเงิน');
 
     // ============== Sheet: ลูกค้า ==============
     if (customers.length > 0) {
@@ -2008,7 +2194,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
             {/* 💰 การ์ดเงินสดในมือ - ใหญ่เด่น */}
             {(() => {
               const totalInvestment = Object.values(actualInvestments.inv).reduce((s, v) => s + v, 0);
-              const cashOnHand = totalInvestment + totalProfit - totalStockValue;
+              const cashOnHand = totalInvestment + totalProfit - dividendStats.total - totalStockValue;
               return (
                 <div className="rounded-3xl shadow-xl overflow-hidden" style={{background: 'linear-gradient(135deg, #0d1f43 0%, #1e3a5f 50%, #0d1f43 100%)'}}>
                   <div className="p-5 md:p-6 text-white">
@@ -2037,6 +2223,12 @@ function DDSolutionManager({ currentUser, onLogout }) {
                         <span>กำไรสะสม</span>
                         <span className="font-mono">+ {fmt(totalProfit)} ฿</span>
                       </div>
+                      {dividendStats.total > 0 && (
+                        <div className="flex justify-between text-violet-300">
+                          <span>ปันผลจ่ายแล้ว</span>
+                          <span className="font-mono">− {fmt(dividendStats.total)} ฿</span>
+                        </div>
+                      )}
                       <div className="flex justify-between text-orange-300">
                         <span>มูลค่าสต๊อก</span>
                         <span className="font-mono">− {fmt(totalStockValue)} ฿</span>
@@ -2047,19 +2239,25 @@ function DDSolutionManager({ currentUser, onLogout }) {
                       </div>
                     </div>
 
-                    {/* ปุ่มเพิ่ม/ถอนทุน */}
-                    <div className="grid grid-cols-2 gap-2 mt-3">
+                    {/* ปุ่มเพิ่มทุน/ถอนทุน/ปันผล */}
+                    <div className="grid grid-cols-3 gap-2 mt-3">
                       <button
                         onClick={() => { setCapitalMode('deposit'); setShowCapitalModal(true); }}
-                        className="bg-emerald-500 hover:bg-emerald-400 text-white font-medium py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-lg"
+                        className="bg-emerald-500 hover:bg-emerald-400 text-white font-medium py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-lg text-sm"
                       >
                         <ArrowDownLeft className="w-4 h-4" /> เพิ่มทุน
                       </button>
                       <button
                         onClick={() => { setCapitalMode('withdraw'); setShowCapitalModal(true); }}
-                        className="bg-rose-500 hover:bg-rose-400 text-white font-medium py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-lg"
+                        className="bg-rose-500 hover:bg-rose-400 text-white font-medium py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-lg text-sm"
                       >
                         <ArrowUpRight className="w-4 h-4" /> ถอนทุน
+                      </button>
+                      <button
+                        onClick={() => setShowDividendModal(true)}
+                        className="bg-violet-500 hover:bg-violet-400 text-white font-medium py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-lg text-sm"
+                      >
+                        💜 ปันผล
                       </button>
                     </div>
                   </div>
@@ -2341,8 +2539,8 @@ function DDSolutionManager({ currentUser, onLogout }) {
                         </div>
                       </div>
                       <div className="bg-emerald-50 rounded-lg p-2">
-                        <div className="text-xs text-emerald-600">ปันผล</div>
-                        <div className="font-bold text-emerald-700">{fmt0(p.totalReturn)} ฿</div>
+                        <div className="text-xs text-emerald-600">ปันผลรับแล้ว</div>
+                        <div className="font-bold text-emerald-700">{fmt0(dividendStats.byPartner[p.id] || 0)} ฿</div>
                       </div>
                     </div>
                     {p.bankAccount && <div className="mt-3 text-xs bg-stone-50 rounded-lg p-2 font-mono text-stone-600">🏦 {p.bankAccount}</div>}
@@ -2380,7 +2578,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
           const isStockBuy = (t) => t.type === 'expense' && t.category === 'ต้นทุนสต๊อก';
           const isStockUse = (t) => t.type === 'expense' && t.category === 'เบิกสต๊อก';
           const isJobCost = (t) => t.type === 'expense' && t.category === 'ต้นทุนงาน';
-          const isCapitalOut = (t) => t.type === 'expense' && (t.category === 'ถอนทุน' || t.category === 'คืนทุน');
+          const isCapitalOut = (t) => t.type === 'expense' && (t.category === 'ถอนทุน' || t.category === 'คืนทุน' || t.category === 'ปันผล');
           
           // P&L calculations
           const pnlIncome = transactions.filter(isCustomerIncome).reduce((s, t) => s + Number(t.amount || 0), 0);
@@ -2540,6 +2738,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
               <span className="flex items-center gap-1"><span className="w-4 h-4 rounded-full bg-amber-100 flex items-center justify-center text-[9px]">📦</span> ซื้อสต๊อก</span>
               <span className="flex items-center gap-1"><span className="w-4 h-4 rounded-full bg-rose-100 flex items-center justify-center text-[9px]">🔧</span> ต้นทุนงาน</span>
               <span className="flex items-center gap-1"><span className="w-4 h-4 rounded-full bg-purple-100 flex items-center justify-center text-[9px]">🏧</span> ถอนทุน</span>
+              <span className="flex items-center gap-1"><span className="w-4 h-4 rounded-full bg-violet-100 flex items-center justify-center text-[9px]">💜</span> ปันผล</span>
             </div>
 
             {filteredTransactions.length === 0 ? (
@@ -2563,6 +2762,8 @@ function DDSolutionManager({ currentUser, onLogout }) {
                       return { icon: '📦', bg: 'bg-amber-100', text: 'text-amber-700', badge: 'bg-amber-50 text-amber-700 border-amber-200', label: 'ซื้อสต๊อก' };
                     if (t.type === 'expense' && t.category === 'ต้นทุนงาน')
                       return { icon: '🔧', bg: 'bg-rose-100', text: 'text-rose-700', badge: 'bg-rose-50 text-rose-700 border-rose-200', label: 'ต้นทุนงาน' };
+                    if (t.type === 'expense' && t.category === 'ปันผล')
+                      return { icon: '💜', bg: 'bg-violet-100', text: 'text-violet-700', badge: 'bg-violet-50 text-violet-700 border-violet-200', label: 'ปันผล' };
                     if (t.type === 'expense' && (t.category === 'ถอนทุน' || t.category === 'คืนทุน'))
                       return { icon: '🏧', bg: 'bg-purple-100', text: 'text-purple-700', badge: 'bg-purple-50 text-purple-700 border-purple-200', label: 'ถอนทุน' };
                     if (t.type === 'income')
@@ -2927,15 +3128,18 @@ function DDSolutionManager({ currentUser, onLogout }) {
             const checks = [];
             const autoActions = [];
             
-            // ✓ Check 1: รายได้บันทึกหรือยัง?
+            // ✓ Check 1: รายได้บันทึกครบยอดขายหรือยัง? (รองรับมัดจำบางส่วน)
             const incomeTx = linkedJob ? transactions.filter(t => 
-              t.type === 'income' && t.category === 'รายได้จากงาน' && t.jobId === linkedJob.id
+              t.type === 'income' && t.category === 'รายได้จากงาน' && t.jobId === linkedJob.id && !t.isService
             ) : [];
             const incomeRecorded = incomeTx.reduce((s, t) => s + Number(t.amount || 0), 0);
             const salePrice = Number(linkedJob?.salePrice || master?.totalAmount || 0);
+            const incomeShortfall = salePrice - incomeRecorded;
             
-            if (linkedJob && incomeRecorded === 0 && salePrice > 0) {
-              checks.push(`⚠️ ยังไม่บันทึกรายได้ → จะสร้างให้ (+${salePrice.toLocaleString()} ฿)`);
+            if (linkedJob && incomeShortfall > 0.5) {
+              checks.push(incomeRecorded > 0
+                ? `⚠️ รายได้บันทึกแล้ว ${incomeRecorded.toLocaleString()} ฿ ขาดอีก ${incomeShortfall.toLocaleString()} ฿ → จะสร้างส่วนที่ขาดให้`
+                : `⚠️ ยังไม่บันทึกรายได้ → จะสร้างให้ (+${salePrice.toLocaleString()} ฿)`);
               autoActions.push({
                 kind: 'income',
                 tx: {
@@ -2943,21 +3147,26 @@ function DDSolutionManager({ currentUser, onLogout }) {
                   date: new Date().toISOString().split('T')[0],
                   type: 'income',
                   category: 'รายได้จากงาน',
-                  amount: salePrice,
-                  description: `${linkedJob.customer} - ${linkedJob.system || 'งานติดตั้ง'}`,
+                  amount: incomeShortfall,
+                  description: incomeRecorded > 0
+                    ? `${linkedJob.customer} - รับเงินส่วนที่เหลือ (ปิดงาน)`
+                    : `${linkedJob.customer} - ${linkedJob.system || 'งานติดตั้ง'}`,
                   jobId: linkedJob.id,
                   partnerId: '',
                   createdBy: `${currentUser.name} (ปิดงานอัตโนมัติ)`,
                   createdAt: new Date().toISOString(),
                 },
               });
-            } else if (incomeRecorded > 0) {
-              checks.push(`✅ รายได้บันทึกแล้ว (${incomeRecorded.toLocaleString()} ฿)`);
+            } else if (linkedJob && salePrice > 0) {
+              checks.push(`✅ รายได้บันทึกครบ (${incomeRecorded.toLocaleString()} ฿)`);
+              if (incomeRecorded > salePrice + 0.5) {
+                checks.push(`⚠️ รายได้บันทึกเกินยอดขาย ${(incomeRecorded - salePrice).toLocaleString()} ฿ — ตรวจสอบรายการซ้ำใน Tab การเงิน`);
+              }
             }
             
             // ✓ Check 2: ต้นทุนงานบันทึกหรือยัง? (ของที่จ่ายจริง ไม่นับเบิกสต๊อก)
             const jobCostTx = linkedJob ? transactions.filter(t => 
-              t.type === 'expense' && t.category === 'ต้นทุนงาน' && t.jobId === linkedJob.id
+              t.type === 'expense' && t.category === 'ต้นทุนงาน' && t.jobId === linkedJob.id && !t.isService
             ) : [];
             const costRecorded = jobCostTx.reduce((s, t) => s + Number(t.amount || 0), 0);
             
@@ -3067,7 +3276,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
             // 3. อัพเดทสถานะงาน + ล็อก
             if (linkedJob) {
               saveJobs(
-                jobs.map(j => j.id === linkedJob.id ? { ...j, status: 'completed', closedAt, closedBy: currentUser.name, locked: true } : j),
+                jobs.map(j => j.id === linkedJob.id ? { ...j, status: 'completed', closedAt, closedBy: currentUser.name, locked: true, workflowStep: Math.max(Number(j.workflowStep || 0), 10) } : j),
                 'edit',
                 `🔒 ปิดงาน: ${linkedJob.customer} (กำไร ${profit.toLocaleString()} ฿)`
               );
@@ -3404,8 +3613,17 @@ function DDSolutionManager({ currentUser, onLogout }) {
                                   </button>
                                 )}
                                 <button onClick={() => {
-                                  if (window.confirm(`ลบ ${typeInfo.label} ${doc.docNumber}?\n\n⚠️ การลบไม่สามารถกู้คืนได้`)) {
-                                    saveDocuments(documents.filter(x => x.id !== doc.id), 'delete', `ลบ ${typeInfo.label}: ${doc.docNumber}`);
+                                  // เช็คว่ามี income ผูกกับใบเสร็จนี้ไหม
+                                  const linkedTx = transactions.find(t => t.sourceDocId === doc.id);
+                                  const txWarn = linkedTx
+                                    ? `\n\n💰 รายการรายได้ที่ผูกอยู่ (+${Number(linkedTx.amount).toLocaleString()} ฿) จะถูกลบด้วย`
+                                    : '';
+                                  if (window.confirm(`ลบ ${typeInfo.label} ${doc.docNumber}?${txWarn}\n\n⚠️ การลบไม่สามารถกู้คืนได้ และจะถูกบันทึกในประวัติ`)) {
+                                    saveDocuments(documents.filter(x => x.id !== doc.id), 'delete', `🗑️ ลบ ${typeInfo.label}: ${doc.docNumber}`);
+                                    if (linkedTx) {
+                                      saveTransactions(transactions.filter(t => t.id !== linkedTx.id), 'delete',
+                                        `🗑️ ลบรายได้ที่ผูกกับใบเสร็จ ${doc.docNumber}: -${Number(linkedTx.amount).toLocaleString()} ฿`);
+                                    }
                                   }
                                 }} className="p-1.5 hover:bg-red-50 rounded-lg" title="ลบเอกสารนี้">
                                   <Trash2 className="w-4 h-4 text-red-400" />
@@ -3450,8 +3668,16 @@ function DDSolutionManager({ currentUser, onLogout }) {
                               ✅ RC เต็ม
                             </button>
                           )}
+                          <button onClick={() => {
+                            const m = getMaster(chain.chainId);
+                            const lj = jobs.find(j => j.quotationId === m?.id || j.quotationId === chain.chainId || (m?.jobId && j.id === m.jobId));
+                            setCustomerGuide({ customerName: m?.customerName || '', systemType: lj?.type || '' });
+                          }}
+                            className="text-xs bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 px-3 py-1.5 rounded-lg font-medium ml-auto">
+                            📱 คู่มือลูกค้า
+                          </button>
                           <button onClick={() => closeChain(chain.chainId)}
-                            className="text-xs bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg font-medium ml-auto">
+                            className="text-xs bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg font-medium">
                             ✅ จบงาน
                           </button>
                           <button onClick={() => cancelChain(chain.chainId)}
@@ -3564,7 +3790,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
                 <div className="flex items-center gap-2"><span className="bg-amber-200 text-amber-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">3</span> เสนอราคา → <strong>เสนอขาย</strong> สร้างใบเสนอราคา</div>
                 <div className="flex items-center gap-2"><span className="bg-amber-200 text-amber-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">4</span> ลูกค้าตกลง → <strong>งานเอกสาร</strong> กด "🚀 สร้างงาน"</div>
                 <div className="flex items-center gap-2"><span className="bg-amber-200 text-amber-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">5</span> ทำงาน + กรอกต้นทุน → <strong>งาน</strong> (เบิกสต๊อก / ซื้อหน้างาน)</div>
-                <div className="flex items-center gap-2"><span className="bg-amber-200 text-amber-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">6</span> เก็บเงิน → ออกใบเสร็จ → <strong>งานเอกสาร</strong></div>
+                <div className="flex items-center gap-2"><span className="bg-amber-200 text-amber-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">6</span> เก็บเงิน → ออกใบเสร็จที่ <strong>งานเอกสาร</strong> (รายได้บันทึกเข้าการเงินอัตโนมัติ ✨)</div>
                 <div className="flex items-center gap-2"><span className="bg-amber-200 text-amber-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">7</span> ปิดงาน → กด "✅ จบงาน" (ระบบสรุป + บันทึกการเงินให้)</div>
               </div>
             </div>
@@ -3601,6 +3827,13 @@ function DDSolutionManager({ currentUser, onLogout }) {
                     <div className="text-xs text-stone-500">เฉพาะที่จ่ายเงินจริง (ของจากสต๊อกไม่นับซ้ำ)</div>
                   </div>
                 </div>
+                <div className="flex items-start gap-3 p-2 bg-violet-50 rounded-lg">
+                  <span className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">💜</span>
+                  <div className="text-sm">
+                    <strong className="text-violet-700">ปันผล</strong> — แบ่งกำไรให้หุ้นส่วน
+                    <div className="text-xs text-stone-500">กดปุ่ม "ปันผล" ที่แดชบอร์ด ใส่ก้อนเงิน ระบบแบ่งตาม % ทุนให้</div>
+                  </div>
+                </div>
               </div>
               <div className="mt-3 p-2 bg-stone-100 rounded-lg text-xs text-stone-600">
                 ⚠️ <strong>"เบิกของจากสต๊อก" ไม่ใช่รายจ่าย</strong> — เงินจ่ายไปแล้วตอนซื้อเข้าสต๊อก ถ้านับอีกจะซ้ำ 2 รอบ
@@ -3611,7 +3844,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
             <div className="bg-white rounded-2xl border border-stone-200 p-4">
               <h3 className="font-bold text-stone-800 mb-2">🧮 สูตรที่ระบบใช้ (ตรวจสอบเองได้)</h3>
               <div className="bg-stone-900 text-stone-100 rounded-xl p-3 font-mono text-sm space-y-1">
-                <div><span className="text-amber-400">เงินสดในมือ</span> = ทุนรวม + กำไรสะสม − มูลค่าสต๊อก</div>
+                <div><span className="text-amber-400">เงินสดในมือ</span> = ทุนรวม + กำไรสะสม − ปันผลจ่ายแล้ว − มูลค่าสต๊อก</div>
                 <div><span className="text-emerald-400">กำไรสะสม</span> = Σ (ราคาขาย − ต้นทุนงาน)</div>
                 <div><span className="text-blue-400">ทุนรวม</span> = Σ เพิ่มทุน − Σ ถอนทุน</div>
               </div>
@@ -3628,12 +3861,12 @@ function DDSolutionManager({ currentUser, onLogout }) {
                   { icon: '📊', title: 'แดชบอร์ด', desc: 'ภาพรวมเงิน • ปุ่ม "เพิ่มทุน/ถอนทุน" สำหรับหุ้นส่วน • ตัวเลขทุกตัวคำนวณอัตโนมัติ ห้ามแก้มือ' },
                   { icon: '📈', title: 'เสนอขาย', desc: 'Wizard 4 ขั้น: กรอกข้อมูลลูกค้า → เลือกแพ็คเกจ (ระบบแนะนำ 3 แบบ) → ปรับแต่ง → สร้างใบเสนอราคา • ราคาปัดขึ้นลงท้าย 999 อัตโนมัติ' },
                   { icon: '💲', title: 'แคตตาล็อกขาย', desc: 'รายการสินค้าสำหรับขาย (inverter/แผง/แบต/สายไฟ) • ตั้งราคาตลาด • ใช้ตอนสร้างใบเสนอราคา' },
-                  { icon: '💼', title: 'งาน', desc: 'รายการงานทั้งหมด • กรอกต้นทุน: "📦 เบิกจากสต๊อก" (ของที่มี) หรือ "+ เพิ่มรายการ" (ซื้อใหม่) • สายไฟม้วนใหม่กรอก ม้วน×ใช้ ระบบคิดเฉพาะที่ใช้ • งานที่ปิดแล้วจะล็อก 🔒' },
+                  { icon: '💼', title: 'งาน', desc: '🔄 ทุกงานมีขั้นตอน 11 ขั้น (ตกลงขาย → มัดจำ[เลือกได้] → สั่งของ → สำรวจ → เตรียมของ → ติดตั้ง → ทดสอบ → เก็บเงิน → ปิดงาน → ติดตาม) กดเลื่อนขั้นในงาน เห็น progress ที่การ์ด • ขั้นเตรียมของมี Checklist อุปกรณ์มาตรฐานให้ติ๊ก • กรอกต้นทุน: "📦 เบิกจากสต๊อก" หรือ "+ เพิ่มรายการ" • งานปิดแล้วล็อก 🔒' },
                   { icon: '👥', title: 'ลูกค้า', desc: 'ฐานข้อมูลลูกค้า • เก็บที่อยู่ เบอร์โทร ประวัติงาน' },
                   { icon: '📦', title: 'สต็อก', desc: '"+ เพิ่มสินค้า" → ☑ บันทึกรายจ่ายอัตโนมัติ (เงินบริษัทเสมอ) • ถ้าเงินบริษัทไม่พอ ให้หุ้นส่วนกด "เพิ่มทุน" ที่แดชบอร์ดก่อน แล้วค่อยซื้อ' },
                   { icon: '🤝', title: 'ผู้ลงทุน', desc: 'ทุนของแต่ละคน คำนวณจากรายการ "เพิ่มทุน" ในการเงิน • % สัดส่วนใช้แบ่งกำไร' },
                   { icon: '💵', title: 'การเงิน', desc: '3 มุมมอง: 📊 ทั้งหมด (ทุกรายการ) • 💰 กำไร/ขาดทุน (เฉพาะธุรกิจ) • 💵 เงินสด (เงินจริงในมือ) • ทุกรายการมีชื่อคนสร้าง/แก้' },
-                  { icon: '📄', title: 'งานเอกสาร', desc: 'ใบเสนอราคา → ใบแจ้งหนี้ → ใบเสร็จ (มัดจำ/เต็ม) • "🚀 สร้างงาน" จากใบเสนอ • "✅ จบงาน" = ระบบสรุปทุกอย่าง + บันทึกการเงินอัตโนมัติ + ล็อกงาน' },
+                  { icon: '📄', title: 'งานเอกสาร', desc: 'ใบเสนอราคา → ใบแจ้งหนี้ → ใบเสร็จ (มัดจำ/เต็ม) • ออกใบเสร็จ = รายได้เข้าการเงินอัตโนมัติทันที (แก้/ลบใบเสร็จ รายได้ sync ตาม) • "🚀 สร้างงาน" จากใบเสนอ • "✅ จบงาน" = สรุปทุกอย่าง + เก็บส่วนที่ขาด + ล็อกงาน' },
                   { icon: '📜', title: 'ประวัติ', desc: 'ทุกการเพิ่ม/แก้/ลบ บันทึกพร้อมชื่อคนทำและเวลา • ใช้ตรวจสอบเมื่อตัวเลขผิด' },
                 ].map((item, i) => (
                   <details key={i} className="border border-stone-100 rounded-lg overflow-hidden">
@@ -3668,8 +3901,12 @@ function DDSolutionManager({ currentUser, onLogout }) {
                   { q: 'ตัวเลข Dashboard กับ Excel ไม่ตรงกัน?', a: 'เช็ค Tab "การเงิน" → "💵 เงินสด" ว่าตรงกับ Dashboard ไหม ถ้าไม่ตรงแปลว่ามีรายการการเงินขาด/เกิน ดูใน "ประวัติ" ว่าใครแก้อะไรล่าสุด' },
                   { q: 'หุ้นส่วนเอาเงินส่วนตัวซื้อของ ต้องทำยังไง?', a: 'โครงสร้างใหม่: ห้ามจ่ายแทนตรงๆ! ให้ทำ 2 ขั้น → ① แดชบอร์ด กด "เพิ่มทุน" ใส่จำนวนเงิน (ทุนหุ้นส่วนเพิ่ม + เงินบริษัทเพิ่ม) → ② ค่อยซื้อของตามปกติ (ตัดจากเงินบริษัท) — แบบนี้ทุนกับการซื้อแยกขาด ตรวจสอบง่าย ไม่งง' },
                   { q: 'เบิกของจากสต๊อกไปใช้งาน นับเป็นรายจ่ายไหม?', a: 'ไม่นับ! เงินจ่ายไปแล้วตอนซื้อเข้าสต๊อก ระบบจะหักสต๊อกและใส่เป็นต้นทุนงานให้เอง (เห็นใน P&L แต่ไม่อยู่ใน Cash Flow)' },
-                  { q: 'ลืมบันทึกรายได้ตอนรับเงิน?', a: 'ไม่เป็นไร ตอนกด "✅ จบงาน" ระบบจะตรวจและสร้างรายการที่ขาดให้อัตโนมัติ พร้อมแสดงสรุปก่อนยืนยัน' },
+                  { q: 'รับเงินลูกค้า ต้องบันทึกการเงินเองไหม?', a: 'ไม่ต้อง! แค่ออกใบเสร็จ (มัดจำ/เต็ม) ที่งานเอกสาร → รายได้เข้า Tab การเงินอัตโนมัติทันที ผูกกับงานให้ด้วย • ถ้ารับเงินสดไม่ออกใบเสร็จ ตอน "✅ จบงาน" ระบบจะเช็คยอดที่ขาดและสร้างให้' },
                   { q: 'อยากดูว่าใครแก้ตัวเลข?', a: 'Tab "ประวัติ" เก็บทุกการเพิ่ม/แก้/ลบ 500 รายการล่าสุด พร้อมชื่อและเวลา • แต่ละรายการการเงินก็แสดง "สร้างโดย/แก้โดย" ด้วย' },
+                  { q: 'ลูกค้าถามวิธีดูแอป Deye Cloud ทำยังไง?', a: 'Tab งานเอกสาร → ที่งานนั้นกดปุ่ม "📱 คู่มือลูกค้า" → ได้คู่มือ 1 หน้า (ติดตั้งแอป, อ่านหน้าจอแบบดูลูกศร, เช็คประจำสัปดาห์, ปัญหาพบบ่อย, ช่องทางติดต่อเรา) → กด "🖨️ พิมพ์/บันทึก PDF" แนบให้ลูกค้าได้ทั้งกระดาษและอีเมล' },
+                  { q: 'ลูกค้าแจ้งปัญหา / ทำงานล้างแผง-ซ่อม บันทึกที่ไหน?', a: 'เปิดงานนั้น → กล่อง "📋 บันทึกงาน + บริการหลังการขาย" → เลือกประเภท (🐛ปัญหา 💬ฟีดแบ็ก 🧽ล้างแผง 🔧ซ่อม 📞ติดตาม) ใส่รายละเอียด + รายรับ/ค่าใช้จ่ายถ้ามี → ระบบบันทึกการเงินให้อัตโนมัติ และการ์ดงานจะโชว์ "กำไรระยะยาว" = กำไรติดตั้ง + บริการสุทธิ ดูได้เลยว่างานนี้คุ้มไหมในระยะยาว • งานที่ปิดแล้วก็เพิ่มบันทึกบริการได้' },
+                  { q: 'จะรู้ได้ไงว่างานไหนถึงขั้นตอนไหนแล้ว?', a: 'การ์ดงานทุกใบมีแถบ Progress บอกขั้น (เช่น "ขั้น 6/11: เตรียมของ") • เปิดงานเข้าไปเห็น Stepper 11 ขั้น พร้อมคำแนะนำแต่ละขั้น (มัดจำก่อนสั่งของ, ตั้ง CT clamp, ฯลฯ) กด "✓ เสร็จขั้นนี้" เพื่อเลื่อน • ขั้นสำรวจ-ติดตั้งมี Checklist ของให้ติ๊กกันลืม' },
+                  { q: 'อยากแบ่งกำไรให้หุ้นส่วน ทำยังไง?', a: 'แดชบอร์ด → กดปุ่ม "💜 ปันผล" → ใส่ยอดรวมเป็นก้อน (เช่น 30,000) → ระบบแบ่งให้อัตโนมัติตาม % สัดส่วนทุนของแต่ละคน พร้อม preview ก่อนยืนยัน • ระบบเตือนถ้าเกินกำไรสะสม และบล็อกถ้าเงินสดไม่พอ • ไม่ต้องแบ่งทุกงาน — สะสมกำไรไว้ ปันผลเมื่อพร้อม' },
                   { q: 'สายไฟเหลือจากงาน หายไปไหน?', a: 'ตอนกด "จบงาน" สายไฟม้วนใหม่ที่ใช้ไม่หมด ระบบจะคำนวณที่เหลือและเพิ่มเข้าสต๊อกให้อัตโนมัติ (ราคาเฉลี่ยถ้ามีของเดิม)' },
                 ].map((item, i) => (
                   <details key={i} className="border border-stone-100 rounded-lg overflow-hidden">
@@ -3692,24 +3929,59 @@ function DDSolutionManager({ currentUser, onLogout }) {
           onClose={() => { setShowJobModal(false); setEditingItem(null); }}
           onSave={(data) => {
             // เช็คว่าเป็น "แก้ไข" หรือ "เพิ่มใหม่" จาก id
-            // - แก้ไข: editingItem มี id (มาจาก JobCard)
-            // - เพิ่มใหม่: editingItem เป็น null หรือ draftJob (ไม่มี id)
             const isEditing = editingItem && editingItem.id;
+            const jobId = isEditing ? editingItem.id : `job-${Date.now()}`;
+            
+            // ✨ บันทึกบริการใหม่ที่มีเงิน → สร้าง tx อัตโนมัติ (isService — ไม่ปนกับยอดติดตั้ง)
+            const SVC_LABELS = { issue: '🐛 ปัญหา', feedback: '💬 ฟีดแบ็ก', clean: '🧽 ล้างแผง', repair: '🔧 ซ่อม', followup: '📞 ติดตามผล', note: '📝 บันทึก' };
+            const newSvcTxs = [];
+            const finalServiceLog = (data.serviceLog || []).map(l => {
+              if (l._txCreated) return l;
+              const updated = { ...l, by: l.by || currentUser.name };
+              const label = SVC_LABELS[l.type] || '📝';
+              const now = new Date().toISOString();
+              if (Number(l.income) > 0) {
+                newSvcTxs.push({
+                  id: `t-svc-${Date.now()}-${Math.random().toString(36).slice(2,5)}`,
+                  date: l.date, type: 'income', category: 'รายได้จากงาน',
+                  amount: Number(l.income),
+                  description: `บริการ: ${label} ${data.customer} — ${l.note}`,
+                  jobId, partnerId: '', isService: true,
+                  createdBy: `${currentUser.name} (บันทึกงาน)`, createdAt: now,
+                });
+              }
+              if (Number(l.cost) > 0) {
+                newSvcTxs.push({
+                  id: `t-svc-${Date.now()}-${Math.random().toString(36).slice(2,5)}c`,
+                  date: l.date, type: 'expense', category: 'ต้นทุนงาน',
+                  amount: Number(l.cost),
+                  description: `บริการ: ${label} ${data.customer} — ${l.note}`,
+                  jobId, partnerId: '', isService: true,
+                  createdBy: `${currentUser.name} (บันทึกงาน)`, createdAt: now,
+                });
+              }
+              return (Number(l.income) > 0 || Number(l.cost) > 0) ? { ...updated, _txCreated: true } : updated;
+            });
+            const jobData = { ...data, serviceLog: finalServiceLog };
             
             if (isEditing) {
-              saveJobs(jobs.map(j => j.id === editingItem.id ? { ...data, id: editingItem.id } : j), 'edit', `แก้ไข: ${data.customer}`);
+              saveJobs(jobs.map(j => j.id === editingItem.id ? { ...jobData, id: editingItem.id } : j), 'edit', `แก้ไข: ${data.customer}`);
             } else {
-              const newJobId = `job-${Date.now()}`;
-              const newJob = { ...data, id: newJobId };
+              const newJob = { ...jobData, id: jobId };
               saveJobs([...jobs, newJob], 'add', `เพิ่ม: ${data.customer} (${data.salePrice} ฿)`);
               // ถ้ามี quotationId → ผูก doc ↔ job (อัพเดทกลับ)
               if (data.quotationId) {
                 saveDocuments(
-                  documents.map(d => d.id === data.quotationId ? { ...d, jobId: newJobId } : d),
+                  documents.map(d => d.id === data.quotationId ? { ...d, jobId } : d),
                   'edit',
                   `เชื่อมงาน ${data.customer} กับใบเสนอราคา`
                 );
               }
+            }
+            
+            if (newSvcTxs.length > 0) {
+              saveTransactions([...transactions, ...newSvcTxs], 'add',
+                `📋 บันทึกบริการ ${data.customer}: สร้าง ${newSvcTxs.length} รายการการเงิน`);
             }
             setShowJobModal(false); setEditingItem(null);
           }}
@@ -3850,7 +4122,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
           mode={capitalMode}
           partners={partners}
           actualInvestments={actualInvestments}
-          cashOnHand={Object.values(actualInvestments.inv).reduce((s, v) => s + v, 0) + totalProfit - totalStockValue}
+          cashOnHand={Object.values(actualInvestments.inv).reduce((s, v) => s + v, 0) + totalProfit - dividendStats.total - totalStockValue}
           fmt={fmt}
           onClose={() => setShowCapitalModal(false)}
           onSave={(data) => {
@@ -3865,11 +4137,51 @@ function DDSolutionManager({ currentUser, onLogout }) {
               description: `${isDeposit ? 'เพิ่มทุน' : 'ถอนทุน'} ${partner?.name || ''}${data.note ? ' - ' + data.note : ''}`,
               jobId: '',
               partnerId: data.partnerId,
+              createdBy: currentUser.name,
+              createdAt: new Date().toISOString(),
             };
             saveTransactions([...transactions, tx], 'add',
               `${isDeposit ? '➕ เพิ่มทุน' : '➖ ถอนทุน'} ${partner?.name}: ${fmt(data.amount)} ฿${data.note ? ' (' + data.note + ')' : ''}`);
             setShowCapitalModal(false);
           }}
+        />
+      )}
+      {showDividendModal && (
+        <DividendModal
+          partners={partners}
+          actualInvestments={actualInvestments}
+          retainedProfit={totalProfit - dividendStats.total}
+          cashOnHand={Object.values(actualInvestments.inv).reduce((s, v) => s + v, 0) + totalProfit - dividendStats.total - totalStockValue}
+          fmt={fmt}
+          onClose={() => setShowDividendModal(false)}
+          onSave={(allocations, note) => {
+            const now = new Date().toISOString();
+            const date = now.split('T')[0];
+            const newTxs = allocations.map((a, i) => ({
+              id: `t-div-${Date.now()}-${i}`,
+              date,
+              type: 'expense',
+              category: 'ปันผล',
+              amount: a.amount,
+              description: `ปันผล ${a.name} (${a.pct.toFixed(1)}%)${note ? ' - ' + note : ''}`,
+              jobId: '',
+              partnerId: a.partnerId,
+              createdBy: currentUser.name,
+              createdAt: now,
+            }));
+            const total = allocations.reduce((s, a) => s + a.amount, 0);
+            saveTransactions([...transactions, ...newTxs], 'add',
+              `💜 ปันผล ${total.toLocaleString()} ฿ แบ่ง ${allocations.length} คนตามสัดส่วนทุน${note ? ' (' + note + ')' : ''}`);
+            setShowDividendModal(false);
+          }}
+        />
+      )}
+      {customerGuide && (
+        <CustomerGuideModal
+          customerName={customerGuide.customerName}
+          systemType={customerGuide.systemType}
+          companyInfo={companyInfo}
+          onClose={() => setCustomerGuide(null)}
         />
       )}
       {showDocumentModal && (
@@ -3882,12 +4194,62 @@ function DDSolutionManager({ currentUser, onLogout }) {
           companyInfo={companyInfo}
           onClose={() => { setShowDocumentModal(false); setEditingItem(null); }}
           onSave={(data) => {
+            // ✨ Helper: หา job ที่ผูกกับเอกสารนี้ (ผ่าน chain)
+            const findLinkedJob = (doc) => {
+              const chainId = doc.jobChainId || doc.id;
+              const master = documents.find(d => d.id === chainId) || doc;
+              return jobs.find(j =>
+                j.quotationId === master?.id ||
+                j.quotationId === chainId ||
+                (master?.jobId && j.id === master.jobId)
+              );
+            };
+            const isReceipt = (d) => d.type === 'receipt-deposit' || d.type === 'receipt-final' || d.type === 'receipt';
+            
             if (editingItem) {
               saveDocuments(documents.map(d => d.id === editingItem.id ? data : d), 'edit',
                 `แก้ไขเอกสาร ${data.docNumber}`);
+              
+              // ถ้าแก้ใบเสร็จที่มี income ผูกอยู่ → sync จำนวนเงินให้ตรง (audit ครบ)
+              if (isReceipt(data)) {
+                const linkedTx = transactions.find(t => t.sourceDocId === data.id);
+                if (linkedTx && Math.abs(Number(linkedTx.amount) - Number(data.totalAmount)) > 0.5) {
+                  saveTransactions(transactions.map(t => t.id === linkedTx.id ? {
+                    ...t,
+                    amount: Number(data.totalAmount || 0),
+                    description: `รับเงินตามใบเสร็จ ${data.docNumber} (${data.customerName})`,
+                    editedBy: `${currentUser.name} (sync ใบเสร็จ)`,
+                    editedAt: new Date().toISOString(),
+                    editCount: (linkedTx.editCount || 0) + 1,
+                  } : t), 'edit', `🔄 Sync รายได้ตามใบเสร็จ ${data.docNumber}: ${Number(data.totalAmount).toLocaleString()} ฿`);
+                }
+              }
             } else {
               saveDocuments([...documents, data], 'add',
                 `สร้างเอกสาร ${data.docNumber} (${data.customerName})`);
+              
+              // ✨ ใบเสร็จใหม่ = เงินเข้าจริง → สร้าง income 'รายได้จากงาน' อัตโนมัติ
+              if (isReceipt(data) && Number(data.totalAmount || 0) > 0) {
+                const alreadyExists = transactions.some(t => t.sourceDocId === data.id);
+                if (!alreadyExists) {
+                  const linkedJob = findLinkedJob(data);
+                  const newTx = {
+                    id: `t-rc-${Date.now()}`,
+                    date: data.date || new Date().toISOString().split('T')[0],
+                    type: 'income',
+                    category: 'รายได้จากงาน',
+                    amount: Number(data.totalAmount || 0),
+                    description: `รับเงินตามใบเสร็จ ${data.docNumber} (${data.customerName})${data.type === 'receipt-deposit' ? ' — มัดจำ' : ''}`,
+                    jobId: linkedJob?.id || '',
+                    partnerId: '',
+                    sourceDocId: data.id,
+                    createdBy: `${currentUser.name} (ใบเสร็จอัตโนมัติ)`,
+                    createdAt: new Date().toISOString(),
+                  };
+                  saveTransactions([...transactions, newTx], 'add',
+                    `💰 รับเงินอัตโนมัติจากใบเสร็จ ${data.docNumber}: +${Number(data.totalAmount).toLocaleString()} ฿`);
+                }
+              }
             }
             setShowDocumentModal(false); setEditingItem(null);
           }}
@@ -3938,8 +4300,22 @@ function StatCard({ icon: Icon, label, value, suffix, color, highlight }) {
 function JobCard({ job, partners, fmt, fmt0, onEdit, onDelete }) {
   const investmentEntries = Object.entries(job.investments || {});
   const isLocked = job.locked === true;
+  // ขั้นตอนงาน: ล็อกแล้ว = ขั้น 10 (ปิดงาน) อย่างน้อย
+  const wfStep = isLocked ? Math.max(Number(job.workflowStep || 0), 10) : Number(job.workflowStep || 1);
+  const wfInfo = JOB_WORKFLOW_STEPS.find(s => s.id === wfStep) || JOB_WORKFLOW_STEPS[0];
+  const wfPct = Math.min(100, (wfStep / JOB_WORKFLOW_STEPS.length) * 100);
   return (
     <div className={`bg-white rounded-2xl p-5 shadow-sm border animate-slide-up ${isLocked ? 'border-stone-300 bg-stone-50/50' : 'border-stone-200'}`}>
+      {/* 🔄 Workflow Progress */}
+      <div className="mb-3 -mt-1">
+        <div className="flex items-center justify-between text-xs mb-1">
+          <span className="font-medium text-amber-700">{wfInfo.icon} ขั้น {wfStep}/{JOB_WORKFLOW_STEPS.length}: {wfInfo.label}</span>
+          <span className="text-stone-400">{Math.round(wfPct)}%</span>
+        </div>
+        <div className="h-1.5 bg-stone-100 rounded-full overflow-hidden">
+          <div className={`h-full rounded-full transition-all ${wfStep >= 10 ? 'bg-emerald-500' : 'bg-amber-400'}`} style={{ width: `${wfPct}%` }} />
+        </div>
+      </div>
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -3980,6 +4356,19 @@ function JobCard({ job, partners, fmt, fmt0, onEdit, onDelete }) {
         <div className="bg-rose-50 rounded-lg p-2 text-center"><div className="text-xs text-rose-600">ต้นทุน</div><div className="font-bold text-rose-700">{fmt0(job.totalCost)} ฿</div></div>
         <div className="bg-amber-50 rounded-lg p-2 text-center"><div className="text-xs text-amber-600">กำไร</div><div className="font-bold text-amber-700">{fmt0(job.profit)} ฿</div></div>
       </div>
+      {/* 📋 กำไรระยะยาว (รวมบริการหลังการขาย) */}
+      {(() => {
+        const svcLog = Array.isArray(job.serviceLog) ? job.serviceLog : [];
+        if (svcLog.length === 0) return null;
+        const svcNet = svcLog.reduce((s, l) => s + Number(l.income || 0) - Number(l.cost || 0), 0);
+        const longTerm = Number(job.profit || 0) + svcNet;
+        return (
+          <div className="mb-3 flex items-center justify-between bg-sky-50 border border-sky-200 rounded-lg px-3 py-1.5 text-xs">
+            <span className="text-sky-700">📋 บริการ {svcLog.length} ครั้ง · สุทธิ <span className={`font-mono font-bold ${svcNet >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{svcNet >= 0 ? '+' : ''}{fmt0(svcNet)}</span></span>
+            <span className="text-stone-600">กำไรระยะยาว: <span className={`font-bold font-mono ${longTerm >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{fmt0(longTerm)} ฿</span></span>
+          </div>
+        );
+      })()}
       {investmentEntries.length > 0 && (
         <div className="mb-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
           <div className="text-xs font-medium text-blue-700 mb-1">💰 ใครออกเงินทุน <span className="text-stone-400 font-normal">(ข้อมูลเก่า — ปัจจุบันใช้เงินบริษัท)</span></div>
@@ -4193,6 +4582,28 @@ function JobModal({ job, partners, stock = [], documents = [], onUpdateStock, on
   const [costsByCategory, setCostsByCategory] = useState(form.costsByCategory || {});
   // ✨ investments = data เก่า (read-only) — โครงสร้างใหม่ไม่กรอกแล้ว เก็บไว้เพื่อ backward compat
   const investments = form.investments || {};
+  // 🔄 Workflow: ขั้นตอนงาน + checklist ของติดตั้ง
+  const [workflowStep, setWorkflowStep] = useState(Number(form.workflowStep || 1));
+  const [checklist, setChecklist] = useState(() => {
+    if (Array.isArray(form.checklist) && form.checklist.length > 0) return form.checklist;
+    // init จาก template มาตรฐาน
+    const items = [];
+    DEFAULT_INSTALL_CHECKLIST.forEach(g => g.items.forEach(it => items.push({ group: g.group, text: it, done: false })));
+    return items;
+  });
+  const [newCheckItem, setNewCheckItem] = useState('');
+  const wfCurrent = JOB_WORKFLOW_STEPS.find(s => s.id === workflowStep) || JOB_WORKFLOW_STEPS[0];
+  // 📋 บันทึกงาน + บริการหลังการขาย (ปัญหา/ฟีดแบ็ก/ล้างแผง/ซ่อม) — เพิ่มได้แม้งานปิดแล้ว
+  const [serviceLog, setServiceLog] = useState(Array.isArray(form.serviceLog) ? form.serviceLog : []);
+  const [svc, setSvc] = useState({ date: new Date().toISOString().split('T')[0], type: 'note', note: '', income: '', cost: '' });
+  const SVC_TYPES = [
+    { id: 'issue', icon: '🐛', label: 'ปัญหา' },
+    { id: 'feedback', icon: '💬', label: 'ฟีดแบ็ก' },
+    { id: 'clean', icon: '🧽', label: 'ล้างแผง' },
+    { id: 'repair', icon: '🔧', label: 'ซ่อม' },
+    { id: 'followup', icon: '📞', label: 'ติดตามผล' },
+    { id: 'note', icon: '📝', label: 'บันทึกทั่วไป' },
+  ];
   const [stockPicker, setStockPicker] = useState(null); // { catId, mode: 'pick' | 'qty', stockId }
   const [pickQty, setPickQty] = useState('');
   // Track stock movements: { stockId: qtyUsed } - เก็บไว้เพื่อหักสต๊อกตอน save
@@ -4271,11 +4682,94 @@ function JobModal({ job, partners, stock = [], documents = [], onUpdateStock, on
       onUpdateStock(newStock);
     }
     
-    onSave({...form, costsByCategory, investments: cleanInv, totalCost, profit});
+    onSave({...form, costsByCategory, investments: cleanInv, totalCost, profit, workflowStep, checklist, serviceLog});
   };
 
   return (
     <Modal title={job ? 'แก้ไขงาน' : 'เพิ่มงานใหม่'} onClose={onClose} wide>
+      {/* === 🔄 Workflow Stepper === */}
+      <div className="mb-4 bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-200 rounded-2xl p-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-bold text-amber-900">🔄 ขั้นตอนงาน</span>
+          <span className="text-xs text-stone-500">ขั้น {workflowStep}/{JOB_WORKFLOW_STEPS.length}</span>
+        </div>
+        {/* แถวปุ่มขั้นตอน — กดเลือกขั้นปัจจุบัน */}
+        <div className="flex gap-1 overflow-x-auto pb-1 mb-2">
+          {JOB_WORKFLOW_STEPS.map(s => {
+            const isDone = s.id < workflowStep;
+            const isCurrent = s.id === workflowStep;
+            return (
+              <button key={s.id} type="button"
+                onClick={() => setWorkflowStep(s.id)}
+                title={`${s.label}${s.optional ? ' (ข้ามได้)' : ''}`}
+                className={`flex-shrink-0 w-9 h-9 rounded-full text-sm flex items-center justify-center border-2 transition-all ${
+                  isCurrent ? 'bg-amber-500 border-amber-600 text-white scale-110 shadow-md' :
+                  isDone ? 'bg-emerald-100 border-emerald-300' :
+                  'bg-white border-stone-200 opacity-60'
+                }`}>
+                {isDone ? '✓' : s.icon}
+              </button>
+            );
+          })}
+        </div>
+        {/* ขั้นปัจจุบัน + คำแนะนำ */}
+        <div className="bg-white/70 rounded-xl p-2.5">
+          <div className="font-medium text-sm text-stone-800 flex items-center gap-1.5">
+            {wfCurrent.icon} {wfCurrent.label}
+            {wfCurrent.optional && <span className="text-[10px] bg-stone-100 text-stone-500 px-1.5 py-0.5 rounded">ข้ามได้</span>}
+          </div>
+          <div className="text-xs text-stone-600 mt-1 leading-relaxed">{wfCurrent.hint}</div>
+          {workflowStep < JOB_WORKFLOW_STEPS.length && (
+            <button type="button"
+              onClick={() => setWorkflowStep(workflowStep + 1)}
+              className="mt-2 text-xs bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg font-medium">
+              ✓ เสร็จขั้นนี้ → ไปขั้นถัดไป
+            </button>
+          )}
+        </div>
+        {/* 📦 Checklist — โผล่ตอนขั้น 5-7 (สำรวจ/เตรียมของ/ติดตั้ง) */}
+        {workflowStep >= 5 && workflowStep <= 7 && (
+          <div className="mt-2 bg-white/70 rounded-xl p-2.5">
+            {(() => {
+              const doneCount = checklist.filter(i => i.done).length;
+              const groups = [...new Set(checklist.map(i => i.group || 'อื่นๆ'))];
+              return (
+                <>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-bold text-stone-700">📦 Checklist ของติดตั้ง</span>
+                    <span className={`text-[11px] font-medium ${doneCount === checklist.length ? 'text-emerald-600' : 'text-amber-600'}`}>
+                      {doneCount}/{checklist.length} {doneCount === checklist.length ? '✅ ครบ!' : ''}
+                    </span>
+                  </div>
+                  <div className="max-h-44 overflow-y-auto space-y-1.5 pr-1">
+                    {groups.map(g => (
+                      <div key={g}>
+                        <div className="text-[10px] font-bold text-amber-700 mb-0.5">{g}</div>
+                        {checklist.map((item, idx) => (item.group || 'อื่นๆ') === g && (
+                          <label key={idx} className="flex items-center gap-2 text-xs py-0.5 cursor-pointer hover:bg-amber-50 rounded px-1">
+                            <input type="checkbox" checked={item.done}
+                              onChange={() => setChecklist(checklist.map((it, i) => i === idx ? { ...it, done: !it.done } : it))}
+                              className="w-3.5 h-3.5 rounded text-emerald-500 flex-shrink-0" />
+                            <span className={item.done ? 'line-through text-stone-400' : 'text-stone-700'}>{item.text}</span>
+                            <button type="button" onClick={(e) => { e.preventDefault(); setChecklist(checklist.filter((_, i) => i !== idx)); }}
+                              className="ml-auto text-stone-300 hover:text-red-400 text-[10px] px-1">✕</button>
+                          </label>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-1 mt-1.5">
+                    <input value={newCheckItem} onChange={e => setNewCheckItem(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' && newCheckItem.trim()) { setChecklist([...checklist, { group: 'เพิ่มเอง', text: newCheckItem.trim(), done: false }]); setNewCheckItem(''); } }}
+                      className="flex-1 text-xs border border-stone-200 rounded-lg px-2 py-1.5" placeholder="+ เพิ่มรายการ (Enter)" />
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        )}
+      </div>
+
       {/* === Quotation Link Badge === */}
       {form.quotationId && (
         <div className="mb-3 bg-emerald-50 border-2 border-emerald-300 rounded-xl p-3">
@@ -4675,6 +5169,82 @@ function JobModal({ job, partners, stock = [], documents = [], onUpdateStock, on
           <span className="font-bold text-amber-700">{(Number(form.salePrice || 0) - totalCost).toFixed(2)} ฿</span>
         </div>
       </div>
+
+      {/* === 📋 บันทึกงาน + บริการหลังการขาย === */}
+      <details className="bg-sky-50 border-2 border-sky-200 rounded-2xl p-3 mb-3" open={serviceLog.length > 0}>
+        <summary className="cursor-pointer font-bold text-sm text-sky-900 flex items-center justify-between">
+          <span>📋 บันทึกงาน + บริการหลังการขาย {serviceLog.length > 0 && `(${serviceLog.length})`}</span>
+          {(() => {
+            const svcNet = serviceLog.reduce((s, l) => s + Number(l.income || 0) - Number(l.cost || 0), 0);
+            return svcNet !== 0 ? (
+              <span className={`text-xs font-mono ${svcNet >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                บริการสุทธิ {svcNet >= 0 ? '+' : ''}{svcNet.toLocaleString()} ฿
+              </span>
+            ) : null;
+          })()}
+        </summary>
+        <div className="mt-2 space-y-2">
+          {serviceLog.length > 0 && (
+            <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+              {[...serviceLog].sort((a, b) => (b.date || '').localeCompare(a.date || '')).map((l) => {
+                const t = SVC_TYPES.find(x => x.id === l.type) || SVC_TYPES[5];
+                const origIdx = serviceLog.indexOf(l);
+                return (
+                  <div key={origIdx} className="bg-white rounded-lg p-2 text-xs flex items-start gap-2 border border-sky-100">
+                    <span className="text-base flex-shrink-0">{t.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-medium">{t.label}</span>
+                        <span className="text-stone-400">{l.date}</span>
+                        {l.by && <span className="text-stone-400">· {l.by}</span>}
+                      </div>
+                      <div className="text-stone-600 mt-0.5">{l.note}</div>
+                      {(Number(l.income) > 0 || Number(l.cost) > 0) && (
+                        <div className="mt-0.5 flex gap-2 font-mono">
+                          {Number(l.income) > 0 && <span className="text-emerald-600">+{Number(l.income).toLocaleString()}</span>}
+                          {Number(l.cost) > 0 && <span className="text-rose-600">−{Number(l.cost).toLocaleString()}</span>}
+                          {l._txCreated && <span className="text-[10px] text-stone-400">(บันทึกการเงินแล้ว)</span>}
+                        </div>
+                      )}
+                    </div>
+                    {!l._txCreated && (
+                      <button type="button" onClick={() => setServiceLog(serviceLog.filter((_, i) => i !== origIdx))}
+                        className="text-stone-300 hover:text-red-400 px-1">✕</button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div className="bg-white rounded-xl p-2.5 border border-sky-200 space-y-2">
+            <div className="flex gap-1.5 flex-wrap">
+              {SVC_TYPES.map(t => (
+                <button key={t.id} type="button" onClick={() => setSvc({ ...svc, type: t.id })}
+                  className={`text-xs px-2 py-1 rounded-lg border ${svc.type === t.id ? 'bg-sky-500 text-white border-sky-600' : 'bg-stone-50 border-stone-200'}`}>
+                  {t.icon} {t.label}
+                </button>
+              ))}
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              <input type="date" value={svc.date} onChange={e => setSvc({ ...svc, date: e.target.value })} className="text-xs border border-stone-200 rounded-lg px-2 py-1.5" />
+              <input type="number" value={svc.income} onChange={e => setSvc({ ...svc, income: e.target.value })} className="text-xs border border-stone-200 rounded-lg px-2 py-1.5" placeholder="รายรับ ฿ (ถ้ามี)" />
+              <input type="number" value={svc.cost} onChange={e => setSvc({ ...svc, cost: e.target.value })} className="text-xs border border-stone-200 rounded-lg px-2 py-1.5" placeholder="ค่าใช้จ่าย ฿" />
+            </div>
+            <div className="flex gap-1.5">
+              <input value={svc.note} onChange={e => setSvc({ ...svc, note: e.target.value })}
+                className="flex-1 text-xs border border-stone-200 rounded-lg px-2 py-1.5" placeholder="รายละเอียด เช่น ล้างแผง 8 แผ่น เก็บ 1,500" />
+              <button type="button"
+                onClick={() => {
+                  if (!svc.note.trim()) { alert('กรุณาใส่รายละเอียด'); return; }
+                  setServiceLog([...serviceLog, { ...svc, income: Number(svc.income) || 0, cost: Number(svc.cost) || 0 }]);
+                  setSvc({ date: new Date().toISOString().split('T')[0], type: svc.type, note: '', income: '', cost: '' });
+                }}
+                className="text-xs bg-sky-500 hover:bg-sky-600 text-white px-3 py-1.5 rounded-lg font-medium whitespace-nowrap">+ เพิ่ม</button>
+            </div>
+            <div className="text-[10px] text-stone-400">💡 รายรับ/ค่าใช้จ่าย จะบันทึกเข้าการเงินอัตโนมัติตอนกดบันทึกงาน · กำไรระยะยาว = กำไรติดตั้ง + บริการสุทธิ</div>
+          </div>
+        </div>
+      </details>
 
       <Field label="หมายเหตุ"><textarea value={form.note} onChange={e => update('note', e.target.value)} className={inputCls} rows={2} /></Field>
       <button onClick={handleSave} className="w-full bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-xl font-medium mt-4 flex items-center justify-center gap-2">
@@ -5273,6 +5843,222 @@ function PhotoLightbox({ photos, index, onClose, onChange }) {
   );
 }
 
+
+// 💜 Modal ปันผล — ใส่ก้อนเงิน แบ่งตามสัดส่วนทุนอัตโนมัติ
+// 📱 คู่มือการใช้งานสำหรับลูกค้า — พิมพ์/บันทึก PDF แนบส่งได้ (กระดาษ + อีเมล)
+function CustomerGuideModal({ customerName, systemType, companyInfo, onClose }) {
+  const today = new Date();
+  const thMonths = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+  const thDate = `${today.getDate()} ${thMonths[today.getMonth()]} ${today.getFullYear() + 543}`;
+  
+  const Section = ({ no, icon, title, children }) => (
+    <div className="mb-4 break-inside-avoid">
+      <div className="flex items-center gap-2 mb-1.5 border-b-2 border-amber-400 pb-1">
+        <span className="w-6 h-6 rounded-full bg-amber-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">{no}</span>
+        <span className="font-bold text-stone-800">{icon} {title}</span>
+      </div>
+      <div className="text-sm text-stone-700 leading-relaxed pl-8">{children}</div>
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-start justify-center overflow-y-auto print:bg-white print:p-0 print:overflow-visible py-6 px-2">
+      {/* Toolbar (ไม่พิมพ์) */}
+      <div className="fixed top-0 left-0 right-0 bg-stone-900 text-white z-50 flex items-center justify-between gap-2 no-print print:hidden shadow-lg px-4 py-2.5">
+        <span className="text-sm font-medium">📱 คู่มือลูกค้า — {customerName || '(ไม่ระบุชื่อ)'}</span>
+        <div className="flex gap-2">
+          <button onClick={() => window.print()} className="bg-amber-500 hover:bg-amber-400 text-stone-900 text-sm font-bold px-4 py-1.5 rounded-lg">
+            🖨️ พิมพ์ / บันทึก PDF
+          </button>
+          <button onClick={onClose} className="bg-stone-700 hover:bg-stone-600 text-sm px-3 py-1.5 rounded-lg">✕ ปิด</button>
+        </div>
+      </div>
+
+      {/* กระดาษ A4 */}
+      <div className="bg-white w-full max-w-[210mm] shadow-2xl print:shadow-none mt-12 print:mt-0 p-8 print:p-6 rounded-xl print:rounded-none">
+        {/* Header */}
+        <div className="text-center border-b-4 border-amber-500 pb-3 mb-4">
+          <div className="text-2xl font-bold text-amber-600">{companyInfo.name || 'D.D. Solution'}</div>
+          {companyInfo.tagline && <div className="text-xs text-stone-500">{companyInfo.tagline}</div>}
+          <div className="text-lg font-bold text-stone-800 mt-2">📱 คู่มือการใช้งานระบบโซล่าเซลล์</div>
+          <div className="text-xs text-stone-500 mt-1">
+            ลูกค้า: <strong className="text-stone-700">{customerName || '-'}</strong>
+            {systemType && <> · ระบบ: <strong className="text-stone-700">{systemType}</strong></>}
+            {' '}· วันที่ {thDate}
+          </div>
+        </div>
+
+        <Section no="1" icon="📲" title="ติดตั้งแอปดูผลผลิตไฟฟ้า">
+          <ul className="list-disc pl-4 space-y-0.5">
+            <li>ดาวน์โหลดแอป <strong>"Deye Cloud"</strong> จาก App Store (iPhone) หรือ Play Store (Android)</li>
+            <li>ทีมงานสร้างบัญชีและเชื่อมระบบให้เรียบร้อยแล้ว — เข้าสู่ระบบด้วยอีเมล/รหัสที่ทีมงานแจ้ง</li>
+            <li>เปิดดูได้ทุกที่ที่มีอินเทอร์เน็ต ทั้งมือถือและแท็บเล็ต</li>
+          </ul>
+        </Section>
+
+        <Section no="2" icon="📊" title="อ่านหน้าจอยังไง">
+          <ul className="list-disc pl-4 space-y-0.5">
+            <li><strong>ผลิตวันนี้ (kWh)</strong> — ไฟที่แผงผลิตได้วันนี้ ยิ่งแดดดียิ่งมาก</li>
+            <li><strong>แผนภาพพลังงาน (Power flow)</strong> — ให้ดู<strong>ทิศทางลูกศร</strong>ว่าไฟวิ่งจากไหนไปไหน
+              <span className="text-stone-500"> (ไม่ต้องสนใจเครื่องหมาย + / − ตัวเลข เพราะแต่ละรุ่นแสดงต่างกัน ลูกศรแม่นยำกว่า)</span></li>
+            <li>กราฟรายวัน: เส้นโค้งสูงช่วง 10:00–15:00 = ปกติ (แดดแรงสุด)</li>
+          </ul>
+        </Section>
+
+        <Section no="3" icon="✅" title="เช็คสุขภาพระบบ (สัปดาห์ละครั้ง)">
+          <ul className="list-disc pl-4 space-y-0.5">
+            <li>เปิดแอปดูยอด "ผลิตวันนี้" — วันแดดดีควรใกล้เคียงกันทุกสัปดาห์</li>
+            <li>ถ้าผลิตตกลงเรื่อยๆ ทั้งที่แดดดี → แผงอาจสกปรก (ฝุ่น/ขี้นก ทำผลิตตก 5–15%)</li>
+            <li>ช่วงหน้าฝน ฝนช่วยล้างแผงให้ฟรี — ผลิตตกเพราะเมฆเป็นเรื่องปกติ</li>
+          </ul>
+        </Section>
+
+        <Section no="4" icon="⚠️" title="ปัญหาพบบ่อย — แบบไหนโทรหาเรา">
+          <table className="w-full text-xs border-collapse">
+            <tbody>
+              <tr className="border-b border-stone-200">
+                <td className="py-1 pr-2 font-medium w-1/2">แอปขึ้น "ออฟไลน์" แต่ไฟบ้านใช้ปกติ</td>
+                <td className="py-1 text-stone-600">WiFi หลุด — รีสตาร์ทเราเตอร์ รอ 5 นาที ระบบยังผลิตไฟตามปกติ ไม่ต้องกังวล</td>
+              </tr>
+              <tr className="border-b border-stone-200">
+                <td className="py-1 pr-2 font-medium">วันแดดดีแต่ผลิตเป็น 0 ทั้งวัน</td>
+                <td className="py-1 text-rose-600 font-medium">📞 โทรหาเราทันที</td>
+              </tr>
+              <tr className="border-b border-stone-200">
+                <td className="py-1 pr-2 font-medium">ไฟสถานะที่ตัวเครื่องเป็นสีแดง / มีรหัส Error</td>
+                <td className="py-1 text-rose-600 font-medium">📞 ถ่ายรูปหน้าจอเครื่อง แล้วส่งให้เรา</td>
+              </tr>
+              <tr>
+                <td className="py-1 pr-2 font-medium">อยากย้าย/เพิ่มอุปกรณ์ไฟฟ้าตัวใหญ่</td>
+                <td className="py-1 text-stone-600">ปรึกษาเราก่อน เพื่อเช็คขนาดระบบ</td>
+              </tr>
+            </tbody>
+          </table>
+          <div className="mt-1.5 bg-rose-50 border border-rose-200 rounded px-2 py-1 text-xs text-rose-700 font-medium">
+            🚫 ห้ามเปิดฝาเครื่อง ถอดสาย หรือซ่อมเองเด็ดขาด — อันตรายไฟฟ้าแรงสูง และทำให้ประกันสิ้นสุด
+          </div>
+        </Section>
+
+        <Section no="5" icon="🤝" title="บริการหลังการขาย">
+          <ul className="list-disc pl-4 space-y-0.5">
+            <li><strong>ล้างแผง</strong> แนะนำปีละ 1–2 ครั้ง (โดยเฉพาะปลายหน้าแล้ง) — นัดทีมงานเราได้เลย</li>
+            <li><strong>รับประกัน</strong> ตามใบรับประกันที่ได้รับ — เก็บคู่กับเอกสารชุดนี้</li>
+            <li>มีคำถาม สงสัยตัวเลขในแอป ทักมาได้เสมอ ยินดีตอบทุกเรื่อง</li>
+          </ul>
+        </Section>
+
+        {/* ติดต่อ */}
+        <div className="mt-4 bg-amber-50 border-2 border-amber-300 rounded-xl p-3 text-center break-inside-avoid">
+          <div className="font-bold text-stone-800 mb-1">📞 ติดต่อ {companyInfo.name || 'D.D. Solution'}</div>
+          <div className="text-sm text-stone-700 flex flex-wrap justify-center gap-x-4 gap-y-0.5">
+            {companyInfo.phone && <span>โทร: <strong>{companyInfo.phone}</strong></span>}
+            {companyInfo.lineId && <span>LINE: <strong>{companyInfo.lineId}</strong></span>}
+            {companyInfo.email && <span>อีเมล: <strong>{companyInfo.email}</strong></span>}
+            {!companyInfo.phone && !companyInfo.lineId && !companyInfo.email && <span className="text-stone-400 text-xs">(ตั้งค่าเบอร์/LINE ได้ที่ ข้อมูลบริษัท ใน Tab งานเอกสาร)</span>}
+          </div>
+          <div className="text-xs text-stone-500 mt-1.5">ขอบคุณที่ไว้วางใจให้เราดูแลระบบโซล่าเซลล์ของคุณ ☀️</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DividendModal({ partners, actualInvestments, retainedProfit, cashOnHand, fmt, onClose, onSave }) {
+  const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
+  
+  const totalCapital = Object.values(actualInvestments.inv).reduce((s, v) => s + v, 0);
+  const amt = Number(amount) || 0;
+  
+  // แบ่งตาม % ทุน — ปัดเป็นสตางค์ เศษให้คนถือหุ้นมากสุด (รวมพอดีก้อนเสมอ)
+  const allocations = useMemo(() => {
+    if (amt <= 0 || totalCapital <= 0) return [];
+    const list = partners
+      .map(p => ({ partnerId: p.id, name: p.name, capital: actualInvestments.inv[p.id] || 0 }))
+      .filter(p => p.capital > 0)
+      .map(p => ({
+        ...p,
+        pct: (p.capital / totalCapital) * 100,
+        amount: Math.round((amt * p.capital / totalCapital) * 100) / 100,
+      }));
+    // ปรับเศษให้รวม = ก้อนพอดี
+    const sumAlloc = list.reduce((s, a) => s + a.amount, 0);
+    const diff = Math.round((amt - sumAlloc) * 100) / 100;
+    if (Math.abs(diff) >= 0.01 && list.length > 0) {
+      const biggest = list.reduce((m, a) => a.capital > m.capital ? a : m, list[0]);
+      biggest.amount = Math.round((biggest.amount + diff) * 100) / 100;
+    }
+    return list;
+  }, [amt, totalCapital, partners, actualInvestments]);
+  
+  const overProfit = amt > retainedProfit + 0.5;
+  const overCash = amt > cashOnHand + 0.5;
+  
+  return (
+    <Modal title="💜 ปันผลกำไร" onClose={onClose}>
+      {/* สถานะเงิน */}
+      <div className="bg-violet-50 border border-violet-200 rounded-xl p-3 mb-3 text-sm space-y-1">
+        <div className="flex justify-between"><span className="text-stone-600">กำไรสะสมคงเหลือ (ปันผลได้)</span><span className="font-bold text-violet-700">{fmt(retainedProfit)} ฿</span></div>
+        <div className="flex justify-between"><span className="text-stone-600">เงินสดในมือ</span><span className="font-mono text-stone-700">{fmt(cashOnHand)} ฿</span></div>
+      </div>
+      
+      <Field label="ยอดปันผลรวม (฿)" hint="ใส่เป็นก้อน ระบบแบ่งให้ตามสัดส่วนทุน">
+        <input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)}
+          className={inputCls} placeholder="เช่น 30000" autoFocus />
+      </Field>
+      
+      {/* Validation */}
+      {amt > 0 && overCash && (
+        <div className="bg-rose-50 border border-rose-200 rounded-lg p-2 text-xs text-rose-700 mb-2">
+          ⛔ เกินเงินสดในมือ ({fmt(cashOnHand)} ฿) — เงินไม่พอจ่ายจริง
+        </div>
+      )}
+      {amt > 0 && !overCash && overProfit && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 text-xs text-amber-700 mb-2">
+          ⚠️ เกินกำไรสะสมคงเหลือ ({fmt(retainedProfit)} ฿) — ส่วนเกินจะกินเงินทุน ไม่แนะนำ
+        </div>
+      )}
+      
+      {/* Preview แบ่งตามสัดส่วน */}
+      {allocations.length > 0 && (
+        <div className="bg-white border border-stone-200 rounded-xl overflow-hidden mb-3">
+          <div className="bg-violet-100 px-3 py-2 text-xs font-bold text-violet-800">แบ่งตามสัดส่วนทุน</div>
+          {allocations.map(a => (
+            <div key={a.partnerId} className="flex items-center justify-between px-3 py-2 border-t border-stone-100 text-sm">
+              <div>
+                <span className="font-medium text-stone-800">{a.name}</span>
+                <span className="text-xs text-stone-400 ml-2">ทุน {fmt(a.capital)} ({a.pct.toFixed(1)}%)</span>
+              </div>
+              <span className="font-bold text-violet-700 font-mono">{fmt(a.amount)} ฿</span>
+            </div>
+          ))}
+          <div className="flex justify-between px-3 py-2 border-t-2 border-violet-200 bg-violet-50 text-sm font-bold">
+            <span>รวม</span>
+            <span className="font-mono text-violet-800">{fmt(allocations.reduce((s, a) => s + a.amount, 0))} ฿</span>
+          </div>
+        </div>
+      )}
+      
+      <Field label="หมายเหตุ (ไม่บังคับ)">
+        <input value={note} onChange={e => setNote(e.target.value)} className={inputCls} placeholder="เช่น ปันผลครึ่งปีแรก 2569" />
+      </Field>
+      
+      <button
+        onClick={() => {
+          if (amt <= 0 || allocations.length === 0) { alert('กรุณาใส่ยอดปันผล'); return; }
+          if (overCash) { alert('เงินสดในมือไม่พอจ่ายปันผล'); return; }
+          if (overProfit && !window.confirm(`⚠️ ยอดปันผลเกินกำไรสะสมคงเหลือ (${fmt(retainedProfit)} ฿)\nส่วนเกินจะกินเงินทุนบริษัท\n\nยืนยันปันผลต่อ?`)) return;
+          const summary = allocations.map(a => `• ${a.name}: ${fmt(a.amount)} ฿ (${a.pct.toFixed(1)}%)`).join('\n');
+          if (!window.confirm(`💜 ยืนยันปันผล ${fmt(amt)} ฿\n\n${summary}\n\nระบบจะสร้างรายการ "ปันผล" ${allocations.length} รายการ`)) return;
+          onSave(allocations, note);
+        }}
+        className="w-full bg-violet-500 hover:bg-violet-600 text-white py-3 rounded-xl font-medium mt-2 flex items-center justify-center gap-2"
+      >
+        💜 ปันผล {amt > 0 ? fmt(amt) + ' ฿' : ''}
+      </button>
+    </Modal>
+  );
+}
 
 function CapitalModal({ mode, partners, actualInvestments, cashOnHand, fmt, onClose, onSave }) {
   const isDeposit = mode === 'deposit';
