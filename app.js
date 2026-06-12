@@ -4469,7 +4469,8 @@ function StockRow({ item, fmt, fmt0, onEdit, onDelete }) {
 
 function Modal({ title, children, onClose, wide }) {
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-0 md:p-4 animate-fade-in" onClick={onClose}>
+    // ✨ ไม่ปิดเมื่อคลิกนอกกรอบ — กันข้อมูลที่กรอกอยู่หาย (ออกได้ทางปุ่ม ✕ เท่านั้น)
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-0 md:p-4 animate-fade-in">
       <div
         className={`bg-white w-full ${wide ? 'md:max-w-2xl' : 'md:max-w-lg'} md:rounded-2xl rounded-t-2xl shadow-xl max-h-[95vh] md:max-h-[90vh] overflow-hidden flex flex-col animate-slide-up`}
         onClick={(e) => e.stopPropagation()}
@@ -4517,8 +4518,8 @@ function PickQuotationModal({ documents, fmt, onClose, onSelect }) {
     .sort((a, b) => (b.createdAt || '') > (a.createdAt || '') ? 1 : -1);
   
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center md:p-4 animate-fade-in" onClick={onClose}>
-      <div className="bg-white w-full md:max-w-2xl md:rounded-2xl rounded-t-2xl shadow-xl max-h-[90vh] flex flex-col animate-slide-up" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center md:p-4 animate-fade-in">
+      <div className="bg-white w-full md:max-w-2xl md:rounded-2xl rounded-t-2xl shadow-xl max-h-[90vh] flex flex-col animate-slide-up">
         <div className="px-4 py-3 border-b border-stone-200 flex items-center justify-between">
           <h3 className="font-bold text-stone-800">🚀 เลือกใบเสนอราคา</h3>
           <button onClick={onClose} className="p-1 hover:bg-stone-100 rounded">
@@ -5071,7 +5072,7 @@ function JobModal({ job, partners, stock = [], documents = [], onUpdateStock, on
 
       {/* Stock Picker Modal */}
       {stockPicker && (
-        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4" onClick={() => setStockPicker(null)}>
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="p-4 border-b border-stone-200 flex items-center justify-between">
               <div>
@@ -7561,7 +7562,7 @@ ${battery ? `- ${battery.brand} ${battery.model} × 1 ลูก` : ''}
       
       {/* PIN Modal */}
       {showProModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowProModal(false)}>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl p-5 max-w-sm w-full" onClick={e => e.stopPropagation()}>
             <h3 className="font-bold text-lg mb-1">🔧 โหมดเทคนิค (Pro)</h3>
             <p className="text-xs text-stone-500 mb-3">ใส่รหัสผ่านเพื่อเข้าโหมดคำนวณตามจริง</p>
