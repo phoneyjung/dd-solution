@@ -2071,6 +2071,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
             { id: 'finance', label: 'การเงิน', icon: Wallet },
             { id: 'documents', label: 'งานเอกสาร', icon: Save },
             { id: 'activity', label: 'ประวัติ', icon: Activity },
+            { id: 'help', label: 'วิธีใช้', icon: AlertCircle },
           ].map(tab => {
             const Icon = tab.icon;
             return (
@@ -2615,6 +2616,16 @@ function DDSolutionManager({ currentUser, onLogout }) {
               </>
             )}
 
+            {/* 🎨 Legend - ประเภทรายการ */}
+            <div className="bg-white rounded-xl border border-stone-200 p-2.5 flex flex-wrap gap-2 text-[11px]">
+              <span className="text-stone-400 font-medium">ประเภท:</span>
+              <span className="flex items-center gap-1"><span className="w-4 h-4 rounded-full bg-emerald-100 flex items-center justify-center text-[9px]">💰</span> รายได้</span>
+              <span className="flex items-center gap-1"><span className="w-4 h-4 rounded-full bg-blue-100 flex items-center justify-center text-[9px]">🏦</span> ทุนเข้า</span>
+              <span className="flex items-center gap-1"><span className="w-4 h-4 rounded-full bg-amber-100 flex items-center justify-center text-[9px]">📦</span> ซื้อสต๊อก</span>
+              <span className="flex items-center gap-1"><span className="w-4 h-4 rounded-full bg-rose-100 flex items-center justify-center text-[9px]">🔧</span> ต้นทุนงาน</span>
+              <span className="flex items-center gap-1"><span className="w-4 h-4 rounded-full bg-purple-100 flex items-center justify-center text-[9px]">🏧</span> ถอนทุน</span>
+            </div>
+
             {filteredTransactions.length === 0 ? (
               <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-stone-200">
                 <Wallet className="w-12 h-12 text-stone-300 mx-auto mb-2" />
@@ -2625,25 +2636,52 @@ function DDSolutionManager({ currentUser, onLogout }) {
                 {filteredTransactions.slice().sort((a, b) => b.date.localeCompare(a.date)).map(t => {
                   const partner = partners.find(p => p.id === t.partnerId);
                   const job = jobs.find(j => j.id === t.jobId);
+                  
+                  // 🎨 สีตามประเภทรายการ (เข้าใจง่าย)
+                  const catStyle = (() => {
+                    if (t.type === 'income' && t.category === 'รายได้จากงาน')
+                      return { icon: '💰', bg: 'bg-emerald-100', text: 'text-emerald-700', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: 'รายได้' };
+                    if (t.type === 'income' && (t.category === 'เพิ่มทุน' || t.category === 'ทุน'))
+                      return { icon: '🏦', bg: 'bg-blue-100', text: 'text-blue-700', badge: 'bg-blue-50 text-blue-700 border-blue-200', label: 'ทุนเข้า' };
+                    if (t.type === 'expense' && t.category === 'ต้นทุนสต๊อก')
+                      return { icon: '📦', bg: 'bg-amber-100', text: 'text-amber-700', badge: 'bg-amber-50 text-amber-700 border-amber-200', label: 'ซื้อสต๊อก' };
+                    if (t.type === 'expense' && t.category === 'ต้นทุนงาน')
+                      return { icon: '🔧', bg: 'bg-rose-100', text: 'text-rose-700', badge: 'bg-rose-50 text-rose-700 border-rose-200', label: 'ต้นทุนงาน' };
+                    if (t.type === 'expense' && (t.category === 'ถอนทุน' || t.category === 'คืนทุน'))
+                      return { icon: '🏧', bg: 'bg-purple-100', text: 'text-purple-700', badge: 'bg-purple-50 text-purple-700 border-purple-200', label: 'ถอนทุน' };
+                    if (t.type === 'income')
+                      return { icon: '📥', bg: 'bg-emerald-100', text: 'text-emerald-700', badge: 'bg-stone-50 text-stone-600 border-stone-200', label: t.category };
+                    return { icon: '📤', bg: 'bg-rose-100', text: 'text-rose-700', badge: 'bg-stone-50 text-stone-600 border-stone-200', label: t.category };
+                  })();
+                  
                   return (
                     <div key={t.id} className="flex items-center gap-3 p-4 border-b border-stone-100 last:border-0 hover:bg-stone-50 transition-colors">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-                        t.type === 'income' ? 'bg-emerald-100' : 'bg-rose-100'
-                      }`}>
-                        {t.type === 'income' 
-                          ? <ArrowDownLeft className="w-5 h-5 text-emerald-600" />
-                          : <ArrowUpRight className="w-5 h-5 text-rose-600" />
-                        }
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-lg ${catStyle.bg}`}>
+                        {catStyle.icon}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-stone-800 truncate">{t.description}</div>
-                        <div className="text-xs text-stone-500 flex flex-wrap gap-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-stone-800 truncate">{t.description}</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium whitespace-nowrap ${catStyle.badge}`}>
+                            {catStyle.label}
+                          </span>
+                        </div>
+                        <div className="text-xs text-stone-500 flex flex-wrap gap-1 mt-0.5">
                           <span>{t.date}</span>
-                          <span>·</span>
-                          <span>{t.category}</span>
                           {partner && <><span>·</span><span className="text-blue-600">👤 {partner.name}</span></>}
                           {job && <><span>·</span><span className="text-amber-600">📋 {job.customer}</span></>}
                         </div>
+                        {/* Audit trail - ใครสร้าง/แก้ */}
+                        {(t.createdBy || t.editedBy) && (
+                          <div className="text-[10px] text-stone-400 mt-0.5 flex flex-wrap gap-1">
+                            {t.createdBy && <span>✍️ สร้างโดย {t.createdBy}</span>}
+                            {t.editedBy && (
+                              <span className="text-orange-500">
+                                ✏️ แก้ล่าสุดโดย {t.editedBy} ({t.editCount || 1} ครั้ง)
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <div className={`font-bold whitespace-nowrap ${t.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
                         {t.type === 'income' ? '+' : '-'}{fmt0(t.amount)} ฿
@@ -2654,7 +2692,9 @@ function DDSolutionManager({ currentUser, onLogout }) {
                           <Edit2 className="w-3.5 h-3.5 text-stone-500" />
                         </button>
                         <button onClick={() => {
-                          if (window.confirm('ลบรายการนี้?')) saveTransactions(transactions.filter(x => x.id !== t.id), 'delete', `ลบรายการ: ${t.description}`);
+                          if (window.confirm(`ลบรายการนี้?\n\n"${t.description}"\n${t.type === 'income' ? '+' : '-'}${Number(t.amount).toLocaleString()} ฿\n\n⚠️ การลบจะถูกบันทึกในประวัติ`)) {
+                            saveTransactions(transactions.filter(x => x.id !== t.id), 'delete', `🗑️ ลบ: ${t.description} (${t.type === 'income' ? '+' : '-'}${Number(t.amount).toLocaleString()} ฿)`);
+                          }
                         }} className="p-1.5 hover:bg-red-50 rounded-lg">
                           <Trash2 className="w-3.5 h-3.5 text-red-400" />
                         </button>
@@ -2960,21 +3000,89 @@ function DDSolutionManager({ currentUser, onLogout }) {
             const paid = getChainPaid(chainId);
             const unpaid = total - paid;
             
-            // ค้นหา job ที่ผูกกับ chain นี้ — ลองหาหลายทาง:
-            // 1. job.quotationId === master.id (ที่ตั้งตอนสร้างงาน — แม่นที่สุด)
-            // 2. master.jobId (ตั้งตอนสร้างงาน อาจ stale)
-            // 3. job.quotationId === chainId
+            // ค้นหา job ที่ผูกกับ chain นี้
             let linkedJob = jobs.find(j => 
               j.quotationId === master?.id || 
               j.quotationId === chainId ||
               (master?.jobId && j.id === master.jobId)
             );
             
-            // ค้นหาสายไฟ "ม้วนใหม่" ที่มีของเหลือ
+            // ===== 📋 CLOSING CEREMONY: ตรวจสอบความครบถ้วน =====
+            const checks = [];
+            const autoActions = [];
+            
+            // ✓ Check 1: รายได้บันทึกหรือยัง?
+            const incomeTx = linkedJob ? transactions.filter(t => 
+              t.type === 'income' && t.category === 'รายได้จากงาน' && t.jobId === linkedJob.id
+            ) : [];
+            const incomeRecorded = incomeTx.reduce((s, t) => s + Number(t.amount || 0), 0);
+            const salePrice = Number(linkedJob?.salePrice || master?.totalAmount || 0);
+            
+            if (linkedJob && incomeRecorded === 0 && salePrice > 0) {
+              checks.push(`⚠️ ยังไม่บันทึกรายได้ → จะสร้างให้ (+${salePrice.toLocaleString()} ฿)`);
+              autoActions.push({
+                kind: 'income',
+                tx: {
+                  id: `t-close-${Date.now()}-i`,
+                  date: new Date().toISOString().split('T')[0],
+                  type: 'income',
+                  category: 'รายได้จากงาน',
+                  amount: salePrice,
+                  description: `${linkedJob.customer} - ${linkedJob.system || 'งานติดตั้ง'}`,
+                  jobId: linkedJob.id,
+                  partnerId: '',
+                  createdBy: `${currentUser.name} (ปิดงานอัตโนมัติ)`,
+                  createdAt: new Date().toISOString(),
+                },
+              });
+            } else if (incomeRecorded > 0) {
+              checks.push(`✅ รายได้บันทึกแล้ว (${incomeRecorded.toLocaleString()} ฿)`);
+            }
+            
+            // ✓ Check 2: ต้นทุนงานบันทึกหรือยัง? (ของที่จ่ายจริง ไม่นับเบิกสต๊อก)
+            const jobCostTx = linkedJob ? transactions.filter(t => 
+              t.type === 'expense' && t.category === 'ต้นทุนงาน' && t.jobId === linkedJob.id
+            ) : [];
+            const costRecorded = jobCostTx.reduce((s, t) => s + Number(t.amount || 0), 0);
+            
+            // คำนวณต้นทุนจริงที่ "จ่ายเงิน" (ไม่นับของจากสต๊อก)
+            let cashCost = 0;
+            let stockCost = 0;
+            if (linkedJob?.costsByCategory) {
+              Object.values(linkedJob.costsByCategory).forEach(items => {
+                (items || []).forEach(item => {
+                  const amt = Number(item.amount || 0);
+                  if (item.stockId) stockCost += amt;
+                  else cashCost += amt;
+                });
+              });
+            }
+            
+            if (linkedJob && costRecorded === 0 && cashCost > 0) {
+              checks.push(`⚠️ ยังไม่บันทึกต้นทุน → จะสร้างให้ (-${cashCost.toLocaleString()} ฿)`);
+              autoActions.push({
+                kind: 'expense',
+                tx: {
+                  id: `t-close-${Date.now()}-e`,
+                  date: new Date().toISOString().split('T')[0],
+                  type: 'expense',
+                  category: 'ต้นทุนงาน',
+                  amount: cashCost,
+                  description: `ต้นทุนงาน ${linkedJob.customer} (จ่ายจริง ไม่รวมของจากสต๊อก)`,
+                  jobId: linkedJob.id,
+                  partnerId: '',
+                  createdBy: `${currentUser.name} (ปิดงานอัตโนมัติ)`,
+                  createdAt: new Date().toISOString(),
+                },
+              });
+            } else if (costRecorded > 0) {
+              checks.push(`✅ ต้นทุนบันทึกแล้ว (${costRecorded.toLocaleString()} ฿)`);
+            }
+            
+            // ✓ Check 3: สายไฟม้วนใหม่ ของเหลือ
             const wireRemainings = [];
             if (linkedJob && linkedJob.costsByCategory?.wire) {
               linkedJob.costsByCategory.wire.forEach(item => {
-                // เฉพาะที่ไม่ใช่ stock (เป็นม้วนใหม่ที่ซื้อมา) และมีเหลือ
                 if (!item.stockId && Number(item.rollLength || 0) > 0) {
                   const remaining = Number(item.rollLength || 0) - Number(item.usedLength || 0);
                   const pricePerMeter = item.rollLength > 0 ? item.rollPrice / item.rollLength : 0;
@@ -2989,39 +3097,74 @@ function DDSolutionManager({ currentUser, onLogout }) {
                 }
               });
             }
-            
-            let warning = '';
-            if (unpaid > 0) {
-              warning = `\n\n⚠️ ลูกค้ายังจ่ายไม่ครบ\n• ยอดรวม: ${total.toLocaleString()} ฿\n• จ่ายแล้ว: ${paid.toLocaleString()} ฿\n• ค้าง: ${unpaid.toLocaleString()} ฿`;
-            }
-            
-            let wireInfo = '';
             if (wireRemainings.length > 0) {
               const wireList = wireRemainings.map(w => 
-                `• ${w.name}: ${w.remaining.toFixed(1)}m × ${w.pricePerMeter.toFixed(2)} ฿/m`
+                `   • ${w.name}: ${w.remaining.toFixed(1)}m (${(w.remaining * w.unitCost).toLocaleString(undefined, {maximumFractionDigits: 0})} ฿)`
               ).join('\n');
-              wireInfo = `\n\n💡 จะบันทึกสายไฟเหลือเข้าสต๊อก:\n${wireList}`;
+              checks.push(`📦 ของเหลือจะเข้าสต๊อก:\n${wireList}`);
             }
             
-            if (!window.confirm(`จบงาน ${master?.docNumber || '-'}\n(${master?.customerName || '-'})\n\nเอกสารทั้งหมดในงานนี้ (${chainDocs.length} ฉบับ) จะถูกซ่อนเข้าประวัติ${warning}${wireInfo}\n\nยืนยันจบงาน?`)) return;
+            // ✓ Check 4: เงินค้าง
+            if (unpaid > 0) {
+              checks.push(`⚠️ ลูกค้าค้างจ่าย ${unpaid.toLocaleString()} ฿ (รับแล้ว ${paid.toLocaleString()}/${total.toLocaleString()})`);
+            } else if (total > 0) {
+              checks.push(`✅ รับเงินครบ (${paid.toLocaleString()} ฿)`);
+            }
+            
+            // กำไรสรุป
+            const totalCostAll = cashCost + stockCost;
+            const profit = salePrice - totalCostAll;
+            
+            // ===== แสดงสรุปก่อนยืนยัน =====
+            const summaryMsg = 
+              `📋 สรุปก่อนปิดงาน — ${master?.customerName || linkedJob?.customer || '-'}\n` +
+              `${'─'.repeat(36)}\n` +
+              `💰 ราคาขาย:    ${salePrice.toLocaleString()} ฿\n` +
+              `💸 ต้นทุนรวม:  ${totalCostAll.toLocaleString()} ฿\n` +
+              (stockCost > 0 ? `   ├─ จากสต๊อก: ${stockCost.toLocaleString()} ฿\n   └─ จ่ายจริง:  ${cashCost.toLocaleString()} ฿\n` : '') +
+              `📈 กำไร:       ${profit.toLocaleString()} ฿\n` +
+              `${'─'.repeat(36)}\n` +
+              checks.join('\n') +
+              `\n${'─'.repeat(36)}\n` +
+              `เอกสาร ${chainDocs.length} ฉบับจะถูกเก็บเข้าประวัติ\n` +
+              `หลังปิดงาน ตัวเลขจะถูกล็อก\n\n` +
+              `ยืนยันปิดงาน?`;
+            
+            if (!window.confirm(summaryMsg)) return;
             
             const closedAt = new Date().toISOString();
+            
+            // 1. สร้าง transactions ที่ขาด (รายได้/ต้นทุน)
+            if (autoActions.length > 0) {
+              const newTxs = [...transactions, ...autoActions.map(a => a.tx)];
+              saveTransactions(newTxs, 'add', 
+                `🔒 ปิดงาน ${master?.customerName}: สร้าง ${autoActions.length} รายการการเงินอัตโนมัติ`);
+            }
+            
+            // 2. ปิดเอกสาร
             saveDocuments(
-              documents.map(d => getChainId(d) === chainId ? { ...d, jobStatus: 'closed', status: 'closed', closedAt } : d),
+              documents.map(d => getChainId(d) === chainId ? { ...d, jobStatus: 'closed', status: 'closed', closedAt, closedBy: currentUser.name } : d),
               'edit',
-              `จบงาน: ${master?.docNumber} (${master?.customerName}) — ซ่อน ${chainDocs.length} ฉบับ`
+              `🔒 ปิดงาน: ${master?.docNumber} (${master?.customerName}) โดย ${currentUser.name}`
             );
             
-            // บันทึกสายไฟเหลือเข้าสต๊อก
+            // 3. อัพเดทสถานะงาน + ล็อก
+            if (linkedJob) {
+              saveJobs(
+                jobs.map(j => j.id === linkedJob.id ? { ...j, status: 'completed', closedAt, closedBy: currentUser.name, locked: true } : j),
+                'edit',
+                `🔒 ปิดงาน: ${linkedJob.customer} (กำไร ${profit.toLocaleString()} ฿)`
+              );
+            }
+            
+            // 4. บันทึกสายไฟเหลือเข้าสต๊อก
             if (wireRemainings.length > 0) {
               const newStock = [...stock];
               wireRemainings.forEach(w => {
-                // เช็คว่ามีของชื่อเดียวกันในสต๊อกไหม → ถ้ามีให้บวกเพิ่ม
                 const existing = newStock.find(s => 
                   s.category === 'wire' && s.name === w.name
                 );
                 if (existing) {
-                  // รวมของเดิม + ของใหม่ (ราคาเฉลี่ย)
                   const oldQty = Number(existing.qty || 0);
                   const oldCost = Number(existing.unitCost || 0);
                   const newQty = oldQty + w.remaining;
@@ -3029,7 +3172,6 @@ function DDSolutionManager({ currentUser, onLogout }) {
                   existing.qty = newQty;
                   existing.unitCost = Number(newCost.toFixed(2));
                 } else {
-                  // สร้างใหม่
                   newStock.push({
                     id: `s-wire-${Date.now()}-${Math.random().toString(36).slice(2,5)}`,
                     name: w.name,
@@ -3037,21 +3179,27 @@ function DDSolutionManager({ currentUser, onLogout }) {
                     qty: w.remaining,
                     unit: 'เมตร',
                     unitCost: Number(w.unitCost.toFixed(2)),
-                    partner: 'p-aam',
+                    partner: '',
                     note: `เหลือจากงาน ${master?.customerName || master?.docNumber}`,
                     createdAt: closedAt,
                   });
                 }
               });
               saveStock(newStock, 'add', 
-                `บันทึกสายไฟเหลือเข้าสต๊อก ${wireRemainings.length} รายการ จากงาน ${master?.customerName}`);
-              
-              // แจ้งผลให้ user
-              const summary = wireRemainings.map(w => 
-                `• ${w.name}: ${w.remaining.toFixed(1)}m (${(w.remaining * w.unitCost).toFixed(2)} ฿)`
-              ).join('\n');
-              setTimeout(() => alert(`✅ จบงานเรียบร้อย!\n\n📦 บันทึกสายไฟเหลือเข้าสต๊อก:\n${summary}`), 100);
+                `📦 ของเหลือเข้าสต๊อก ${wireRemainings.length} รายการ จากงาน ${master?.customerName}`);
             }
+            
+            // 5. แจ้งผลสรุป
+            setTimeout(() => {
+              let resultMsg = `✅ ปิดงานเรียบร้อย!\n\n📈 กำไรงานนี้: ${profit.toLocaleString()} ฿`;
+              if (autoActions.length > 0) {
+                resultMsg += `\n💰 สร้างรายการการเงินอัตโนมัติ ${autoActions.length} รายการ`;
+              }
+              if (wireRemainings.length > 0) {
+                resultMsg += `\n📦 ของเหลือเข้าสต๊อก ${wireRemainings.length} รายการ`;
+              }
+              alert(resultMsg);
+            }, 100);
           };
 
           // ยกเลิกงาน
@@ -3483,6 +3631,144 @@ function DDSolutionManager({ currentUser, onLogout }) {
             </div>
           </div>
         )}
+
+        {activeTab === 'help' && (
+          <div className="space-y-4 animate-fade-in max-w-3xl mx-auto">
+            <div>
+              <h2 className="display-font text-3xl text-stone-800">❓ คู่มือการใช้งาน</h2>
+              <p className="text-sm text-stone-500">วิธีใช้ทุกฟังก์ชั่น เรียงตามขั้นตอนการทำงานจริง</p>
+            </div>
+
+            {/* === Flow Overview === */}
+            <div className="bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-300 rounded-2xl p-4">
+              <h3 className="font-bold text-amber-900 mb-2">🔄 ภาพรวมการทำงาน</h3>
+              <div className="text-sm text-stone-700 space-y-1">
+                <div className="flex items-center gap-2"><span className="bg-amber-200 text-amber-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">1</span> ใส่ทุน → <strong>แดชบอร์ด</strong> กดปุ่ม "เพิ่มทุน"</div>
+                <div className="flex items-center gap-2"><span className="bg-amber-200 text-amber-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">2</span> ซื้อของตุน → <strong>สต็อก</strong> "+ เพิ่มสินค้า" (บันทึกรายจ่ายอัตโนมัติ)</div>
+                <div className="flex items-center gap-2"><span className="bg-amber-200 text-amber-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">3</span> เสนอราคา → <strong>เสนอขาย</strong> สร้างใบเสนอราคา</div>
+                <div className="flex items-center gap-2"><span className="bg-amber-200 text-amber-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">4</span> ลูกค้าตกลง → <strong>งานเอกสาร</strong> กด "🚀 สร้างงาน"</div>
+                <div className="flex items-center gap-2"><span className="bg-amber-200 text-amber-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">5</span> ทำงาน + กรอกต้นทุน → <strong>งาน</strong> (เบิกสต๊อก / ซื้อหน้างาน)</div>
+                <div className="flex items-center gap-2"><span className="bg-amber-200 text-amber-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">6</span> เก็บเงิน → ออกใบเสร็จ → <strong>งานเอกสาร</strong></div>
+                <div className="flex items-center gap-2"><span className="bg-amber-200 text-amber-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">7</span> ปิดงาน → กด "✅ จบงาน" (ระบบสรุป + บันทึกการเงินให้)</div>
+              </div>
+            </div>
+
+            {/* === เงิน 4 ประเภท === */}
+            <div className="bg-white rounded-2xl border border-stone-200 p-4">
+              <h3 className="font-bold text-stone-800 mb-3">💡 เงิน 4 ประเภทที่ต้องเข้าใจ</h3>
+              <div className="space-y-2">
+                <div className="flex items-start gap-3 p-2 bg-blue-50 rounded-lg">
+                  <span className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">🏦</span>
+                  <div className="text-sm">
+                    <strong className="text-blue-700">ทุนเข้า</strong> — หุ้นส่วนใส่เงินเข้าบริษัท
+                    <div className="text-xs text-stone-500">เช่น ตั้งต้นบริษัท, หุ้นส่วนออกเงินซื้อของแทน</div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 p-2 bg-emerald-50 rounded-lg">
+                  <span className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">💰</span>
+                  <div className="text-sm">
+                    <strong className="text-emerald-700">รายได้</strong> — ลูกค้าจ่ายเงินค่างาน
+                    <div className="text-xs text-stone-500">บันทึกเมื่อรับเงินจริง (มัดจำ + งวดสุดท้าย)</div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 p-2 bg-amber-50 rounded-lg">
+                  <span className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">📦</span>
+                  <div className="text-sm">
+                    <strong className="text-amber-700">ซื้อสต๊อก</strong> — ซื้อของตุนไว้ (ยังไม่ใช้)
+                    <div className="text-xs text-stone-500">เงินออก แต่ได้ของมาแทน (มูลค่าบริษัทไม่ลด)</div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 p-2 bg-rose-50 rounded-lg">
+                  <span className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center flex-shrink-0">🔧</span>
+                  <div className="text-sm">
+                    <strong className="text-rose-700">ต้นทุนงาน</strong> — ค่าของ+แรงที่จ่ายในงาน
+                    <div className="text-xs text-stone-500">เฉพาะที่จ่ายเงินจริง (ของจากสต๊อกไม่นับซ้ำ)</div>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 p-2 bg-stone-100 rounded-lg text-xs text-stone-600">
+                ⚠️ <strong>"เบิกของจากสต๊อก" ไม่ใช่รายจ่าย</strong> — เงินจ่ายไปแล้วตอนซื้อเข้าสต๊อก ถ้านับอีกจะซ้ำ 2 รอบ
+              </div>
+            </div>
+
+            {/* === สูตรเงินสด === */}
+            <div className="bg-white rounded-2xl border border-stone-200 p-4">
+              <h3 className="font-bold text-stone-800 mb-2">🧮 สูตรที่ระบบใช้ (ตรวจสอบเองได้)</h3>
+              <div className="bg-stone-900 text-stone-100 rounded-xl p-3 font-mono text-sm space-y-1">
+                <div><span className="text-amber-400">เงินสดในมือ</span> = ทุนรวม + กำไรสะสม − มูลค่าสต๊อก</div>
+                <div><span className="text-emerald-400">กำไรสะสม</span> = Σ (ราคาขาย − ต้นทุนงาน)</div>
+                <div><span className="text-blue-400">ทุนรวม</span> = Σ เพิ่มทุน − Σ ถอนทุน</div>
+              </div>
+              <div className="text-xs text-stone-500 mt-2">
+                💡 ตรวจสอบ: Tab "การเงิน" → "💵 เงินสด" ต้องตรงกับ "เงินสดในมือ" ใน Dashboard
+              </div>
+            </div>
+
+            {/* === วิธีใช้แต่ละหน้า === */}
+            <div className="bg-white rounded-2xl border border-stone-200 p-4">
+              <h3 className="font-bold text-stone-800 mb-3">📖 วิธีใช้แต่ละหน้า</h3>
+              <div className="space-y-2">
+                {[
+                  { icon: '📊', title: 'แดชบอร์ด', desc: 'ภาพรวมเงิน • ปุ่ม "เพิ่มทุน/ถอนทุน" สำหรับหุ้นส่วน • ตัวเลขทุกตัวคำนวณอัตโนมัติ ห้ามแก้มือ' },
+                  { icon: '📈', title: 'เสนอขาย', desc: 'Wizard 4 ขั้น: กรอกข้อมูลลูกค้า → เลือกแพ็คเกจ (ระบบแนะนำ 3 แบบ) → ปรับแต่ง → สร้างใบเสนอราคา • ราคาปัดขึ้นลงท้าย 999 อัตโนมัติ' },
+                  { icon: '💲', title: 'แคตตาล็อกขาย', desc: 'รายการสินค้าสำหรับขาย (inverter/แผง/แบต/สายไฟ) • ตั้งราคาตลาด • ใช้ตอนสร้างใบเสนอราคา' },
+                  { icon: '💼', title: 'งาน', desc: 'รายการงานทั้งหมด • กรอกต้นทุน: "📦 เบิกจากสต๊อก" (ของที่มี) หรือ "+ เพิ่มรายการ" (ซื้อใหม่) • สายไฟม้วนใหม่กรอก ม้วน×ใช้ ระบบคิดเฉพาะที่ใช้ • งานที่ปิดแล้วจะล็อก 🔒' },
+                  { icon: '👥', title: 'ลูกค้า', desc: 'ฐานข้อมูลลูกค้า • เก็บที่อยู่ เบอร์โทร ประวัติงาน' },
+                  { icon: '📦', title: 'สต็อก', desc: '"+ เพิ่มสินค้า" → ☑ บันทึกรายจ่ายอัตโนมัติ (ดึงจากเงินบริษัท) • ถ้าหุ้นส่วนออกเงินเอง กด "▶ ใช้เงินหุ้นส่วน" ระบบจะ +ทุนให้' },
+                  { icon: '🤝', title: 'ผู้ลงทุน', desc: 'ทุนของแต่ละคน คำนวณจากรายการ "เพิ่มทุน" ในการเงิน • % สัดส่วนใช้แบ่งกำไร' },
+                  { icon: '💵', title: 'การเงิน', desc: '3 มุมมอง: 📊 ทั้งหมด (ทุกรายการ) • 💰 กำไร/ขาดทุน (เฉพาะธุรกิจ) • 💵 เงินสด (เงินจริงในมือ) • ทุกรายการมีชื่อคนสร้าง/แก้' },
+                  { icon: '📄', title: 'งานเอกสาร', desc: 'ใบเสนอราคา → ใบแจ้งหนี้ → ใบเสร็จ (มัดจำ/เต็ม) • "🚀 สร้างงาน" จากใบเสนอ • "✅ จบงาน" = ระบบสรุปทุกอย่าง + บันทึกการเงินอัตโนมัติ + ล็อกงาน' },
+                  { icon: '📜', title: 'ประวัติ', desc: 'ทุกการเพิ่ม/แก้/ลบ บันทึกพร้อมชื่อคนทำและเวลา • ใช้ตรวจสอบเมื่อตัวเลขผิด' },
+                ].map((item, i) => (
+                  <details key={i} className="border border-stone-100 rounded-lg overflow-hidden">
+                    <summary className="cursor-pointer p-3 hover:bg-stone-50 font-medium text-sm flex items-center gap-2">
+                      <span className="text-lg">{item.icon}</span> {item.title}
+                    </summary>
+                    <div className="px-3 pb-3 pt-1 text-sm text-stone-600 leading-relaxed">
+                      {item.desc}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </div>
+
+            {/* === กฎเหล็ก === */}
+            <div className="bg-rose-50 border-2 border-rose-200 rounded-2xl p-4">
+              <h3 className="font-bold text-rose-900 mb-2">⚠️ กฎเหล็ก — เพื่อข้อมูลที่ถูกต้อง</h3>
+              <ul className="text-sm text-stone-700 space-y-1.5">
+                <li className="flex gap-2"><span>1.</span> <span><strong>เงินทุกบาทต้องมีรายการ</strong> — รับเงิน/จ่ายเงิน ต้องบันทึกในการเงินทันที (ระบบช่วยสร้างให้เกือบทุกจุดแล้ว)</span></li>
+                <li className="flex gap-2"><span>2.</span> <span><strong>อย่าลบรายการเก่า</strong> — ถ้าผิด ให้แก้ไข (มีประวัติ) หรือสร้างรายการแก้ (เช่น คืนเงิน)</span></li>
+                <li className="flex gap-2"><span>3.</span> <span><strong>งานปิดแล้วอย่าแก้</strong> — ตัวเลขถูกล็อก ถ้าแก้กำไรสะสมจะเพี้ยน</span></li>
+                <li className="flex gap-2"><span>4.</span> <span><strong>ตรวจ Dashboard กับ Tab เงินสด ให้ตรงกัน</strong> — ถ้าไม่ตรง มีรายการขาด/เกิน</span></li>
+                <li className="flex gap-2"><span>5.</span> <span><strong>ของเข้า-ออกสต๊อก ผ่านระบบเท่านั้น</strong> — อย่าแก้จำนวนมือถ้าไม่จำเป็น</span></li>
+              </ul>
+            </div>
+
+            {/* === FAQ === */}
+            <div className="bg-white rounded-2xl border border-stone-200 p-4">
+              <h3 className="font-bold text-stone-800 mb-3">❓ คำถามที่พบบ่อย</h3>
+              <div className="space-y-2">
+                {[
+                  { q: 'ตัวเลข Dashboard กับ Excel ไม่ตรงกัน?', a: 'เช็ค Tab "การเงิน" → "💵 เงินสด" ว่าตรงกับ Dashboard ไหม ถ้าไม่ตรงแปลว่ามีรายการการเงินขาด/เกิน ดูใน "ประวัติ" ว่าใครแก้อะไรล่าสุด' },
+                  { q: 'หุ้นส่วนเอาเงินส่วนตัวซื้อของ ต้องทำยังไง?', a: 'เพิ่มสินค้าในสต๊อก → กด "▶ ใช้เงินหุ้นส่วน" → เลือกชื่อ → ระบบสร้าง "เพิ่มทุน" + "ต้นทุนสต๊อก" ให้ครบ' },
+                  { q: 'เบิกของจากสต๊อกไปใช้งาน นับเป็นรายจ่ายไหม?', a: 'ไม่นับ! เงินจ่ายไปแล้วตอนซื้อเข้าสต๊อก ระบบจะหักสต๊อกและใส่เป็นต้นทุนงานให้เอง (เห็นใน P&L แต่ไม่อยู่ใน Cash Flow)' },
+                  { q: 'ลืมบันทึกรายได้ตอนรับเงิน?', a: 'ไม่เป็นไร ตอนกด "✅ จบงาน" ระบบจะตรวจและสร้างรายการที่ขาดให้อัตโนมัติ พร้อมแสดงสรุปก่อนยืนยัน' },
+                  { q: 'อยากดูว่าใครแก้ตัวเลข?', a: 'Tab "ประวัติ" เก็บทุกการเพิ่ม/แก้/ลบ 500 รายการล่าสุด พร้อมชื่อและเวลา • แต่ละรายการการเงินก็แสดง "สร้างโดย/แก้โดย" ด้วย' },
+                  { q: 'สายไฟเหลือจากงาน หายไปไหน?', a: 'ตอนกด "จบงาน" สายไฟม้วนใหม่ที่ใช้ไม่หมด ระบบจะคำนวณที่เหลือและเพิ่มเข้าสต๊อกให้อัตโนมัติ (ราคาเฉลี่ยถ้ามีของเดิม)' },
+                ].map((item, i) => (
+                  <details key={i} className="border border-stone-100 rounded-lg overflow-hidden">
+                    <summary className="cursor-pointer p-3 hover:bg-stone-50 text-sm font-medium">
+                      {item.q}
+                    </summary>
+                    <div className="px-3 pb-3 pt-1 text-sm text-stone-600 leading-relaxed bg-stone-50/50">
+                      {item.a}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       {showJobModal && (
@@ -3621,10 +3907,26 @@ function DDSolutionManager({ currentUser, onLogout }) {
         <TransactionModal tx={editingItem} partners={partners} jobs={jobs}
           onClose={() => { setShowTransactionModal(false); setEditingItem(null); }}
           onSave={(data) => {
+            const now = new Date().toISOString();
             if (editingItem) {
-              saveTransactions(transactions.map(t => t.id === editingItem.id ? data : t), 'edit', `แก้ไข: ${data.description}`);
+              // เก็บประวัติแก้ไข: ใคร เมื่อไหร่
+              const updated = {
+                ...data,
+                createdBy: editingItem.createdBy || null,
+                createdAt: editingItem.createdAt || null,
+                editedBy: currentUser.name,
+                editedAt: now,
+                editCount: (editingItem.editCount || 0) + 1,
+              };
+              saveTransactions(transactions.map(t => t.id === editingItem.id ? updated : t), 'edit', `แก้ไข: ${data.description} (${Number(data.amount).toLocaleString()} ฿)`);
             } else {
-              saveTransactions([...transactions, { ...data, id: `t-${Date.now()}` }], 'add', `เพิ่ม: ${data.description} (${data.amount} ฿)`);
+              const newTx = {
+                ...data,
+                id: `t-${Date.now()}`,
+                createdBy: currentUser.name,
+                createdAt: now,
+              };
+              saveTransactions([...transactions, newTx], 'add', `เพิ่ม: ${data.description} (${Number(data.amount).toLocaleString()} ฿)`);
             }
             setShowTransactionModal(false); setEditingItem(null);
           }}
@@ -3735,8 +4037,9 @@ function StatCard({ icon: Icon, label, value, suffix, color, highlight }) {
 
 function JobCard({ job, partners, fmt, fmt0, onEdit, onDelete }) {
   const investmentEntries = Object.entries(job.investments || {});
+  const isLocked = job.locked === true;
   return (
-    <div className="bg-white rounded-2xl p-5 shadow-sm border border-stone-200 animate-slide-up">
+    <div className={`bg-white rounded-2xl p-5 shadow-sm border animate-slide-up ${isLocked ? 'border-stone-300 bg-stone-50/50' : 'border-stone-200'}`}>
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -3744,13 +4047,32 @@ function JobCard({ job, partners, fmt, fmt0, onEdit, onDelete }) {
             <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${job.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
               {job.status === 'completed' ? '✓ เสร็จ' : '⏳ ดำเนินการ'}
             </span>
+            {isLocked && (
+              <span className="px-2 py-0.5 text-xs rounded-full font-medium bg-stone-200 text-stone-600" title={`ปิดงานโดย ${job.closedBy || '-'}`}>
+                🔒 ปิดแล้ว
+              </span>
+            )}
           </div>
           <p className="text-sm text-stone-500">{job.date} · {job.location}</p>
           <p className="text-sm text-amber-700 font-medium mt-1">{job.type}</p>
+          {isLocked && job.closedBy && (
+            <p className="text-[10px] text-stone-400 mt-0.5">🔒 ปิดงานโดย {job.closedBy} · {job.closedAt ? new Date(job.closedAt).toLocaleDateString('th-TH') : ''}</p>
+          )}
         </div>
         <div className="flex gap-1">
-          <button onClick={onEdit} className="p-2 hover:bg-stone-100 rounded-lg"><Edit2 className="w-4 h-4 text-stone-500" /></button>
-          <button onClick={onDelete} className="p-2 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4 text-red-400" /></button>
+          <button onClick={() => {
+            if (isLocked) {
+              if (!window.confirm('🔒 งานนี้ปิดแล้ว ตัวเลขถูกล็อก\n\nการแก้ไขงานที่ปิดแล้วอาจทำให้ตัวเลขการเงินไม่ตรง\n\nต้องการเปิดดู/แก้ไขหรือไม่?')) return;
+            }
+            onEdit();
+          }} className="p-2 hover:bg-stone-100 rounded-lg"><Edit2 className="w-4 h-4 text-stone-500" /></button>
+          <button onClick={() => {
+            if (isLocked) {
+              alert('🔒 งานนี้ปิดแล้ว ไม่สามารถลบได้\n\nหากต้องการลบจริงๆ ให้ติดต่อผู้ดูแลระบบ');
+              return;
+            }
+            onDelete();
+          }} className="p-2 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4 text-red-400" /></button>
         </div>
       </div>
       <div className="grid grid-cols-3 gap-2 mb-3">
@@ -4618,38 +4940,51 @@ function StockModal({ item, onClose, onSave }) {
               onChange={e => update('createTransaction', e.target.checked)}
               className="w-5 h-5 rounded text-blue-500" />
             <span className="text-sm font-bold text-blue-700">
-              💰 บันทึกเป็นรายการการเงินด้วย
+              💰 บันทึกเป็นรายจ่าย "ต้นทุนสต๊อก"
             </span>
           </label>
           {form.createTransaction !== false && (
             <div className="pl-7 space-y-2">
               <div className="text-xs text-blue-600">
-                มูลค่ารวม: <strong>{(Number(form.qty || 0) * Number(form.unitCost || 0)).toLocaleString(undefined, {maximumFractionDigits: 2})} ฿</strong>
+                มูลค่า <strong>{(Number(form.qty || 0) * Number(form.unitCost || 0)).toLocaleString(undefined, {maximumFractionDigits: 2})} ฿</strong>
+                {!form.useAdvanced && ' (ดึงจากเงินบริษัท)'}
               </div>
-              <Field label="ใครเป็นคนจ่ายเงิน">
-                <select 
-                  value={form.txPartnerId === undefined ? 'company' : form.txPartnerId} 
-                  onChange={e => update('txPartnerId', e.target.value)} 
-                  className={inputCls}>
-                  <option value="company">🏢 บริษัท (ดึงจากเงินสดบริษัท)</option>
-                  <option value="p-aam">👤 อาม (เงินส่วนตัว → +ทุน)</option>
-                  <option value="p-phone">👤 โฟน (เงินส่วนตัว → +ทุน)</option>
-                  <option value="p-pa">👤 พ่อ (เงินส่วนตัว → +ทุน)</option>
-                </select>
-              </Field>
-              {/* Hint ตามที่เลือก */}
-              {(form.txPartnerId === 'company' || form.txPartnerId === undefined || form.txPartnerId === '') ? (
-                <div className="text-[11px] text-stone-600 bg-stone-100 p-2 rounded">
-                  💵 จะสร้าง <strong>"ต้นทุนสต๊อก"</strong> ดึงจากเงินบริษัท
-                </div>
-              ) : (
-                <div className="text-[11px] text-amber-700 bg-amber-50 p-2 rounded">
-                  👤 หุ้นส่วนใส่เงินส่วนตัว → จะสร้าง 2 รายการ:
-                  <br />→ <strong>เพิ่มทุน</strong> (income)
-                  <br />→ <strong>ต้นทุนสต๊อก</strong> (expense)
+              
+              {/* Advanced toggle */}
+              <button 
+                type="button"
+                onClick={() => update('useAdvanced', !form.useAdvanced)}
+                className="text-[11px] text-blue-700 hover:underline flex items-center gap-1"
+              >
+                {form.useAdvanced ? '▼' : '▶'} ใช้เงินหุ้นส่วน? (กรณีหุ้นส่วนเอาเงินส่วนตัวซื้อ)
+              </button>
+              
+              {form.useAdvanced && (
+                <div className="bg-white/60 rounded-lg p-2 space-y-2">
+                  <Field label="ใครเป็นคนจ่ายเงิน">
+                    <select 
+                      value={form.txPartnerId || 'company'} 
+                      onChange={e => update('txPartnerId', e.target.value)} 
+                      className={inputCls}>
+                      <option value="company">🏢 บริษัท (เงินบริษัท)</option>
+                      <option value="p-aam">👤 อาม (เงินส่วนตัว → +ทุน)</option>
+                      <option value="p-phone">👤 โฟน (เงินส่วนตัว → +ทุน)</option>
+                      <option value="p-pa">👤 พ่อ (เงินส่วนตัว → +ทุน)</option>
+                    </select>
+                  </Field>
+                  {form.txPartnerId && form.txPartnerId !== 'company' && (
+                    <div className="text-[11px] text-amber-700 bg-amber-50 p-2 rounded">
+                      👤 หุ้นส่วนใส่เงินส่วนตัว → จะสร้าง 2 รายการ:
+                      <br />→ <strong>เพิ่มทุน</strong> (income)
+                      <br />→ <strong>ต้นทุนสต๊อก</strong> (expense)
+                    </div>
+                  )}
                 </div>
               )}
-              <Field label="หมายเหตุ"><input value={form.txNote || ''} onChange={e => update('txNote', e.target.value)} className={inputCls} placeholder="เช่น ตุนไว้ขาย / ของสำหรับงาน X" /></Field>
+              
+              <Field label="หมายเหตุ (ไม่บังคับ)">
+                <input value={form.txNote || ''} onChange={e => update('txNote', e.target.value)} className={inputCls} placeholder="เช่น ตุนไว้ขาย / ของสำหรับงาน X" />
+              </Field>
             </div>
           )}
         </div>
@@ -4657,7 +4992,7 @@ function StockModal({ item, onClose, onSave }) {
 
       <button onClick={() => {
         // ส่ง txOptions ออกไปด้วย (ถ้าเลือก)
-        const partnerSelection = form.txPartnerId === undefined ? 'company' : form.txPartnerId;
+        const partnerSelection = form.useAdvanced ? (form.txPartnerId || 'company') : 'company';
         const txOptions = (!item && form.createTransaction !== false && Number(form.qty) > 0 && Number(form.unitCost) > 0) ? {
           createTransaction: true,
           partnerId: (partnerSelection === 'company' || partnerSelection === '') ? '' : partnerSelection,
@@ -4665,7 +5000,7 @@ function StockModal({ item, onClose, onSave }) {
           note: form.txNote || '',
         } : null;
         // ลบ field ชั่วคราวออกก่อน save
-        const {createTransaction, txPartnerId, txNote, ...cleanData} = form;
+        const {createTransaction, txPartnerId, txNote, useAdvanced, ...cleanData} = form;
         onSave(cleanData, txOptions);
       }} className="w-full bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-xl font-medium mt-4 flex items-center justify-center gap-2">
         <Save className="w-4 h-4" /> บันทึก
