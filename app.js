@@ -2667,6 +2667,23 @@ function DDSolutionManager({ currentUser, onLogout }) {
               </div>
             )}
 
+            {/* ✓ พิสูจน์ยอด: ส่วนต่างต้องตรง "เงินสดในมือ" Dashboard เสมอ */}
+            {financeTab === 'all' && (() => {
+              const totalInv = Object.values(actualInvestments.inv).reduce((s, v) => s + v, 0);
+              const expectedCash = totalInv + totalProfit - dividendStats.total - totalStockValue;
+              const diff = (allIncome - allExpense) - expectedCash;
+              const ok = Math.abs(diff) < 1;
+              return (
+                <div className={`rounded-xl px-3 py-2 text-xs flex items-center justify-between border ${ok ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-rose-50 border-rose-300 text-rose-700'}`}>
+                  {ok ? (
+                    <span>✅ ยอดตรงกับ "เงินสดในมือ" หน้าแดชบอร์ด ({fmt0(expectedCash)} ฿) — ข้อมูลครบถูกต้อง</span>
+                  ) : (
+                    <span>⚠️ ไม่ตรงแดชบอร์ด! ต่างกัน <strong>{fmt0(Math.abs(diff))} ฿</strong> ({diff > 0 ? 'รายการเกิน/ขาดรายจ่าย' : 'ขาดรายการรับ'}) — เช็ค "ประวัติ" ว่าใครแก้อะไรล่าสุด</span>
+                  )}
+                </div>
+              );
+            })()}
+
             {financeTab === 'pnl' && (
               <>
                 <div className="grid grid-cols-3 gap-3">
@@ -2751,6 +2768,10 @@ function DDSolutionManager({ currentUser, onLogout }) {
                 {filteredTransactions.slice().sort((a, b) => b.date.localeCompare(a.date)).map(t => {
                   const partner = partners.find(p => p.id === t.partnerId);
                   const job = jobs.find(j => j.id === t.jobId);
+                  // 🔒 รายการอัตโนมัติ (จากใบเสร็จ/สต๊อก/ปิดงาน/ปันผล/บริการ) = แสดงอย่างเดียว แก้ที่ต้นทาง
+                  const isAuto = !!(t.sourceDocId || t.isService || t.auto ||
+                    /^t-(rc|svc|close|div)-/.test(t.id || '') ||
+                    (t.createdBy || '').includes('อัตโนมัติ') || (t.createdBy || '').includes('บันทึกงาน'));
                   
                   // 🎨 สีตามประเภทรายการ (เข้าใจง่าย)
                   const catStyle = (() => {
@@ -2789,8 +2810,9 @@ function DDSolutionManager({ currentUser, onLogout }) {
                           {job && <><span>·</span><span className="text-amber-600">📋 {job.customer}</span></>}
                         </div>
                         {/* Audit trail - ใครสร้าง/แก้ */}
-                        {(t.createdBy || t.editedBy) && (
+                        {(t.createdBy || t.editedBy || isAuto) && (
                           <div className="text-[10px] text-stone-400 mt-0.5 flex flex-wrap gap-1">
+                            {isAuto && <span className="bg-stone-100 text-stone-500 px-1.5 rounded">🤖 อัตโนมัติ</span>}
                             {t.createdBy && <span>✍️ สร้างโดย {t.createdBy}</span>}
                             {t.editedBy && (
                               <span className="text-orange-500">
@@ -2803,18 +2825,24 @@ function DDSolutionManager({ currentUser, onLogout }) {
                       <div className={`font-bold whitespace-nowrap ${t.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
                         {t.type === 'income' ? '+' : '-'}{fmt0(t.amount)} ฿
                       </div>
-                      <div className="flex gap-1">
-                        <button onClick={() => { setEditingItem(t); setShowTransactionModal(true); }}
-                          className="p-1.5 hover:bg-stone-100 rounded-lg">
-                          <Edit2 className="w-3.5 h-3.5 text-stone-500" />
-                        </button>
-                        <button onClick={() => {
-                          if (window.confirm(`ลบรายการนี้?\n\n"${t.description}"\n${t.type === 'income' ? '+' : '-'}${Number(t.amount).toLocaleString()} ฿\n\n⚠️ การลบจะถูกบันทึกในประวัติ`)) {
-                            saveTransactions(transactions.filter(x => x.id !== t.id), 'delete', `🗑️ ลบ: ${t.description} (${t.type === 'income' ? '+' : '-'}${Number(t.amount).toLocaleString()} ฿)`);
-                          }
-                        }} className="p-1.5 hover:bg-red-50 rounded-lg">
-                          <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                        </button>
+                      <div className="flex gap-1 items-center">
+                        {isAuto ? (
+                          <span className="text-stone-300 px-1.5 select-none" title="รายการอัตโนมัติ — ดึงมาแสดงอย่างเดียว แก้/ลบที่ต้นทาง (ใบเสร็จ/สต๊อก/งาน)">🔒</span>
+                        ) : (
+                          <>
+                            <button onClick={() => { setEditingItem(t); setShowTransactionModal(true); }}
+                              className="p-1.5 hover:bg-stone-100 rounded-lg">
+                              <Edit2 className="w-3.5 h-3.5 text-stone-500" />
+                            </button>
+                            <button onClick={() => {
+                              if (window.confirm(`ลบรายการนี้?\n\n"${t.description}"\n${t.type === 'income' ? '+' : '-'}${Number(t.amount).toLocaleString()} ฿\n\n⚠️ การลบจะถูกบันทึกในประวัติ`)) {
+                                saveTransactions(transactions.filter(x => x.id !== t.id), 'delete', `🗑️ ลบ: ${t.description} (${t.type === 'income' ? '+' : '-'}${Number(t.amount).toLocaleString()} ฿)`);
+                              }
+                            }} className="p-1.5 hover:bg-red-50 rounded-lg">
+                              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   );
@@ -3086,6 +3114,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
             const draftJob = {
               date: new Date().toISOString().split('T')[0],
               customer: quotation.customerName || '',
+              phone: quotation.customerPhone || '',
               location: quotation.customerAddress || '',
               type: snap.jobType || quotation.jobType || itemDesc.split('\n')[0] || '',
               salePrice: Number(quotation.totalAmount || 0),
@@ -3862,10 +3891,10 @@ function DDSolutionManager({ currentUser, onLogout }) {
                   { icon: '📈', title: 'เสนอขาย', desc: 'Wizard 4 ขั้น: กรอกข้อมูลลูกค้า → เลือกแพ็คเกจ (ระบบแนะนำ 3 แบบ) → ปรับแต่ง → สร้างใบเสนอราคา • ราคาปัดขึ้นลงท้าย 999 อัตโนมัติ' },
                   { icon: '💲', title: 'แคตตาล็อกขาย', desc: 'รายการสินค้าสำหรับขาย (inverter/แผง/แบต/สายไฟ) • ตั้งราคาตลาด • ใช้ตอนสร้างใบเสนอราคา' },
                   { icon: '💼', title: 'งาน', desc: '🔄 ทุกงานมีขั้นตอน 11 ขั้น (ตกลงขาย → มัดจำ[เลือกได้] → สั่งของ → สำรวจ → เตรียมของ → ติดตั้ง → ทดสอบ → เก็บเงิน → ปิดงาน → ติดตาม) กดเลื่อนขั้นในงาน เห็น progress ที่การ์ด • ขั้นเตรียมของมี Checklist อุปกรณ์มาตรฐานให้ติ๊ก • กรอกต้นทุน: "📦 เบิกจากสต๊อก" หรือ "+ เพิ่มรายการ" • งานปิดแล้วล็อก 🔒' },
-                  { icon: '👥', title: 'ลูกค้า', desc: 'ฐานข้อมูลลูกค้า • เก็บที่อยู่ เบอร์โทร ประวัติงาน' },
+                  { icon: '👥', title: 'ลูกค้า', desc: 'ฐานข้อมูลลูกค้า — สร้างอัตโนมัติเมื่อบันทึกงาน (ชื่อ/เบอร์/ที่อยู่/ระบบ ผูกงานให้เลย) • เติมรูปหน้างาน แผนที่ ประกัน เพิ่มทีหลังได้' },
                   { icon: '📦', title: 'สต็อก', desc: '"+ เพิ่มสินค้า" → ☑ บันทึกรายจ่ายอัตโนมัติ (เงินบริษัทเสมอ) • ถ้าเงินบริษัทไม่พอ ให้หุ้นส่วนกด "เพิ่มทุน" ที่แดชบอร์ดก่อน แล้วค่อยซื้อ' },
                   { icon: '🤝', title: 'ผู้ลงทุน', desc: 'ทุนของแต่ละคน คำนวณจากรายการ "เพิ่มทุน" ในการเงิน • % สัดส่วนใช้แบ่งกำไร' },
-                  { icon: '💵', title: 'การเงิน', desc: '3 มุมมอง: 📊 ทั้งหมด (ทุกรายการ) • 💰 กำไร/ขาดทุน (เฉพาะธุรกิจ) • 💵 เงินสด (เงินจริงในมือ) • ทุกรายการมีชื่อคนสร้าง/แก้' },
+                  { icon: '💵', title: 'การเงิน', desc: 'สมุดบัญชีกลาง — ดึงข้อมูลมาแสดงเป็นหลัก ระบบเช็คให้เองว่ายอดตรงแดชบอร์ด (แถบเขียว ✅ ใต้สรุป) • รายการอัตโนมัติ 🔒 แก้/ลบไม่ได้ตรงนี้ ต้องแก้ที่ต้นทาง (ใบเสร็จ/สต๊อก/งาน) แล้วเลขตามมาเอง • รายการที่กรอกมือ (ค่าน้ำมัน ฯลฯ) ยังแก้ได้ มีชื่อคนแก้' },
                   { icon: '📄', title: 'งานเอกสาร', desc: 'ใบเสนอราคา → ใบแจ้งหนี้ → ใบเสร็จ (มัดจำ/เต็ม) • ออกใบเสร็จ = รายได้เข้าการเงินอัตโนมัติทันที (แก้/ลบใบเสร็จ รายได้ sync ตาม) • "🚀 สร้างงาน" จากใบเสนอ • "✅ จบงาน" = สรุปทุกอย่าง + เก็บส่วนที่ขาด + ล็อกงาน' },
                   { icon: '📜', title: 'ประวัติ', desc: 'ทุกการเพิ่ม/แก้/ลบ บันทึกพร้อมชื่อคนทำและเวลา • ใช้ตรวจสอบเมื่อตัวเลขผิด' },
                 ].map((item, i) => (
@@ -3898,11 +3927,12 @@ function DDSolutionManager({ currentUser, onLogout }) {
               <h3 className="font-bold text-stone-800 mb-3">❓ คำถามที่พบบ่อย</h3>
               <div className="space-y-2">
                 {[
-                  { q: 'ตัวเลข Dashboard กับ Excel ไม่ตรงกัน?', a: 'เช็ค Tab "การเงิน" → "💵 เงินสด" ว่าตรงกับ Dashboard ไหม ถ้าไม่ตรงแปลว่ามีรายการการเงินขาด/เกิน ดูใน "ประวัติ" ว่าใครแก้อะไรล่าสุด' },
+                  { q: 'ตัวเลข Dashboard กับ Excel ไม่ตรงกัน?', a: 'เปิด Tab "การเงิน" → ดูแถบใต้สรุป: ✅ เขียว = ตรงแดชบอร์ด ข้อมูลครบ / ⚠️ แดง = บอกเลยว่าต่างกี่บาท ขาดฝั่งไหน → ไปดู "ประวัติ" ว่าใครแก้อะไรล่าสุด' },
                   { q: 'หุ้นส่วนเอาเงินส่วนตัวซื้อของ ต้องทำยังไง?', a: 'โครงสร้างใหม่: ห้ามจ่ายแทนตรงๆ! ให้ทำ 2 ขั้น → ① แดชบอร์ด กด "เพิ่มทุน" ใส่จำนวนเงิน (ทุนหุ้นส่วนเพิ่ม + เงินบริษัทเพิ่ม) → ② ค่อยซื้อของตามปกติ (ตัดจากเงินบริษัท) — แบบนี้ทุนกับการซื้อแยกขาด ตรวจสอบง่าย ไม่งง' },
                   { q: 'เบิกของจากสต๊อกไปใช้งาน นับเป็นรายจ่ายไหม?', a: 'ไม่นับ! เงินจ่ายไปแล้วตอนซื้อเข้าสต๊อก ระบบจะหักสต๊อกและใส่เป็นต้นทุนงานให้เอง (เห็นใน P&L แต่ไม่อยู่ใน Cash Flow)' },
                   { q: 'รับเงินลูกค้า ต้องบันทึกการเงินเองไหม?', a: 'ไม่ต้อง! แค่ออกใบเสร็จ (มัดจำ/เต็ม) ที่งานเอกสาร → รายได้เข้า Tab การเงินอัตโนมัติทันที ผูกกับงานให้ด้วย • ถ้ารับเงินสดไม่ออกใบเสร็จ ตอน "✅ จบงาน" ระบบจะเช็คยอดที่ขาดและสร้างให้' },
                   { q: 'อยากดูว่าใครแก้ตัวเลข?', a: 'Tab "ประวัติ" เก็บทุกการเพิ่ม/แก้/ลบ 500 รายการล่าสุด พร้อมชื่อและเวลา • แต่ละรายการการเงินก็แสดง "สร้างโดย/แก้โดย" ด้วย' },
+                  { q: 'ต้องกรอกลูกค้าซ้ำใน Tab ลูกค้าไหม?', a: 'ไม่ต้อง! บันทึกงาน → ระบบสร้างลูกค้าให้อัตโนมัติ (ชื่อ เบอร์ ที่อยู่ วันติดตั้ง ระบบ ผูกงานให้) → ไป Tab ลูกค้า เติมข้อมูลเพิ่ม (รูป, แผนที่, ประกัน) ทีหลังได้ • ถ้าลูกค้ามีอยู่แล้ว ระบบเติมเฉพาะช่องว่าง ไม่ทับของเดิม' },
                   { q: 'ลูกค้าถามวิธีดูแอป Deye Cloud ทำยังไง?', a: 'Tab งานเอกสาร → ที่งานนั้นกดปุ่ม "📱 คู่มือลูกค้า" → ได้คู่มือ 1 หน้า (ติดตั้งแอป, อ่านหน้าจอแบบดูลูกศร, เช็คประจำสัปดาห์, ปัญหาพบบ่อย, ช่องทางติดต่อเรา) → กด "🖨️ พิมพ์/บันทึก PDF" แนบให้ลูกค้าได้ทั้งกระดาษและอีเมล' },
                   { q: 'ลูกค้าแจ้งปัญหา / ทำงานล้างแผง-ซ่อม บันทึกที่ไหน?', a: 'เปิดงานนั้น → กล่อง "📋 บันทึกงาน + บริการหลังการขาย" → เลือกประเภท (🐛ปัญหา 💬ฟีดแบ็ก 🧽ล้างแผง 🔧ซ่อม 📞ติดตาม) ใส่รายละเอียด + รายรับ/ค่าใช้จ่ายถ้ามี → ระบบบันทึกการเงินให้อัตโนมัติ และการ์ดงานจะโชว์ "กำไรระยะยาว" = กำไรติดตั้ง + บริการสุทธิ ดูได้เลยว่างานนี้คุ้มไหมในระยะยาว • งานที่ปิดแล้วก็เพิ่มบันทึกบริการได้' },
                   { q: 'จะรู้ได้ไงว่างานไหนถึงขั้นตอนไหนแล้ว?', a: 'การ์ดงานทุกใบมีแถบ Progress บอกขั้น (เช่น "ขั้น 6/11: เตรียมของ") • เปิดงานเข้าไปเห็น Stepper 11 ขั้น พร้อมคำแนะนำแต่ละขั้น (มัดจำก่อนสั่งของ, ตั้ง CT clamp, ฯลฯ) กด "✓ เสร็จขั้นนี้" เพื่อเลื่อน • ขั้นสำรวจ-ติดตั้งมี Checklist ของให้ติ๊กกันลืม' },
@@ -3983,6 +4013,41 @@ function DDSolutionManager({ currentUser, onLogout }) {
               saveTransactions([...transactions, ...newSvcTxs], 'add',
                 `📋 บันทึกบริการ ${data.customer}: สร้าง ${newSvcTxs.length} รายการการเงิน`);
             }
+            
+            // ✨ Auto-sync ลูกค้าจากงาน → Tab ลูกค้า (เพิ่มข้อมูลทีหลังได้)
+            if (data.customer && data.customer.trim()) {
+              const custName = data.customer.trim();
+              const existing = customers.find(cu => cu.name.trim() === custName || cu.jobId === jobId);
+              if (!existing) {
+                // ยังไม่มี → สร้างใหม่จากข้อมูลงาน
+                const newCust = {
+                  id: `cust-${Date.now()}`,
+                  name: custName,
+                  phone: data.phone || '',
+                  address: data.location || '',
+                  mapLink: '',
+                  installDate: data.date || '',
+                  system: data.type || '',
+                  warranty: '',
+                  jobId: jobId,
+                  note: '',
+                  photos: [],
+                };
+                saveCustomers([...customers, newCust], 'add', `👤 สร้างลูกค้าอัตโนมัติจากงาน: ${custName}`);
+              } else {
+                // มีแล้ว → เติมเฉพาะช่องที่ว่าง (ไม่ทับข้อมูลที่กรอกไว้)
+                const patch = {};
+                if (!existing.phone && data.phone) patch.phone = data.phone;
+                if (!existing.address && data.location) patch.address = data.location;
+                if (!existing.system && data.type) patch.system = data.type;
+                if (!existing.installDate && data.date) patch.installDate = data.date;
+                if (!existing.jobId) patch.jobId = jobId;
+                if (Object.keys(patch).length > 0) {
+                  saveCustomers(customers.map(cu => cu.id === existing.id ? { ...cu, ...patch } : cu), 'edit',
+                    `👤 อัพเดทข้อมูลลูกค้าจากงาน: ${custName}`);
+                }
+              }
+            }
             setShowJobModal(false); setEditingItem(null);
           }}
         />
@@ -4002,6 +4067,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
             const draftJob = {
               date: new Date().toISOString().split('T')[0],
               customer: quotation.customerName || '',
+              phone: quotation.customerPhone || '',
               location: quotation.customerAddress || '',
               type: snap.jobType || itemDesc.split('\n')[0] || '',
               salePrice: Number(quotation.totalAmount || 0),
@@ -4050,7 +4116,8 @@ function DDSolutionManager({ currentUser, onLogout }) {
                   description: `ซื้อ ${data.name} ${data.qty} ${data.unit}${txOptions.note ? ' - ' + txOptions.note : ''}`,
                   jobId: '',
                   partnerId: '',
-                  createdBy: currentUser.name,
+                  auto: true,
+                  createdBy: `${currentUser.name} (สต๊อกอัตโนมัติ)`,
                   createdAt: new Date().toISOString(),
                 };
                 
@@ -4301,7 +4368,7 @@ function JobCard({ job, partners, fmt, fmt0, onEdit, onDelete }) {
   const investmentEntries = Object.entries(job.investments || {});
   const isLocked = job.locked === true;
   // ขั้นตอนงาน: ล็อกแล้ว = ขั้น 10 (ปิดงาน) อย่างน้อย
-  const wfStep = isLocked ? Math.max(Number(job.workflowStep || 0), 10) : Number(job.workflowStep || 1);
+  const wfStep = (isLocked || job.status === 'completed') ? Math.max(Number(job.workflowStep || 0), 10) : Number(job.workflowStep || 1);
   const wfInfo = JOB_WORKFLOW_STEPS.find(s => s.id === wfStep) || JOB_WORKFLOW_STEPS[0];
   const wfPct = Math.min(100, (wfStep / JOB_WORKFLOW_STEPS.length) * 100);
   return (
@@ -4330,6 +4397,11 @@ function JobCard({ job, partners, fmt, fmt0, onEdit, onDelete }) {
             )}
           </div>
           <p className="text-sm text-stone-500">{job.date} · {job.location}</p>
+          {job.phone && (
+            <a href={`tel:${job.phone.replace(/[^0-9+]/g, '')}`} className="inline-flex items-center gap-1 text-sm text-blue-600 mt-0.5 hover:underline">
+              📞 {job.phone}
+            </a>
+          )}
           <p className="text-sm text-amber-700 font-medium mt-1">{job.type}</p>
           {isLocked && job.closedBy && (
             <p className="text-[10px] text-stone-400 mt-0.5">🔒 ปิดงานโดย {job.closedBy} · {job.closedAt ? new Date(job.closedAt).toLocaleDateString('th-TH') : ''}</p>
@@ -4789,6 +4861,7 @@ function JobModal({ job, partners, stock = [], documents = [], onUpdateStock, on
       
       <Field label="วันที่"><input type="date" value={form.date} onChange={e => update('date', e.target.value)} className={inputCls} /></Field>
       <Field label="ลูกค้า"><input value={form.customer} onChange={e => update('customer', e.target.value)} className={inputCls} placeholder="ชื่อลูกค้า" /></Field>
+      <Field label="เบอร์ติดต่อ"><input type="tel" value={form.phone || ''} onChange={e => update('phone', e.target.value)} className={inputCls} placeholder="08x-xxx-xxxx" /></Field>
       <Field label="สถานที่"><input value={form.location} onChange={e => update('location', e.target.value)} className={inputCls} /></Field>
       <Field label="ประเภทงาน"><input value={form.type} onChange={e => update('type', e.target.value)} className={inputCls} placeholder="เช่น 5kW Hybrid" /></Field>
       <div className="grid grid-cols-2 gap-3">
