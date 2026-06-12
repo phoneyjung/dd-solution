@@ -2709,7 +2709,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
                   </div>
                 </div>
                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-800">
-                  <strong>💡 มุมมองกำไร/ขาดทุน (P&L):</strong> นับเฉพาะรายได้จากลูกค้า vs ต้นทุนงาน (รวมเบิกสต๊อก). ไม่นับทุนหุ้นส่วน และไม่นับซื้อของเข้าสต๊อก.
+                  <strong>💡 มุมมองกำไร/ขาดทุน (P&L):</strong> นับเฉพาะ "เงินจริง" ที่บันทึกแล้ว: รายได้จากลูกค้า − ต้นทุนงานที่จ่ายเงิน. <strong>ไม่รวมของที่เบิกจากสต๊อก</strong> (จ่ายไปแล้วตอนซื้อเข้า). กำไรเต็มรวมของจากสต๊อก ดูที่ Dashboard.
                 </div>
               </>
             )}
@@ -2742,8 +2742,47 @@ function DDSolutionManager({ currentUser, onLogout }) {
                   </div>
                 </div>
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
-                  <strong>💡 มุมมองเงินสด (Cash Flow):</strong> ทุน + รายได้ลูกค้า - ซื้อสต๊อก - ค่าใช้จ่าย. <strong>ไม่นับเบิกสต๊อก</strong> (ของอยู่แล้ว ไม่ได้จ่ายเงินใหม่). ตรงกับ "เงินสดในมือ" ใน Dashboard.
+                  <strong>💡 มุมมองเงินสด (Cash Flow):</strong> ทุน + รายได้ลูกค้า - ซื้อสต๊อก - ค่าใช้จ่าย. <strong>ไม่นับเบิกสต๊อก</strong> (ของอยู่แล้ว ไม่ได้จ่ายเงินใหม่).
                 </div>
+                {/* ✓ พิสูจน์ยอด + วิเคราะห์สาเหตุอัตโนมัติ */}
+                {(() => {
+                  const totalInv = Object.values(actualInvestments.inv).reduce((s, v) => s + v, 0);
+                  const expectedCash = totalInv + totalProfit - dividendStats.total - totalStockValue;
+                  const diff = cashBalance - expectedCash;
+                  if (Math.abs(diff) < 1) {
+                    return (
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 text-xs text-emerald-700">
+                        ✅ ตรงกับ "เงินสดในมือ" หน้าแดชบอร์ด ({fmt0(expectedCash)} ฿) — ทุกงานบันทึกเงินครบ
+                      </div>
+                    );
+                  }
+                  // วิเคราะห์: หางานที่กำไรนับแล้วแต่เงินจริงยังไม่ครบ
+                  const pendingJobs = jobs.map(j => {
+                    const inc = transactions.filter(t => t.type === 'income' && t.category === 'รายได้จากงาน' && t.jobId === j.id && !t.isService)
+                      .reduce((s, t) => s + Number(t.amount || 0), 0);
+                    const incomeGap = Number(j.salePrice || 0) - inc;
+                    // ต้นทุนจ่ายจริง (ไม่รวมเบิกสต๊อก) ที่ยังไม่บันทึก
+                    let cashCost = 0;
+                    Object.values(j.costsByCategory || {}).forEach(items => (items || []).forEach(it => { if (!it.stockId) cashCost += Number(it.amount || 0); }));
+                    const costRec = transactions.filter(t => t.type === 'expense' && t.category === 'ต้นทุนงาน' && t.jobId === j.id && !t.isService)
+                      .reduce((s, t) => s + Number(t.amount || 0), 0);
+                    const costGap = cashCost - costRec;
+                    return { name: j.customer, incomeGap, costGap, net: incomeGap - costGap };
+                  }).filter(x => Math.abs(x.net) > 0.5 || x.incomeGap > 0.5 || x.costGap > 0.5);
+                  return (
+                    <div className="bg-orange-50 border border-orange-300 rounded-xl px-3 py-2 text-xs text-orange-800 space-y-1">
+                      <div>⚠️ ต่างจากแดชบอร์ด <strong>{fmt0(Math.abs(diff))} ฿</strong> — งานเสร็จแล้วแต่เงินยังไม่บันทึก:</div>
+                      {pendingJobs.map((x, i) => (
+                        <div key={i} className="pl-3">
+                          📋 <strong>{x.name}</strong>:
+                          {x.incomeGap > 0.5 && <> ค้างรับ {fmt0(x.incomeGap)} ฿</>}
+                          {x.costGap > 0.5 && <> · ค้างบันทึกจ่าย {fmt0(x.costGap)} ฿</>}
+                        </div>
+                      ))}
+                      <div className="pl-3 text-orange-600">→ ออกใบเสร็จที่งานเอกสาร (รายได้เข้าเอง) แล้วกด "✅ จบงาน" (เก็บที่เหลือให้)</div>
+                    </div>
+                  );
+                })()}
               </>
             )}
 
