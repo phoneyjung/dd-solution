@@ -1431,7 +1431,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
   const [showStockModal, setShowStockModal] = useState(false);
   const [showPartnerModal, setShowPartnerModal] = useState(false);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
-  const [financeTab, setFinanceTab] = useState('all'); // 'all' | 'pnl' | 'cash'
+  const [financeTab, setFinanceTab] = useState('cash'); // 'cash' | 'pnl'
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showCapitalModal, setShowCapitalModal] = useState(false);
@@ -2783,25 +2783,15 @@ function DDSolutionManager({ currentUser, onLogout }) {
           const pnlExpense = pnlCashCost + pnlStockUsed;
           const pnlProfit = pnlIncome - pnlExpense;
           
-          // Cash Flow calculations
-          const cashIn = transactions.filter(t => isCustomerIncome(t) || isCapitalIn(t)).reduce((s, t) => s + Number(t.amount || 0), 0);
-          const cashOut = transactions.filter(t => isStockBuy(t) || isJobCost(t) || isCapitalOut(t)).reduce((s, t) => s + Number(t.amount || 0), 0);
+          // Cash Flow = ทุกรายการ (โครงสร้างใหม่: ทุก transaction คือเงินจริง)
+          const cashIn = transactions.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount || 0), 0);
+          const cashOut = transactions.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount || 0), 0);
           const cashBalance = cashIn - cashOut;
           
-          // All
-          const allIncome = transactions.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount || 0), 0);
-          const allExpense = transactions.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount || 0), 0);
-          
           // Filter transactions ตาม tab
-          const filteredTransactions = (() => {
-            if (financeTab === 'pnl') {
-              return transactions.filter(t => isCustomerIncome(t) || isJobCost(t) || isStockUse(t));
-            }
-            if (financeTab === 'cash') {
-              return transactions.filter(t => isCustomerIncome(t) || isCapitalIn(t) || isStockBuy(t) || isJobCost(t) || isCapitalOut(t));
-            }
-            return transactions; // all
-          })();
+          const filteredTransactions = financeTab === 'pnl'
+            ? transactions.filter(t => isCustomerIncome(t) || isJobCost(t) || isStockUse(t))
+            : transactions; // เงินสด = ทุกรายการ (ทุกตัวคือเงินจริง)
           
           return (
           <div className="space-y-4 animate-fade-in">
@@ -2816,13 +2806,13 @@ function DDSolutionManager({ currentUser, onLogout }) {
               </button>
             </div>
 
-            {/* === 3 Tabs === */}
+            {/* === 2 มุมมอง === */}
             <div className="bg-white rounded-2xl p-1 shadow-sm border border-stone-200 flex gap-1">
-              <button onClick={() => setFinanceTab('all')}
+              <button onClick={() => setFinanceTab('cash')}
                 className={`flex-1 py-2 px-3 rounded-xl text-sm font-medium transition-colors ${
-                  financeTab === 'all' ? 'bg-stone-800 text-white' : 'text-stone-600 hover:bg-stone-100'
+                  financeTab === 'cash' ? 'bg-amber-600 text-white' : 'text-stone-600 hover:bg-stone-100'
                 }`}>
-                📊 ทั้งหมด
+                💵 เงินสด (ทุกรายการ)
               </button>
               <button onClick={() => setFinanceTab('pnl')}
                 className={`flex-1 py-2 px-3 rounded-xl text-sm font-medium transition-colors ${
@@ -2830,40 +2820,10 @@ function DDSolutionManager({ currentUser, onLogout }) {
                 }`}>
                 💰 กำไร/ขาดทุน
               </button>
-              <button onClick={() => setFinanceTab('cash')}
-                className={`flex-1 py-2 px-3 rounded-xl text-sm font-medium transition-colors ${
-                  financeTab === 'cash' ? 'bg-amber-600 text-white' : 'text-stone-600 hover:bg-stone-100'
-                }`}>
-                💵 เงินสด
-              </button>
             </div>
 
             {/* === Summary Cards (เปลี่ยนตาม tab) === */}
-            {financeTab === 'all' && (
-              <div className="grid grid-cols-3 gap-3">
-                <div className="bg-emerald-500 text-white rounded-2xl p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <ArrowDownLeft className="w-4 h-4" />
-                    <span className="text-xs">รายรับรวม</span>
-                  </div>
-                  <div className="display-font text-2xl">{fmt0(allIncome)}</div>
-                </div>
-                <div className="bg-rose-500 text-white rounded-2xl p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <ArrowUpRight className="w-4 h-4" />
-                    <span className="text-xs">รายจ่ายรวม</span>
-                  </div>
-                  <div className="display-font text-2xl">{fmt0(allExpense)}</div>
-                </div>
-                <div className="bg-amber-500 text-white rounded-2xl p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Wallet className="w-4 h-4" />
-                    <span className="text-xs">ส่วนต่าง</span>
-                  </div>
-                  <div className="display-font text-2xl">{fmt0(allIncome - allExpense)}</div>
-                </div>
-              </div>
-            )}
+            
 
             
 
@@ -2933,11 +2893,10 @@ function DDSolutionManager({ currentUser, onLogout }) {
               </>
             )}
 
-            {(financeTab === 'all' || financeTab === 'cash') && (() => {
+            {financeTab === 'cash' && (() => {
                   const totalInv = Object.values(actualInvestments.inv).reduce((s, v) => s + v, 0);
                   const expectedCash = totalInv + totalProfit - dividendStats.total - totalStockValue;
-                  const shownBalance = financeTab === 'cash' ? cashBalance : (allIncome - allExpense);
-                  const diff = shownBalance - expectedCash;
+                  const diff = cashBalance - expectedCash;
                   if (Math.abs(diff) < 1) {
                     return (
                       <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 text-xs text-emerald-700">
@@ -4176,7 +4135,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
                   { icon: '👥', title: 'ลูกค้า', desc: 'ฐานข้อมูลลูกค้า — สร้างอัตโนมัติเมื่อบันทึกงาน (ชื่อ/เบอร์/ที่อยู่/ระบบ ผูกงานให้เลย) • เติมรูปหน้างาน แผนที่ ประกัน เพิ่มทีหลังได้' },
                   { icon: '📦', title: 'สต็อก', desc: '"+ เพิ่มสินค้า" → ☑ บันทึกรายจ่ายอัตโนมัติ (เงินบริษัทเสมอ) • ถ้าเงินบริษัทไม่พอ ให้หุ้นส่วนกด "เพิ่มทุน" ที่แดชบอร์ดก่อน แล้วค่อยซื้อ' },
                   { icon: '🤝', title: 'ผู้ลงทุน', desc: 'ทุนของแต่ละคน คำนวณจากรายการ "เพิ่มทุน" ในการเงิน • % สัดส่วนใช้แบ่งกำไร' },
-                  { icon: '💵', title: 'การเงิน', desc: 'สมุดบัญชีกลาง — ดึงข้อมูลมาแสดงเป็นหลัก ระบบเช็คให้เองว่ายอดตรงแดชบอร์ด (แถบเขียว ✅ ใต้สรุป) • รายการอัตโนมัติ 🔒 แก้/ลบไม่ได้ตรงนี้ ต้องแก้ที่ต้นทาง (ใบเสร็จ/สต๊อก/งาน) แล้วเลขตามมาเอง • รายการที่กรอกมือ (ค่าน้ำมัน ฯลฯ) ยังแก้ได้ มีชื่อคนแก้' },
+                  { icon: '💵', title: 'การเงิน', desc: 'สมุดบัญชีกลาง 2 มุมมอง: 💵 เงินสด (ทุกรายการเงินจริง — ระบบเช็คให้ว่าตรงแดชบอร์ด แถบเขียว ✅) • 💰 กำไร/ขาดทุน (รวมของจากสต๊อก กำไรตรงแดชบอร์ด) • รายการอัตโนมัติ 🔒 แก้ที่ต้นทาง (งาน/สต๊อก) เลขตามเอง • รายการกรอกมือยังแก้ได้ มีชื่อคนแก้' },
                   { icon: '📄', title: 'งานเอกสาร', desc: 'ใบเสนอราคา → ใบแจ้งหนี้ → ใบเสร็จ (มัดจำ/เต็ม) • ออกใบเสร็จ = รายได้เข้าการเงินอัตโนมัติทันที (แก้/ลบใบเสร็จ รายได้ sync ตาม) • "🚀 สร้างงาน" จากใบเสนอ • "✅ จบงาน" = สรุปทุกอย่าง + เก็บส่วนที่ขาด + ล็อกงาน' },
                   { icon: '📜', title: 'ประวัติ', desc: 'ทุกการเพิ่ม/แก้/ลบ บันทึกพร้อมชื่อคนทำและเวลา • ใช้ตรวจสอบเมื่อตัวเลขผิด' },
                 ].map((item, i) => (
