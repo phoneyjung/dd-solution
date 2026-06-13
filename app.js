@@ -2169,6 +2169,139 @@ function DDSolutionManager({ currentUser, onLogout }) {
     logActivity('export', 'ระบบ', `ดาวน์โหลด Excel: ${fileName}`);
   };
 
+  // ============== 📊 Export แฟ้มงาน (รายงานครบทุกมิติ ต่องาน 1 ไฟล์) ==============
+  const exportJobToExcel = (job) => {
+    if (!window.XLSX) { alert('ห้องสมุด Excel กำลังโหลด กรุณาลองใหม่ใน 2-3 วินาที'); return; }
+    const XLSX = window.XLSX;
+    const wb = XLSX.utils.book_new();
+    const thin = { top: { style: 'thin', color: { rgb: 'CCCCCC' } }, bottom: { style: 'thin', color: { rgb: 'CCCCCC' } }, left: { style: 'thin', color: { rgb: 'CCCCCC' } }, right: { style: 'thin', color: { rgb: 'CCCCCC' } } };
+    const S = {
+      section: { font: { bold: true, sz: 11, color: { rgb: '7B0000' } }, fill: { fgColor: { rgb: 'FCE4D6' } } },
+      th: { font: { bold: true, sz: 10, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '305496' } }, alignment: { horizontal: 'center', vertical: 'center' }, border: thin },
+      cell: { font: { sz: 10 }, alignment: { vertical: 'center' }, border: thin },
+      money: { font: { sz: 10 }, alignment: { horizontal: 'right', vertical: 'center' }, numFmt: '#,##0.00', border: thin },
+      center: { font: { sz: 10 }, alignment: { horizontal: 'center', vertical: 'center' }, border: thin },
+      total: { font: { bold: true, sz: 11 }, fill: { fgColor: { rgb: 'FED7AA' } }, alignment: { horizontal: 'right' }, numFmt: '#,##0.00', border: { top: { style: 'medium' }, bottom: { style: 'medium' }, left: { style: 'medium' }, right: { style: 'medium' } } },
+      profit: { font: { sz: 12, bold: true, color: { rgb: 'D97706' } }, fill: { fgColor: { rgb: 'FEF3C7' } }, alignment: { horizontal: 'right' }, numFmt: '#,##0.00', border: { top: { style: 'medium' }, bottom: { style: 'medium' }, left: { style: 'medium' }, right: { style: 'medium' } } },
+      green: { font: { sz: 10, bold: true, color: { rgb: '065F46' } }, alignment: { horizontal: 'right' }, numFmt: '#,##0.00', border: thin },
+      red: { font: { sz: 10, bold: true, color: { rgb: '991B1B' } }, alignment: { horizontal: 'right' }, numFmt: '#,##0.00', border: thin },
+    };
+    const ws = {};
+    const set = (addr, v, s) => { ws[addr] = { v, t: typeof v === 'number' ? 'n' : 's', s }; };
+    let r = 2;
+
+    // ===== Header =====
+    set(`B${r}`, `D.D. SOLUTION — แฟ้มงาน`, { font: { bold: true, sz: 16, color: { rgb: 'D97706' } } }); r++;
+    set(`B${r}`, `Export โดย ${currentUser.name} · ${new Date().toLocaleDateString('th-TH')}`, { font: { sz: 9, italic: true, color: { rgb: '78716C' } } }); r += 2;
+
+    // ===== 1. ข้อมูลงาน =====
+    set(`B${r}`, '📋 ข้อมูลงาน', S.section); set(`C${r}`, '', S.section); r++;
+    const wfStep = (job.locked || job.status === 'completed') ? Math.max(Number(job.workflowStep || 0), 10) : Number(job.workflowStep || 1);
+    const wfInfo = JOB_WORKFLOW_STEPS.find(s => s.id === wfStep) || {};
+    const infoRows = [
+      ['ลูกค้า', job.customer || '-'], ['เบอร์ติดต่อ', job.phone || '-'],
+      ['สถานที่', job.location || '-'], ['วันที่', job.date || '-'],
+      ['ประเภทงาน', job.type || '-'],
+      ['สถานะ', job.status === 'completed' ? '✓ เสร็จ' : 'ดำเนินการ'],
+      ['ขั้นตอน', `${wfStep}/${JOB_WORKFLOW_STEPS.length} ${wfInfo.label || ''}`],
+    ];
+    if (job.closedBy) infoRows.push(['ปิดงานโดย', `${job.closedBy} (${job.closedAt ? new Date(job.closedAt).toLocaleDateString('th-TH') : ''})`]);
+    infoRows.forEach(([k, v]) => { set(`B${r}`, k, S.cell); set(`C${r}`, v, S.cell); r++; });
+    r++;
+
+    // ===== 2. สรุปการเงิน =====
+    set(`B${r}`, '💰 สรุปการเงินงาน', S.section); set(`C${r}`, '', S.section); r++;
+    let stockCost = 0, cashCost = 0;
+    Object.values(job.costsByCategory || {}).forEach(items => (items || []).forEach(it => {
+      const a = Number(it.amount || 0);
+      if (it.stockId) stockCost += a; else cashCost += a;
+    }));
+    const sale = Number(job.salePrice || 0);
+    const totalC = cashCost + stockCost;
+    const svcLog = Array.isArray(job.serviceLog) ? job.serviceLog : [];
+    const svcNet = svcLog.reduce((s, l) => s + Number(l.income || 0) - Number(l.cost || 0), 0);
+    set(`B${r}`, 'ราคาขาย', S.cell); set(`C${r}`, sale, S.green); r++;
+    set(`B${r}`, 'ต้นทุน — จ่ายจริง', S.cell); set(`C${r}`, cashCost, S.red); r++;
+    set(`B${r}`, 'ต้นทุน — ของจากสต๊อก', S.cell); set(`C${r}`, stockCost, S.red); r++;
+    set(`B${r}`, 'ต้นทุนรวม', S.cell); set(`C${r}`, totalC, S.total); r++;
+    set(`B${r}`, `กำไรติดตั้ง (${sale > 0 ? ((sale - totalC) / sale * 100).toFixed(1) : 0}%)`, S.cell); set(`C${r}`, sale - totalC, S.profit); r++;
+    if (svcLog.length > 0) {
+      set(`B${r}`, `บริการหลังขายสุทธิ (${svcLog.length} ครั้ง)`, S.cell); set(`C${r}`, svcNet, svcNet >= 0 ? S.green : S.red); r++;
+      set(`B${r}`, '🏆 กำไรระยะยาว', S.cell); set(`C${r}`, sale - totalC + svcNet, S.profit); r++;
+    }
+    r++;
+
+    // ===== 3. ต้นทุนแยกหมวด =====
+    set(`B${r}`, '🔧 รายการต้นทุนทั้งหมด', S.section); ['C','D','E'].forEach(c => set(`${c}${r}`, '', S.section)); r++;
+    ['หมวด', 'รายการ', 'ที่มา', 'จำนวนเงิน (฿)'].forEach((h, i) => set(`${String.fromCharCode(66 + i)}${r}`, h, S.th)); r++;
+    const CAT_LABELS = { panel: 'แผงโซล่า', inverter: 'อินเวอร์เตอร์', battery: 'แบตเตอรี่', wire: 'สายไฟ', material: 'วัสดุอื่นๆ', travel: 'ค่าเดินทาง', panel_box: 'ตู้คอนโทรล', labor: 'ค่าแรง', other: 'อื่นๆ' };
+    Object.entries(job.costsByCategory || {}).forEach(([cat, items]) => {
+      (items || []).forEach(it => {
+        set(`B${r}`, CAT_LABELS[cat] || cat, S.cell);
+        set(`C${r}`, it.item || '-', S.cell);
+        set(`D${r}`, it.stockId ? '📦 เบิกสต๊อก' : '🛒 ซื้อ/จ่าย', S.center);
+        set(`E${r}`, Number(it.amount || 0), S.money);
+        r++;
+      });
+    });
+    set(`B${r}`, 'รวมต้นทุน', S.cell); set(`C${r}`, '', S.cell); set(`D${r}`, '', S.cell); set(`E${r}`, totalC, S.total); r += 2;
+
+    // ===== 4. รายการเงินของงาน =====
+    const jobTxs = transactions.filter(t => t.jobId === job.id).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    set(`B${r}`, `💵 รายการเงินของงาน (${jobTxs.length} รายการ)`, S.section); ['C','D','E','F'].forEach(c => set(`${c}${r}`, '', S.section)); r++;
+    ['วันที่', 'หมวด', 'รายละเอียด', 'รับ (฿)', 'จ่าย (฿)', 'สร้างโดย'].forEach((h, i) => set(`${String.fromCharCode(66 + i)}${r}`, h, S.th)); r++;
+    jobTxs.forEach(t => {
+      set(`B${r}`, t.date || '', S.center);
+      set(`C${r}`, t.category || '', S.cell);
+      set(`D${r}`, t.description || '', S.cell);
+      set(`E${r}`, t.type === 'income' ? Number(t.amount || 0) : '', S.green);
+      set(`F${r}`, t.type === 'expense' ? Number(t.amount || 0) : '', S.red);
+      set(`G${r}`, t.createdBy || '-', { font: { sz: 8, color: { rgb: '78716C' } }, border: thin });
+      r++;
+    });
+    r++;
+
+    // ===== 5. เอกสารของงาน =====
+    const jobDocs = documents.filter(d => d.jobId === job.id || d.id === job.quotationId || d.jobChainId === job.quotationId);
+    if (jobDocs.length > 0) {
+      set(`B${r}`, `📄 เอกสารของงาน (${jobDocs.length} ฉบับ)`, S.section); ['C','D','E'].forEach(c => set(`${c}${r}`, '', S.section)); r++;
+      ['เลขที่', 'ประเภท', 'วันที่', 'ยอด (฿)'].forEach((h, i) => set(`${String.fromCharCode(66 + i)}${r}`, h, S.th)); r++;
+      const DOC_LABELS = { quotation: 'ใบเสนอราคา', invoice: 'ใบแจ้งหนี้', 'receipt-deposit': 'ใบเสร็จมัดจำ', 'receipt-final': 'ใบเสร็จ', receipt: 'ใบเสร็จ' };
+      jobDocs.forEach(d => {
+        set(`B${r}`, d.docNumber || '-', S.center);
+        set(`C${r}`, DOC_LABELS[d.type] || d.type, S.cell);
+        set(`D${r}`, d.date || '-', S.center);
+        set(`E${r}`, Number(d.totalAmount || 0), S.money);
+        r++;
+      });
+      r++;
+    }
+
+    // ===== 6. บันทึกงาน + บริการ =====
+    if (svcLog.length > 0) {
+      set(`B${r}`, `📋 บันทึกงาน + บริการหลังการขาย (${svcLog.length})`, S.section); ['C','D','E','F'].forEach(c => set(`${c}${r}`, '', S.section)); r++;
+      ['วันที่', 'ประเภท', 'รายละเอียด', 'รับ (฿)', 'จ่าย (฿)', 'โดย'].forEach((h, i) => set(`${String.fromCharCode(66 + i)}${r}`, h, S.th)); r++;
+      const SVC_L = { issue: '🐛 ปัญหา', feedback: '💬 ฟีดแบ็ก', clean: '🧽 ล้างแผง', repair: '🔧 ซ่อม', followup: '📞 ติดตาม', note: '📝 บันทึก' };
+      [...svcLog].sort((a, b) => (a.date || '').localeCompare(b.date || '')).forEach(l => {
+        set(`B${r}`, l.date || '', S.center);
+        set(`C${r}`, SVC_L[l.type] || l.type, S.cell);
+        set(`D${r}`, l.note || '', S.cell);
+        set(`E${r}`, Number(l.income || 0) > 0 ? Number(l.income) : '', S.green);
+        set(`F${r}`, Number(l.cost || 0) > 0 ? Number(l.cost) : '', S.red);
+        set(`G${r}`, l.by || '-', { font: { sz: 8, color: { rgb: '78716C' } }, border: thin });
+        r++;
+      });
+    }
+
+    ws['!ref'] = `A1:H${r + 1}`;
+    ws['!cols'] = [{ wch: 2 }, { wch: 16 }, { wch: 20 }, { wch: 40 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 4 }];
+    const safeName = (job.customer || 'งาน').replace(/[\\/:*?"<>|]/g, '').slice(0, 30);
+    XLSX.utils.book_append_sheet(wb, ws, 'แฟ้มงาน');
+    const fileName = `DD_งาน_${safeName}_${job.date || ''}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    logActivity('export', 'งาน', `📊 Export แฟ้มงาน: ${job.customer} (${fileName})`);
+  };
+
   if (loading) {
     return <div className="min-h-screen bg-stone-100 flex items-center justify-center"><Sun className="w-16 h-16 text-amber-500 animate-spin" /></div>;
   }
@@ -2485,6 +2618,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
               {jobs.map(job => (
                 <JobCard key={job.id} job={job} partners={partners} fmt={fmt} fmt0={fmt0}
                   onEdit={() => { setEditingItem(job); setShowJobModal(true); }}
+                  onExportExcel={() => exportJobToExcel(job)}
                   onDelete={() => {
                     const autoTxs = transactions.filter(t => t.id === `t-jobinc-${job.id}` || t.id === `t-jobcost-${job.id}` || (t.jobId === job.id && t.isService));
                     const txWarn = autoTxs.length > 0 ? `\n\n💰 รายการเงินอัตโนมัติของงานนี้ ${autoTxs.length} รายการจะถูกลบด้วย` : '';
@@ -4083,6 +4217,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
                   { q: 'ต้องกรอกลูกค้าซ้ำใน Tab ลูกค้าไหม?', a: 'ไม่ต้อง! บันทึกงาน → ระบบสร้างลูกค้าให้อัตโนมัติ (ชื่อ เบอร์ ที่อยู่ วันติดตั้ง ระบบ ผูกงานให้) → ไป Tab ลูกค้า เติมข้อมูลเพิ่ม (รูป, แผนที่, ประกัน) ทีหลังได้ • ถ้าลูกค้ามีอยู่แล้ว ระบบเติมเฉพาะช่องว่าง ไม่ทับของเดิม' },
                   { q: 'ลูกค้าถามวิธีดูแอป Deye Cloud ทำยังไง?', a: 'Tab งานเอกสาร → ที่งานนั้นกดปุ่ม "📱 คู่มือลูกค้า" → ได้คู่มือ 1 หน้า (ติดตั้งแอป, อ่านหน้าจอแบบดูลูกศร, เช็คประจำสัปดาห์, ปัญหาพบบ่อย, ช่องทางติดต่อเรา) → กด "🖨️ พิมพ์/บันทึก PDF" แนบให้ลูกค้าได้ทั้งกระดาษและอีเมล' },
                   { q: 'ลูกค้าแจ้งปัญหา / ทำงานล้างแผง-ซ่อม บันทึกที่ไหน?', a: 'เปิดงานนั้น → กล่อง "📋 บันทึกงาน + บริการหลังการขาย" → เลือกประเภท (🐛ปัญหา 💬ฟีดแบ็ก 🧽ล้างแผง 🔧ซ่อม 📞ติดตาม) ใส่รายละเอียด + รายรับ/ค่าใช้จ่ายถ้ามี → ระบบบันทึกการเงินให้อัตโนมัติ และการ์ดงานจะโชว์ "กำไรระยะยาว" = กำไรติดตั้ง + บริการสุทธิ ดูได้เลยว่างานนี้คุ้มไหมในระยะยาว • งานที่ปิดแล้วก็เพิ่มบันทึกบริการได้' },
+                  { q: 'อยากเก็บรายงานงานแต่ละงานเป็นไฟล์ ทำไง?', a: 'การ์ดงาน → กดปุ่ม 📥 สีเขียว → ได้ Excel "แฟ้มงาน" 1 ไฟล์ครบทุกอย่างของงานนั้น: ข้อมูลงาน+เบอร์ / สรุปเงิน (ขาย-ต้นทุนแตกจ่ายจริง·สต๊อก-กำไร-กำไรระยะยาว) / ต้นทุนทุกชิ้นบอกที่มา / รายการเงินทุกตัวพร้อมชื่อคนสร้าง / เอกสารที่ออก / บันทึกบริการ • เก็บเข้าแฟ้มลูกค้าหรือส่งหุ้นส่วนดูได้เลย' },
                   { q: 'จะรู้ได้ไงว่างานไหนถึงขั้นตอนไหนแล้ว?', a: 'การ์ดงานทุกใบมีแถบ Progress บอกขั้น (เช่น "ขั้น 6/11: เตรียมของ") • เปิดงานเข้าไปเห็น Stepper 11 ขั้น พร้อมคำแนะนำแต่ละขั้น (มัดจำก่อนสั่งของ, ตั้ง CT clamp, ฯลฯ) กด "✓ เสร็จขั้นนี้" เพื่อเลื่อน • ขั้นสำรวจ-ติดตั้งมี Checklist ของให้ติ๊กกันลืม' },
                   { q: 'อยากแบ่งกำไรให้หุ้นส่วน ทำยังไง?', a: 'แดชบอร์ด → กดปุ่ม "💜 ปันผล" → ใส่ยอดรวมเป็นก้อน (เช่น 30,000) → ระบบแบ่งให้อัตโนมัติตาม % สัดส่วนทุนของแต่ละคน พร้อม preview ก่อนยืนยัน • ระบบเตือนถ้าเกินกำไรสะสม และบล็อกถ้าเงินสดไม่พอ • ไม่ต้องแบ่งทุกงาน — สะสมกำไรไว้ ปันผลเมื่อพร้อม' },
                   { q: 'สายไฟเหลือจากงาน หายไปไหน?', a: 'ตอนกด "จบงาน" สายไฟม้วนใหม่ที่ใช้ไม่หมด ระบบจะคำนวณที่เหลือและเพิ่มเข้าสต๊อกให้อัตโนมัติ (ราคาเฉลี่ยถ้ามีของเดิม)' },
@@ -4527,7 +4662,7 @@ function StatCard({ icon: Icon, label, value, suffix, color, highlight }) {
   );
 }
 
-function JobCard({ job, partners, fmt, fmt0, onEdit, onDelete }) {
+function JobCard({ job, partners, fmt, fmt0, onEdit, onDelete, onExportExcel }) {
   const investmentEntries = Object.entries(job.investments || {});
   const isLocked = job.locked === true;
   // ขั้นตอนงาน: ล็อกแล้ว = ขั้น 10 (ปิดงาน) อย่างน้อย
@@ -4571,6 +4706,8 @@ function JobCard({ job, partners, fmt, fmt0, onEdit, onDelete }) {
           )}
         </div>
         <div className="flex gap-1">
+          <button onClick={onExportExcel} title="📊 Export แฟ้มงาน Excel — รายละเอียดครบทุกอย่างของงานนี้"
+            className="p-2 hover:bg-emerald-50 rounded-lg"><Download className="w-4 h-4 text-emerald-600" /></button>
           <button onClick={() => {
             if (isLocked) {
               if (!window.confirm('🔒 งานนี้ปิดแล้ว ตัวเลขถูกล็อก\n\nการแก้ไขงานที่ปิดแล้วอาจทำให้ตัวเลขการเงินไม่ตรง\n\nต้องการเปิดดู/แก้ไขหรือไม่?')) return;
