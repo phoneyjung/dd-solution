@@ -65,8 +65,24 @@
   const db = getFirestore(app);
   const auth = getAuth(app);
   
-  // Sign in anonymously (ไม่ต้องใส่ password ทุกครั้ง)
-  signInAnonymously(auth).catch(err => console.error('Auth error:', err));
+  // Sign in anonymously (ไม่ต้องใส่ password ทุกครั้ง) + แจ้ง error ชัดเจน
+  signInAnonymously(auth).catch(err => {
+    console.error('Auth error:', err);
+    // แปล error code เป็นภาษาคน + วิธีแก้
+    var fix = '';
+    if (err.code === 'auth/configuration-not-found' || err.code === 'auth/operation-not-allowed') {
+      fix = '\n\n🔧 วิธีแก้: เปิด Firebase Console → Authentication → Sign-in method → เปิด "Anonymous"';
+    } else if (err.code === 'auth/api-key-not-valid' || (err.message && err.message.indexOf('api-key') > -1)) {
+      fix = '\n\n🔧 วิธีแก้: API key ถูกจำกัด/ไม่ถูกต้อง → เช็ค Google Cloud Console → Credentials → ปลดล็อก/แก้ referrer';
+    } else if (err.code === 'auth/network-request-failed') {
+      fix = '\n\n🔧 วิธีแก้: เน็ตมีปัญหา ลองเปลี่ยน WiFi/มือถือ';
+    }
+    if (window.__showFatalError) {
+      window.__showFatalError('เชื่อมต่อ Firebase ไม่ได้', (err.code || '') + '\n' + (err.message || '') + fix);
+    } else {
+      window.__firebaseError = (err.code || 'auth-error') + ': ' + (err.message || '') + fix;
+    }
+  });
   
   // Expose Firebase API to window
   window.firebaseDb = db;
@@ -150,6 +166,76 @@
 </div>
 
 <div id="root"></div>
+
+<!-- 🛡️ Error Catcher — แสดง error บนจอแทนจอขาว (กันงงครั้งหน้า) -->
+<script>
+  (function() {
+    let errorShown = false;
+    function showError(title, detail) {
+      if (errorShown) return;
+      errorShown = true;
+      var splash = document.getElementById('splash');
+      if (splash) splash.style.display = 'none';
+      var box = document.createElement('div');
+      box.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:99999;padding:20px;overflow:auto;font-family:system-ui,sans-serif;-webkit-overflow-scrolling:touch';
+      box.innerHTML =
+        '<div style="max-width:600px;margin:40px auto">' +
+        '<div style="font-size:48px;text-align:center">⚠️</div>' +
+        '<h2 style="color:#dc2626;text-align:center;margin:8px 0">แอปโหลดไม่สำเร็จ</h2>' +
+        '<p style="color:#78716c;text-align:center;font-size:14px">ส่งภาพหน้านี้ให้ผู้ดูแลเพื่อแก้ไข</p>' +
+        '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:12px;padding:14px;margin:16px 0">' +
+        '<div style="font-weight:bold;color:#991b1b;margin-bottom:6px">' + title + '</div>' +
+        '<pre style="white-space:pre-wrap;word-break:break-word;font-size:12px;color:#7f1d1d;margin:0">' + detail + '</pre>' +
+        '</div>' +
+        '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:12px;padding:14px;font-size:13px;color:#0c4a6e">' +
+        '<strong>ลองแก้เบื้องต้น:</strong><br>' +
+        '1. ปิดแอป เปิดใหม่ (Hard refresh)<br>' +
+        '2. เช็คเน็ต / ปิด-เปิด WiFi<br>' +
+        '3. ถ้ายังไม่ได้ ส่งภาพนี้ให้ผู้ดูแล' +
+        '</div>' +
+        '<button onclick="location.reload()" style="width:100%;background:#f59e0b;color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:bold;margin-top:16px">🔄 ลองโหลดใหม่</button>' +
+        '<div style="text-align:center;font-size:11px;color:#a8a29e;margin-top:12px">เวลา: ' + new Date().toLocaleString('th-TH') + '</div>' +
+        '</div>';
+      document.body.appendChild(box);
+    }
+
+    // จับ error ทุกชนิด
+    window.__showFatalError = showError;  // ให้ Firebase module เรียกได้
+    window.addEventListener('error', function(e) {
+      var msg = e.message || 'Unknown error';
+      var src = e.filename ? (e.filename.split('/').pop() + ':' + e.lineno) : '';
+      // เฉพาะ error ที่ทำให้แอปพังจริง (ไม่นับ resource โหลดไม่ครบเล็กๆ น้อยๆ)
+      if (e.message) showError('JavaScript Error', msg + (src ? '\n📍 ' + src : ''));
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      var r = e.reason || {};
+      showError('Promise Error', (r.message || String(r)) + (r.code ? '\n🔑 code: ' + r.code : ''));
+    });
+
+    // เช็คว่า React render สำเร็จไหมใน 8 วินาที (จอขาว = render ไม่ขึ้น)
+    window.__appLoaded = false;
+    setTimeout(function() {
+      var root = document.getElementById('root');
+      if (!window.__appLoaded && root && root.children.length === 0) {
+        // ถ้ามี Firebase error ค้างอยู่ → แสดงอันนั้นก่อน (ชัดกว่า)
+        if (window.__firebaseError) {
+          showError('เชื่อมต่อ Firebase ไม่ได้', window.__firebaseError);
+          return;
+        }
+        // ตรวจว่าเครื่องมือโหลดครบไหม
+        var missing = [];
+        if (typeof React === 'undefined') missing.push('React');
+        if (typeof ReactDOM === 'undefined') missing.push('ReactDOM');
+        if (typeof Babel === 'undefined') missing.push('Babel (ตัวแปลงโค้ด)');
+        if (typeof XLSX === 'undefined') missing.push('XLSX (Excel)');
+        var detail = missing.length > 0
+          ? 'โหลดไลบรารีไม่ครบ: ' + missing.join(', ') + '\n\nมักเกิดจากเน็ตช้า/หลุด หรือ CDN ถูกบล็อก ลองเปิดใหม่หรือเปลี่ยนเน็ต'
+          : 'แอปไม่แสดงผลใน 8 วินาที (โค้ดอาจมี error ตอนเริ่มทำงาน) ลองโหลดใหม่';
+        showError('แอปไม่แสดงผล (จอขาว)', detail);
+      }
+    }, 8000);
+  })();
+</script>
 
 <!-- Firebase Storage Adapter -->
 <script>

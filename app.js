@@ -9201,5 +9201,15 @@ function CompanySettingsModal({ companyInfo, onClose, onSave }) {
 }
 
 // ============== RENDER APP ==============
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(React.createElement(App));
+try {
+  const root = ReactDOM.createRoot(document.getElementById('root'));
+  root.render(React.createElement(App));
+  // บอก error catcher ว่า render สำเร็จแล้ว (กัน false alarm จอขาว)
+  window.__appLoaded = true;
+  // ซ่อน splash เมื่อ render เสร็จ
+  setTimeout(() => { const s = document.getElementById('splash'); if (s) s.style.display = 'none'; }, 100);
+} catch (err) {
+  window.__appLoaded = false;
+  if (window.onerror) window.onerror(err.message, 'app.js', 0, 0, err);
+  throw err;
+}
