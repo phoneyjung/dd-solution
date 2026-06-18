@@ -171,6 +171,20 @@
 <script>
   (function() {
     let errorShown = false;
+    // 🧹 ล้าง Service Worker + cache ทั้งหมด (แก้ปัญหา SW เก่าเสิร์ฟไฟล์ผิด → จอขาว)
+    window.__clearAllCache = async function() {
+      try {
+        if ('serviceWorker' in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map(r => r.unregister()));
+        }
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map(k => caches.delete(k)));
+        }
+      } catch (e) {}
+      location.href = location.pathname + '?fresh=' + Date.now();
+    };
     function showError(title, detail) {
       if (errorShown) return;
       errorShown = true;
@@ -189,11 +203,13 @@
         '</div>' +
         '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:12px;padding:14px;font-size:13px;color:#0c4a6e">' +
         '<strong>ลองแก้เบื้องต้น:</strong><br>' +
-        '1. ปิดแอป เปิดใหม่ (Hard refresh)<br>' +
-        '2. เช็คเน็ต / ปิด-เปิด WiFi<br>' +
+        '1. กดปุ่มสีเขียวด้านล่าง (ล้างแคช + รีเฟรช)<br>' +
+        '2. ถ้ายังไม่ได้ ปิดแอปเปิดใหม่ / เปลี่ยนเน็ต<br>' +
         '3. ถ้ายังไม่ได้ ส่งภาพนี้ให้ผู้ดูแล' +
         '</div>' +
-        '<button onclick="location.reload()" style="width:100%;background:#f59e0b;color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:bold;margin-top:16px">🔄 ลองโหลดใหม่</button>' +
+        '<button onclick="window.__clearAllCache()" style="width:100%;background:#10b981;color:#fff;border:none;border-radius:12px;padding:16px;font-size:16px;font-weight:bold;margin-top:16px">🧹 ล้างแคช + โหลดใหม่ (แนะนำ)</button>' +
+        '<button onclick="location.reload()" style="width:100%;background:#f59e0b;color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:bold;margin-top:10px">🔄 โหลดใหม่เฉยๆ</button>' +
+        '<button onclick="window.__clearAllCache()" style="width:100%;background:#dc2626;color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:bold;margin-top:10px">🧹 ล้างแคชแล้วโหลดใหม่ (แก้จอขาว)</button>' +
         '<div style="text-align:center;font-size:11px;color:#a8a29e;margin-top:12px">เวลา: ' + new Date().toLocaleString('th-TH') + '</div>' +
         '</div>';
       document.body.appendChild(box);
