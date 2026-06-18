@@ -331,8 +331,10 @@
   };
 </script>
 
-<!-- App Code -->
-<script type="text/babel" data-presets="react" src="app.js?v=20260618"></script>
+<!-- App Code — โหลดจาก path ใหม่ (app.v6.js) ที่ไม่เคยถูก cache ที่ชั้นไหนเลย
+     ⚠️ เปลี่ยน "ชื่อไฟล์" ไม่ใช่แค่ ?v= เพราะ SW เก่าบางตัว match แบบ ignoreSearch (มองข้าม ?v=)
+     เวลาแก้โค้ดครั้งต่อไปแล้วกลัว cache ดื้อ → เปลี่ยนเลขนี้เป็น v7, v8 ... (และเปลี่ยนชื่อไฟล์ตาม) -->
+<script type="text/babel" data-presets="react" src="app.v6.js"></script>
 
 <!-- Hide splash screen when app is ready -->
 <script>

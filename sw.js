@@ -1,90 +1,33 @@
-// D.D. Solution Service Worker v3
-const CACHE_VERSION = 'v3-' + new Date().toISOString().split('T')[0];
-const CACHE_NAME = 'dd-solution-' + CACHE_VERSION;
-const ASSETS = [
-  './',
-  './index.html',
-  './app.js',
-  './manifest.json',
-  './icons/icon-192.png',
-  './icons/icon-512.png',
-  './icons/apple-touch-icon.png',
-  './icons/favicon.png',
-];
+// ============================================================
+// D.D. Solution Service Worker — KILL SWITCH (v6)
+// ============================================================
+// จงใจ"ไม่ cache อะไรเลย" — แอปออนไลน์ตลอด เพื่อกันบั๊กจอขาว
+// อาการเดิม: SW v3 cache ไฟล์ app.js เก่า (ที่ยังมี import) แล้วเสิร์ฟทับ
+//            ทำให้ Babel เจอ import → "import declarations may only appear
+//            at top level of a module" → จอขาว
+//
+// หน้าที่ของไฟล์นี้มีแค่ 2 อย่าง:
+//   1) เข้ามาแทน SW เก่าทุกตัวที่ยังค้างในเครื่องผู้ใช้ (ผ่าน auto-update ของเบราว์เซอร์)
+//   2) ตอน activate → ลบ cache ทุกชั้นทิ้งให้เกลี้ยง
+//
+// ❗ ไม่มี fetch handler โดยเจตนา → ทุก request วิ่งออกเน็ตตรง ๆ
+//    เป็นไปไม่ได้ที่จะเสิร์ฟไฟล์ผิดประเภท (เช่น index.html แทน app.js) อีก
+// ============================================================
 
-// Install: cache assets
-self.addEventListener('install', (e) => {
-  e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => 
-      cache.addAll(ASSETS).catch(() => {})
-    )
-  );
+self.addEventListener('install', () => {
+  // ติดตั้งทันที ไม่ต้องรอคิว
   self.skipWaiting();
 });
 
-// Activate: clear ALL old caches
 self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys().then((keys) => Promise.all(
-      keys.filter((k) => k !== CACHE_NAME).map((k) => {
-        console.log('[SW] Deleting old cache:', k);
-        return caches.delete(k);
-      })
-    )).then(() => self.clients.claim())
-  );
+  e.waitUntil((async () => {
+    // ลบ cache เก่าทุกชั้น (ของ v3/v4/v5 ที่อาจค้าง)
+    const keys = await caches.keys();
+    await Promise.all(keys.map((k) => caches.delete(k)));
+    // เข้าควบคุมทุกแท็บที่เปิดอยู่ทันที
+    await self.clients.claim();
+  })());
 });
 
-// Fetch strategy: Network-first สำหรับ HTML/JS, Cache-first สำหรับรูป
-self.addEventListener('fetch', (e) => {
-  const url = e.request.url;
-  
-  // ปล่อยให้ Firebase / Google APIs / ImgBB ผ่านไปตรงๆ
-  if (url.includes('firestore') || 
-      url.includes('firebaseio') ||
-      url.includes('googleapis.com') ||
-      url.includes('gstatic.com') ||
-      url.includes('imgbb.com') ||
-      url.includes('ibb.co')) {
-    return;
-  }
-  
-  // Network-first สำหรับ HTML, JS, JSON (ดึงเวอร์ชั่นใหม่ก่อน)
-  const isCodeFile = url.endsWith('.html') || 
-                      url.endsWith('.js') || 
-                      url.endsWith('.json') ||
-                      url.endsWith('/');
-  
-  if (isCodeFile) {
-    e.respondWith(
-      fetch(e.request).then((res) => {
-        if (res && res.status === 200 && res.type === 'basic') {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
-        }
-        return res;
-      }).catch(() => caches.match(e.request).then(c => c || caches.match('./index.html')))
-    );
-    return;
-  }
-  
-  // Cache-first สำหรับรูป/อื่นๆ
-  e.respondWith(
-    caches.match(e.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(e.request).then((res) => {
-        if (res && res.status === 200 && res.type === 'basic') {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
-        }
-        return res;
-      }).catch(() => caches.match('./index.html'));
-    })
-  );
-});
-
-// รับข้อความจากแอปเพื่อ force update
-self.addEventListener('message', (e) => {
-  if (e.data === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
-});
+// ไม่มี self.addEventListener('fetch', ...) — ตั้งใจปล่อยให้เบราว์เซอร์
+// โหลดทุกอย่างจาก network เองตามปกติ
