@@ -287,6 +287,7 @@ const COST_CATEGORIES = [
   { id: 'labor', label: 'ค่าแรง', icon: Users },
   { id: 'travel', label: 'ค่าเดินทาง', icon: Truck },
   { id: 'food', label: 'ค่าน้ำค่าข้าว', icon: Coffee },
+  { id: 'commission', label: 'ค่าคอม (แนะนำ)', icon: Users },
   { id: 'other', label: 'อื่นๆ', icon: Box },
 ];
 
@@ -2234,7 +2235,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
     // ===== 3. ต้นทุนแยกหมวด =====
     set(`B${r}`, '🔧 รายการต้นทุนทั้งหมด', S.section); ['C','D','E'].forEach(c => set(`${c}${r}`, '', S.section)); r++;
     ['หมวด', 'รายการ', 'ที่มา', 'จำนวนเงิน (฿)'].forEach((h, i) => set(`${String.fromCharCode(66 + i)}${r}`, h, S.th)); r++;
-    const CAT_LABELS = { panel: 'แผงโซล่า', inverter: 'อินเวอร์เตอร์', battery: 'แบตเตอรี่', wire: 'สายไฟ', material: 'วัสดุอื่นๆ', travel: 'ค่าเดินทาง', panel_box: 'ตู้คอนโทรล', labor: 'ค่าแรง', other: 'อื่นๆ' };
+    const CAT_LABELS = { panel: 'แผงโซล่า', inverter: 'อินเวอร์เตอร์', battery: 'แบตเตอรี่', wire: 'สายไฟ', material: 'วัสดุอื่นๆ', travel: 'ค่าเดินทาง', panel_box: 'ตู้คอนโทรล', labor: 'ค่าแรง', commission: 'ค่าคอม', other: 'อื่นๆ' };
     Object.entries(job.costsByCategory || {}).forEach(([cat, items]) => {
       (items || []).forEach(it => {
         set(`B${r}`, CAT_LABELS[cat] || cat, S.cell);
@@ -5225,6 +5226,11 @@ function JobModal({ job, partners, stock = [], documents = [], onUpdateStock, on
                 <span className="font-medium text-amber-700">{cat.label}</span>
                 <span className="text-sm font-mono">{subtotal.toFixed(2)} ฿</span>
               </div>
+              {cat.id === 'commission' && (
+                <div className="text-[11px] text-amber-700 bg-amber-50 rounded-lg px-2 py-1.5 mb-2 flex items-start gap-1.5">
+                  <span>🎁</span><span>ค่าแนะนำให้คนที่แนะนำลูกค้ามา — เพิ่มได้หลายคน (กด "เพิ่มรายการ") · นับเป็นต้นทุน หักจากกำไรอัตโนมัติ</span>
+                </div>
+              )}
               {items.map((item, i) => {
                 // หมวดที่มี qty × unitPrice
                 const hasQtyPrice = (cat.id === 'panel' || cat.id === 'battery' || cat.id === 'inverter');
@@ -5381,7 +5387,7 @@ function JobModal({ job, partners, stock = [], documents = [], onUpdateStock, on
                 return (
                   <div key={i} className={`flex gap-2 mb-2 ${item.stockId ? 'bg-emerald-50 p-2 rounded-lg' : ''}`}>
                     {item.stockId && <span className="text-emerald-600 self-center" title="เบิกจากสต๊อก">📦</span>}
-                    <input value={item.item} onChange={e => updateCostItem(cat.id, i, 'item', e.target.value)} className={inputCls + " flex-1"} placeholder="ชื่อรายการ" disabled={!!item.stockId} />
+                    <input value={item.item} onChange={e => updateCostItem(cat.id, i, 'item', e.target.value)} className={inputCls + " flex-1"} placeholder={cat.id === 'commission' ? 'ชื่อคนแนะนำ / ผู้รับคอม' : 'ชื่อรายการ'} disabled={!!item.stockId} />
                     <input type="number" step="0.01" value={item.amount} onChange={e => updateCostItem(cat.id, i, 'amount', Number(e.target.value))} className={inputCls + " w-28"} placeholder="0" disabled={!!item.stockId} />
                     <button onClick={() => removeCostItem(cat.id, i)} className="p-2 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4 text-red-400" /></button>
                   </div>
