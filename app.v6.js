@@ -4635,9 +4635,9 @@ async function downloadJobSummaryPNG(job, partners) {
     try { logo = new Image(); logo.src = DD_LOGO_DATAURL; await logo.decode(); } catch(e) { logo = null; }
     try { if (document.fonts && document.fonts.ready) await Promise.race([document.fonts.ready, new Promise(function(r){setTimeout(r,1500);})]); } catch(e) {}
 
-    const W = 1488, H = 2105;
+    const W = 1488, FOOTER_H = 112;
     const cv = document.createElement('canvas');
-    cv.width = W; cv.height = H;
+    cv.width = W; cv.height = 7000;
     const ctx = cv.getContext('2d');
 
     const INK='#0d1f43', INK2='#33415f', MUT='#6c768e', PAPER='#f5f2ea', LINE='#e7e1d2';
@@ -4662,7 +4662,7 @@ async function downloadJobSummaryPNG(job, partners) {
       if (cur) lines.push(cur); return lines;
     };
 
-    ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, 7000);
     ctx.textBaseline = 'alphabetic';
 
     // ===== HEADER =====
@@ -4727,37 +4727,52 @@ async function downloadJobSummaryPNG(job, partners) {
     // ===== COST BREAKDOWN =====
     const cbc = job.costsByCategory || {};
     let rows = Object.entries(cbc).map(([cid, items]) => {
-      const sub = (items||[]).reduce((s, it) => s + (Number(it.amount)||0), 0);
+      const list = items || [];
+      const sub = list.reduce((s, it) => s + (Number(it.amount)||0), 0);
       const label = (typeof getCatLabel === 'function') ? getCatLabel(cid) : cid;
-      return { cid, label, amount: sub, n: (items||[]).length };
+      return { cid, label, amount: sub, items: list };
     }).filter(r => r.amount > 0).sort((a, b) => b.amount - a.amount);
+
+    const trunc = (text, maxW) => {
+      if (ctx.measureText(text).width <= maxW) return text;
+      let t = text;
+      while (t.length > 1 && ctx.measureText(t + '\u2026').width > maxW) t = t.slice(0, -1);
+      return t + '\u2026';
+    };
 
     if (rows.length) {
       ctx.textAlign = 'left'; ctx.fillStyle = INK; ctx.font = font('700', 32);
-      ctx.fillText('ต้นทุนแยกหมวด', 96, y);
+      ctx.fillText('\u0e15\u0e49\u0e19\u0e17\u0e38\u0e19\u0e41\u0e22\u0e01\u0e2b\u0e21\u0e27\u0e14', 96, y);
       ctx.textAlign = 'right'; ctx.fillStyle = MUT; ctx.font = font('400', 24);
-      ctx.fillText(rows.length + ' หมวด', W-96, y);
-      y += 30;
+      ctx.fillText(rows.length + ' \u0e2b\u0e21\u0e27\u0e14', W-96, y);
+      y += 38;
       const maxAmt = Math.max.apply(null, rows.map(r => r.amount));
-      const shown = rows.slice(0, 9);
-      shown.forEach(r => {
+      rows.forEach(r => {
         const isComm = r.cid === 'commission';
-        ctx.textAlign = 'left'; ctx.fillStyle = INK; ctx.font = font('600', 26);
-        ctx.fillText((isComm ? '🎁 ' : '') + r.label + (r.n > 1 ? '  (' + r.n + ')' : ''), 96, y+24);
-        ctx.textAlign = 'right'; ctx.fillStyle = isComm ? SUND : INK2; ctx.font = font('600', 26);
-        ctx.fillText(f0(r.amount) + ' ฿', W-96, y+24);
-        ctx.fillStyle = '#ebe4d6'; rr(96, y+38, 1296, 12, 6); ctx.fill();
+        ctx.textAlign = 'left'; ctx.fillStyle = INK; ctx.font = font('700', 26);
+        ctx.fillText((isComm ? '\ud83c\udf81 ' : '') + r.label, 96, y+24);
+        ctx.textAlign = 'right'; ctx.fillStyle = isComm ? SUND : INK; ctx.font = font('700', 26);
+        ctx.fillText(f0(r.amount) + ' \u0e3f', W-96, y+24);
+        ctx.fillStyle = '#ebe4d6'; rr(96, y+36, 1296, 10, 5); ctx.fill();
         const bw = Math.max(10, 1296 * (r.amount / maxAmt));
-        ctx.fillStyle = isComm ? SUN : TEAL; rr(96, y+38, bw, 12, 6); ctx.fill();
-        y += 70;
+        ctx.fillStyle = isComm ? SUN : TEAL; rr(96, y+36, bw, 10, 5); ctx.fill();
+        y += 56;
+        (r.items || []).forEach(it => {
+          const fromStock = !!it.stockId;
+          const nm = (it.item && String(it.item).trim()) || '(\u0e44\u0e21\u0e48\u0e23\u0e30\u0e1a\u0e38\u0e0a\u0e37\u0e48\u0e2d)';
+          ctx.textAlign = 'right'; ctx.font = font('500', 23); ctx.fillStyle = MUT;
+          const amtTxt = f0(it.amount) + ' \u0e3f';
+          const amtW = ctx.measureText(amtTxt).width;
+          ctx.fillText(amtTxt, W-96, y+19);
+          ctx.textAlign = 'left'; ctx.font = font('400', 23);
+          ctx.fillStyle = fromStock ? '#1f8a70' : INK2;
+          const prefix = fromStock ? '\ud83d\udce6 ' : '\u00b7  ';
+          const maxNameW = (W-96) - 142 - amtW - 28;
+          ctx.fillText(trunc(prefix + nm, maxNameW), 142, y+19);
+          y += 33;
+        });
+        y += 18;
       });
-      if (rows.length > 9) {
-        const rest = rows.slice(9).reduce((s, r) => s + r.amount, 0);
-        ctx.textAlign = 'left'; ctx.fillStyle = MUT; ctx.font = font('400', 24);
-        ctx.fillText('+ อีก ' + (rows.length-9) + ' หมวด', 96, y+18);
-        ctx.textAlign = 'right'; ctx.fillText(f0(rest) + ' ฿', W-96, y+18);
-        y += 46;
-      }
     }
 
     // ===== INVESTORS =====
@@ -4800,23 +4815,30 @@ async function downloadJobSummaryPNG(job, partners) {
       y += boxH + 20;
     }
 
-    // ===== FOOTER =====
-    ctx.fillStyle = INK; ctx.fillRect(0, H-112, W, 112);
-    ctx.fillStyle = SUN; ctx.fillRect(0, H-112, W, 5);
-    ctx.textAlign = 'left'; ctx.fillStyle = '#ffffff'; ctx.font = font('700', 30);
-    ctx.fillText('D.D. Solution', 96, H-58);
-    ctx.fillStyle = '#9fb0cc'; ctx.font = font('400', 22);
-    ctx.fillText('daddy solution · โซล่าเซลล์ครบวงจร', 96, H-26);
-    ctx.textAlign = 'right'; ctx.fillStyle = SUN; ctx.font = font('600', 22);
-    ctx.fillText('เอกสารสรุปภายใน — สำหรับหุ้นส่วน', W-96, H-44);
+    // ===== FOOTER + CROP TO CONTENT =====
+    const contentBottom = Math.ceil(y);
+    const finalH = Math.max(900, contentBottom + 44 + FOOTER_H);
+    const out = document.createElement('canvas');
+    out.width = W; out.height = finalH;
+    const octx = out.getContext('2d');
+    octx.fillStyle = PAPER; octx.fillRect(0, 0, W, finalH);
+    octx.drawImage(cv, 0, 0, W, contentBottom, 0, 0, W, contentBottom);
+    octx.fillStyle = INK; octx.fillRect(0, finalH-FOOTER_H, W, FOOTER_H);
+    octx.fillStyle = SUN; octx.fillRect(0, finalH-FOOTER_H, W, 5);
+    octx.textAlign = 'left'; octx.fillStyle = '#ffffff'; octx.font = font('700', 30);
+    octx.fillText('D.D. Solution', 96, finalH-58);
+    octx.fillStyle = '#9fb0cc'; octx.font = font('400', 22);
+    octx.fillText('daddy solution \u00b7 \u0e42\u0e0b\u0e25\u0e48\u0e32\u0e40\u0e0b\u0e25\u0e25\u0e4c\u0e04\u0e23\u0e1a\u0e27\u0e07\u0e08\u0e23', 96, finalH-26);
+    octx.textAlign = 'right'; octx.fillStyle = SUN; octx.font = font('600', 22);
+    octx.fillText('\u0e40\u0e2d\u0e01\u0e2a\u0e32\u0e23\u0e2a\u0e23\u0e38\u0e1b\u0e20\u0e32\u0e22\u0e43\u0e19 \u2014 \u0e2a\u0e33\u0e2b\u0e23\u0e31\u0e1a\u0e2b\u0e38\u0e49\u0e19\u0e2a\u0e48\u0e27\u0e19', W-96, finalH-44);
 
     // ===== EXPORT =====
     const safe = (job.customer || 'job').replace(/[\\/:*?"<>|]/g, '').trim().slice(0, 40);
-    cv.toBlob((blob) => {
-      if (!blob) { alert('สร้างภาพไม่สำเร็จ'); return; }
+    out.toBlob((blob) => {
+      if (!blob) { alert('\u0e2a\u0e23\u0e49\u0e32\u0e07\u0e20\u0e32\u0e1e\u0e44\u0e21\u0e48\u0e2a\u0e33\u0e40\u0e23\u0e47\u0e08'); return; }
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = 'สรุปงาน_' + safe + '_' + (job.date || '') + '.png';
+      a.href = url; a.download = '\u0e2a\u0e23\u0e38\u0e1b\u0e07\u0e32\u0e19_' + safe + '_' + (job.date || '') + '.png';
       document.body.appendChild(a); a.click();
       setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1500);
     }, 'image/png');
