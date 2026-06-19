@@ -5633,7 +5633,7 @@ function StockModal({ item, onClose, onSave }) {
         <>
           <Field label="หน่วย">
             <select value={form.unit || 'ชิ้น'} onChange={e => update('unit', e.target.value)} className={inputCls}>
-              <option>ชิ้น</option><option>แผ่น</option><option>เครื่อง</option><option>ลูก</option><option>ตู้</option><option>อัน</option><option>ชุด</option>
+              <option>ชิ้น</option><option>เมตร</option><option>แผ่น</option><option>เครื่อง</option><option>ลูก</option><option>ตู้</option><option>อัน</option><option>ชุด</option>
             </select>
           </Field>
           <div className="grid grid-cols-2 gap-3">
