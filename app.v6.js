@@ -4862,7 +4862,7 @@ async function downloadStockSummaryPNG(stock, totalStockValue) {
     const ctx = cv.getContext('2d');
 
     const INK='#0d1f43', INK2='#33415f', MUT='#6c768e', PAPER='#f5f2ea', LINE='#e7e1d2';
-    const SUN='#f2a23d', TEAL='#3f97a0', TEALB='#e6f1f2';
+    const SUN='#f2a23d', FOREST='#13543a', TEAL='#0f7a4f', TEALB='#e7f4ec';
     const font = (w, px) => w + ' ' + px + "px 'Sarabun','Anuphan',system-ui,'Noto Sans Thai',sans-serif";
     const f0 = (n) => new Intl.NumberFormat('th-TH', { maximumFractionDigits: 0 }).format(Math.round(Number(n) || 0));
     const f2 = (n) => new Intl.NumberFormat('th-TH', { maximumFractionDigits: 2 }).format(Number(n) || 0);
@@ -4874,11 +4874,11 @@ async function downloadStockSummaryPNG(stock, totalStockValue) {
     ctx.textBaseline = 'alphabetic';
 
     // HEADER
-    ctx.fillStyle = INK; ctx.fillRect(0, 0, W, 300);
+    ctx.fillStyle = FOREST; ctx.fillRect(0, 0, W, 300);
     if (logo) { try { ctx.drawImage(logo, 96, 62, 176, 176); } catch(e) {} }
     else { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(184, 150, 88, 0, Math.PI*2); ctx.fill(); }
     ctx.textAlign = 'left'; ctx.fillStyle = '#ffffff'; ctx.font = font('700', 54); ctx.fillText('D.D. Solution', 300, 138);
-    ctx.fillStyle = '#9fd0d6'; ctx.font = font('500', 27); ctx.fillText('\u0e23\u0e30\u0e1a\u0e1a\u0e42\u0e0b\u0e25\u0e48\u0e32\u0e40\u0e0b\u0e25\u0e25\u0e4c\u0e04\u0e23\u0e1a\u0e27\u0e07\u0e08\u0e23 \u00b7 daddy solution', 300, 182);
+    ctx.fillStyle = '#a9e0c2'; ctx.font = font('500', 27); ctx.fillText('\u0e23\u0e30\u0e1a\u0e1a\u0e42\u0e0b\u0e25\u0e48\u0e32\u0e40\u0e0b\u0e25\u0e25\u0e4c\u0e04\u0e23\u0e1a\u0e27\u0e07\u0e08\u0e23 \u00b7 daddy solution', 300, 182);
     ctx.textAlign = 'right'; ctx.fillStyle = '#ffffff'; ctx.font = font('600', 30); ctx.fillText('\u0e2a\u0e23\u0e38\u0e1b\u0e2a\u0e15\u0e4a\u0e2d\u0e01', W-96, 120);
     const today = new Date().toLocaleDateString('th-TH', { day:'numeric', month:'short', year:'numeric' });
     ctx.fillStyle = '#aebbd2'; ctx.font = font('400', 23); ctx.fillText('\u0e13 \u0e27\u0e31\u0e19\u0e17\u0e35\u0e48 ' + today, W-96, 158);
@@ -4948,7 +4948,7 @@ async function downloadStockSummaryPNG(stock, totalStockValue) {
     const octx = out.getContext('2d');
     octx.fillStyle = PAPER; octx.fillRect(0, 0, W, finalH);
     octx.drawImage(cv, 0, 0, W, contentBottom, 0, 0, W, contentBottom);
-    octx.fillStyle = INK; octx.fillRect(0, finalH-FOOTER_H, W, FOOTER_H);
+    octx.fillStyle = FOREST; octx.fillRect(0, finalH-FOOTER_H, W, FOOTER_H);
     octx.fillStyle = SUN; octx.fillRect(0, finalH-FOOTER_H, W, 5);
     octx.textAlign = 'left'; octx.fillStyle = '#ffffff'; octx.font = font('700', 30); octx.fillText('D.D. Solution', 96, finalH-58);
     octx.fillStyle = '#9fb0cc'; octx.font = font('400', 22); octx.fillText('daddy solution \u00b7 \u0e42\u0e0b\u0e25\u0e48\u0e32\u0e40\u0e0b\u0e25\u0e25\u0e4c\u0e04\u0e23\u0e1a\u0e27\u0e07\u0e08\u0e23', 96, finalH-26);
