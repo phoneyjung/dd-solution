@@ -2646,6 +2646,9 @@ function DDSolutionManager({ currentUser, onLogout }) {
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div><h2 className="display-font text-3xl text-stone-800">สต็อกสินค้า</h2><p className="text-sm text-stone-500">มูลค่ารวม: <span className="font-semibold text-amber-600">{fmt0(totalStockValue)} ฿</span></p></div>
               <div className="flex gap-2">
+                <button onClick={() => downloadStockSummaryPNG(stock, totalStockValue)} title="บันทึกภาพสต๊อกล่าสุด (PNG)" className="flex items-center gap-2 px-3 py-2 rounded-xl font-medium border bg-white border-stone-200 hover:bg-amber-50 transition-colors">
+                  <Camera className="w-4 h-4 text-amber-600" /> รูปสต๊อก
+                </button>
                 <button onClick={() => setShowHistory(!showHistory)} className={`flex items-center gap-2 px-3 py-2 rounded-xl font-medium border transition-colors ${showHistory ? 'bg-stone-200 border-stone-300' : 'bg-white border-stone-200'}`}>
                   {showHistory ? <EyeOff className="w-4 h-4" /> : <History className="w-4 h-4" />}
                   {showHistory ? 'ซ่อนประวัติ' : 'ดูประวัติ'}
@@ -4844,6 +4847,124 @@ async function downloadJobSummaryPNG(job, partners) {
     }, 'image/png');
   } catch (err) {
     alert('สร้างภาพไม่สำเร็จ: ' + (err && err.message ? err.message : err));
+  }
+}
+
+async function downloadStockSummaryPNG(stock, totalStockValue) {
+  try {
+    let logo = null;
+    try { logo = new Image(); logo.src = DD_LOGO_DATAURL; await logo.decode(); } catch(e) { logo = null; }
+    try { if (document.fonts && document.fonts.ready) await Promise.race([document.fonts.ready, new Promise(function(r){setTimeout(r,1500);})]); } catch(e) {}
+
+    const W = 1488, FOOTER_H = 112;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = 8000;
+    const ctx = cv.getContext('2d');
+
+    const INK='#0d1f43', INK2='#33415f', MUT='#6c768e', PAPER='#f5f2ea', LINE='#e7e1d2';
+    const SUN='#f2a23d', TEAL='#3f97a0', TEALB='#e6f1f2';
+    const font = (w, px) => w + ' ' + px + "px 'Sarabun','Anuphan',system-ui,'Noto Sans Thai',sans-serif";
+    const f0 = (n) => new Intl.NumberFormat('th-TH', { maximumFractionDigits: 0 }).format(Math.round(Number(n) || 0));
+    const f2 = (n) => new Intl.NumberFormat('th-TH', { maximumFractionDigits: 2 }).format(Number(n) || 0);
+    const rr = (x, y, w, h, r) => { const rad = Math.max(0, Math.min(r, w/2, h/2)); ctx.beginPath(); ctx.moveTo(x+rad, y); ctx.arcTo(x+w, y, x+w, y+h, rad); ctx.arcTo(x+w, y+h, x, y+h, rad); ctx.arcTo(x, y+h, x, y, rad); ctx.arcTo(x, y, x+w, y, rad); ctx.closePath(); };
+    const trunc = (text, maxW) => { if (ctx.measureText(text).width <= maxW) return text; let t = text; while (t.length > 1 && ctx.measureText(t + '\u2026').width > maxW) t = t.slice(0, -1); return t + '\u2026'; };
+    const catLabel = (id) => { const arr = (typeof STOCK_CATEGORIES !== 'undefined' ? STOCK_CATEGORIES : []); const c = arr.find(x => x.id === id); return c ? c.label : ((typeof getCatLabel === 'function') ? getCatLabel(id) : id); };
+
+    ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, 8000);
+    ctx.textBaseline = 'alphabetic';
+
+    // HEADER
+    ctx.fillStyle = INK; ctx.fillRect(0, 0, W, 300);
+    if (logo) { try { ctx.drawImage(logo, 96, 62, 176, 176); } catch(e) {} }
+    else { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(184, 150, 88, 0, Math.PI*2); ctx.fill(); }
+    ctx.textAlign = 'left'; ctx.fillStyle = '#ffffff'; ctx.font = font('700', 54); ctx.fillText('D.D. Solution', 300, 138);
+    ctx.fillStyle = '#9fd0d6'; ctx.font = font('500', 27); ctx.fillText('\u0e23\u0e30\u0e1a\u0e1a\u0e42\u0e0b\u0e25\u0e48\u0e32\u0e40\u0e0b\u0e25\u0e25\u0e4c\u0e04\u0e23\u0e1a\u0e27\u0e07\u0e08\u0e23 \u00b7 daddy solution', 300, 182);
+    ctx.textAlign = 'right'; ctx.fillStyle = '#ffffff'; ctx.font = font('600', 30); ctx.fillText('\u0e2a\u0e23\u0e38\u0e1b\u0e2a\u0e15\u0e4a\u0e2d\u0e01', W-96, 120);
+    const today = new Date().toLocaleDateString('th-TH', { day:'numeric', month:'short', year:'numeric' });
+    ctx.fillStyle = '#aebbd2'; ctx.font = font('400', 23); ctx.fillText('\u0e13 \u0e27\u0e31\u0e19\u0e17\u0e35\u0e48 ' + today, W-96, 158);
+    ctx.font = font('600', 20); const tagT = '\u0e40\u0e2d\u0e01\u0e2a\u0e32\u0e23\u0e20\u0e32\u0e22\u0e43\u0e19', tagW = ctx.measureText(tagT).width;
+    ctx.fillStyle = 'rgba(242,162,61,0.20)'; rr(W-96-tagW-26, 178, tagW+26, 34, 9); ctx.fill();
+    ctx.fillStyle = SUN; ctx.fillText(tagT, W-96-13, 201);
+
+    // group active items by STOCK_CATEGORIES order
+    const active = (stock || []).filter(s => Number(s.qty) > 0);
+    const arr = (typeof STOCK_CATEGORIES !== 'undefined' ? STOCK_CATEGORIES : []);
+    const seen = {}; let groups = [];
+    arr.forEach(c => { const items = active.filter(s => s.category === c.id); if (items.length) { groups.push({ cid: c.id, label: c.label, items }); seen[c.id] = 1; } });
+    active.forEach(s => { if (!seen[s.category]) { seen[s.category] = 1; groups.push({ cid: s.category, label: catLabel(s.category), items: active.filter(x => x.category === s.category) }); } });
+
+    const grandValue = active.reduce((sum, s) => sum + Number(s.qty) * Number(s.unitCost), 0);
+    const totalVal = (typeof totalStockValue === 'number' && totalStockValue > 0) ? totalStockValue : grandValue;
+
+    // TITLE + SUMMARY CARD
+    let y = 384;
+    ctx.textAlign = 'left'; ctx.fillStyle = INK; ctx.font = font('700', 46);
+    ctx.fillText('\u0e2a\u0e15\u0e4a\u0e2d\u0e01\u0e04\u0e07\u0e40\u0e2b\u0e25\u0e37\u0e2d', 96, y);
+    y += 44;
+    const cH = 150;
+    ctx.fillStyle = TEALB; rr(96, y, 1296, cH, 20); ctx.fill();
+    ctx.textAlign = 'left'; ctx.fillStyle = TEAL; ctx.font = font('600', 26); ctx.fillText('\u0e21\u0e39\u0e25\u0e04\u0e48\u0e32\u0e2a\u0e15\u0e4a\u0e2d\u0e01\u0e23\u0e27\u0e21', 136, y+58);
+    ctx.fillStyle = INK; ctx.font = font('700', 60); ctx.fillText(f0(totalVal) + ' \u0e3f', 136, y+120);
+    ctx.textAlign = 'right'; ctx.fillStyle = INK2; ctx.font = font('500', 26);
+    ctx.fillText(active.length + ' \u0e23\u0e32\u0e22\u0e01\u0e32\u0e23 \u00b7 ' + groups.length + ' \u0e2b\u0e21\u0e27\u0e14', W-136, y+58);
+    y += cH + 50;
+
+    if (!groups.length) {
+      ctx.textAlign = 'left'; ctx.fillStyle = MUT; ctx.font = font('400', 28);
+      ctx.fillText('\u0e44\u0e21\u0e48\u0e21\u0e35\u0e2a\u0e15\u0e4a\u0e2d\u0e01\u0e04\u0e07\u0e40\u0e2b\u0e25\u0e37\u0e2d', 96, y); y += 40;
+    }
+
+    groups.forEach(g => {
+      const catTotal = g.items.reduce((s, it) => s + Number(it.qty) * Number(it.unitCost), 0);
+      ctx.textAlign = 'left'; ctx.fillStyle = INK; ctx.font = font('700', 30);
+      ctx.fillText(g.label, 96, y+8);
+      const lw = ctx.measureText(g.label).width;
+      ctx.fillStyle = MUT; ctx.font = font('400', 22); ctx.fillText('  (' + g.items.length + ' \u0e23\u0e32\u0e22\u0e01\u0e32\u0e23)', 96+lw, y+8);
+      ctx.textAlign = 'right'; ctx.fillStyle = TEAL; ctx.font = font('700', 28); ctx.fillText(f0(catTotal) + ' \u0e3f', W-96, y+8);
+      y += 22;
+      ctx.strokeStyle = LINE; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(96, y); ctx.lineTo(W-96, y); ctx.stroke();
+      y += 16;
+      g.items.forEach(it => {
+        const qty = Number(it.qty) || 0, uc = Number(it.unitCost) || 0, unit = it.unit || '\u0e0a\u0e34\u0e49\u0e19';
+        const total = qty * uc;
+        ctx.textAlign = 'right'; ctx.font = font('700', 26); ctx.fillStyle = INK;
+        const totalTxt = f0(total) + ' \u0e3f', totalW = ctx.measureText(totalTxt).width;
+        ctx.fillText(totalTxt, W-96, y+26);
+        ctx.textAlign = 'left'; ctx.font = font('600', 25); ctx.fillStyle = INK;
+        const maxNameW = (W-96) - 96 - totalW - 40;
+        ctx.fillText(trunc(it.name || '(\u0e44\u0e21\u0e48\u0e23\u0e30\u0e1a\u0e38)', maxNameW), 96, y+26);
+        ctx.font = font('400', 22); ctx.fillStyle = MUT;
+        const qtyStr = (it.category === 'wire') ? f2(qty) : f0(qty);
+        ctx.fillText('\u0e04\u0e07\u0e40\u0e2b\u0e25\u0e37\u0e2d ' + qtyStr + ' ' + unit + '  \u00d7  ' + f2(uc) + ' \u0e3f/' + unit, 96, y+54);
+        y += 70;
+      });
+      y += 20;
+    });
+
+    // FOOTER + CROP
+    const contentBottom = Math.ceil(y);
+    const finalH = Math.max(900, contentBottom + 44 + FOOTER_H);
+    const out = document.createElement('canvas'); out.width = W; out.height = finalH;
+    const octx = out.getContext('2d');
+    octx.fillStyle = PAPER; octx.fillRect(0, 0, W, finalH);
+    octx.drawImage(cv, 0, 0, W, contentBottom, 0, 0, W, contentBottom);
+    octx.fillStyle = INK; octx.fillRect(0, finalH-FOOTER_H, W, FOOTER_H);
+    octx.fillStyle = SUN; octx.fillRect(0, finalH-FOOTER_H, W, 5);
+    octx.textAlign = 'left'; octx.fillStyle = '#ffffff'; octx.font = font('700', 30); octx.fillText('D.D. Solution', 96, finalH-58);
+    octx.fillStyle = '#9fb0cc'; octx.font = font('400', 22); octx.fillText('daddy solution \u00b7 \u0e42\u0e0b\u0e25\u0e48\u0e32\u0e40\u0e0b\u0e25\u0e25\u0e4c\u0e04\u0e23\u0e1a\u0e27\u0e07\u0e08\u0e23', 96, finalH-26);
+    octx.textAlign = 'right'; octx.fillStyle = SUN; octx.font = font('600', 22); octx.fillText('\u0e40\u0e2d\u0e01\u0e2a\u0e32\u0e23\u0e2a\u0e15\u0e4a\u0e2d\u0e01\u0e20\u0e32\u0e22\u0e43\u0e19 \u2014 \u0e2a\u0e33\u0e2b\u0e23\u0e31\u0e1a\u0e2b\u0e38\u0e49\u0e19\u0e2a\u0e48\u0e27\u0e19', W-96, finalH-44);
+
+    out.toBlob((blob) => {
+      if (!blob) { alert('\u0e2a\u0e23\u0e49\u0e32\u0e07\u0e20\u0e32\u0e1e\u0e44\u0e21\u0e48\u0e2a\u0e33\u0e40\u0e23\u0e47\u0e08'); return; }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const d = new Date(); const ds = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+      a.href = url; a.download = '\u0e2a\u0e15\u0e4a\u0e2d\u0e01\u0e25\u0e48\u0e32\u0e2a\u0e38\u0e14_' + ds + '.png';
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1500);
+    }, 'image/png');
+  } catch (err) {
+    alert('\u0e2a\u0e23\u0e49\u0e32\u0e07\u0e20\u0e32\u0e1e\u0e44\u0e21\u0e48\u0e2a\u0e33\u0e40\u0e23\u0e47\u0e08: ' + (err && err.message ? err.message : err));
   }
 }
 
