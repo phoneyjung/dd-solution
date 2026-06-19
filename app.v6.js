@@ -5383,13 +5383,19 @@ function JobModal({ job, partners, stock = [], documents = [], onUpdateStock, on
                   );
                 }
                 
-                // แบบเดิมสำหรับหมวดอื่นๆ + รายการที่เบิกจากสต๊อก
+                // แบบเดิมสำหรับหมวดอื่นๆ + รายการที่เบิกจากสต๊อก (ชื่อรายการบรรทัดบน / จำนวนเงินบรรทัดล่าง)
                 return (
-                  <div key={i} className={`flex gap-2 mb-2 ${item.stockId ? 'bg-emerald-50 p-2 rounded-lg' : ''}`}>
-                    {item.stockId && <span className="text-emerald-600 self-center" title="เบิกจากสต๊อก">📦</span>}
-                    <input value={item.item} onChange={e => updateCostItem(cat.id, i, 'item', e.target.value)} className={inputCls + " flex-1"} placeholder={cat.id === 'commission' ? 'ชื่อคนแนะนำ / ผู้รับคอม' : 'ชื่อรายการ'} disabled={!!item.stockId} />
-                    <input type="number" step="0.01" value={item.amount} onChange={e => updateCostItem(cat.id, i, 'amount', Number(e.target.value))} className={inputCls + " w-28"} placeholder="0" disabled={!!item.stockId} />
-                    <button onClick={() => removeCostItem(cat.id, i)} className="p-2 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4 text-red-400" /></button>
+                  <div key={i} className={`border rounded-lg p-2 mb-2 ${item.stockId ? 'bg-emerald-50 border-emerald-100' : 'bg-stone-50/50 border-stone-100'}`}>
+                    <div className="flex gap-2 mb-1.5 items-center">
+                      {item.stockId && <span className="text-emerald-600 shrink-0" title="เบิกจากสต๊อก">📦</span>}
+                      <input value={item.item} onChange={e => updateCostItem(cat.id, i, 'item', e.target.value)} className={inputCls + " flex-1"} placeholder={cat.id === 'commission' ? 'ชื่อคนแนะนำ / ผู้รับคอม' : (cat.id === 'labor' ? 'เช่น ค่าแรงช่าง...' : cat.id === 'equipment' ? 'เช่น ท่อไฟ, อุปกรณ์ติดตั้ง...' : 'ชื่อรายการ')} disabled={!!item.stockId} />
+                      <button onClick={() => removeCostItem(cat.id, i)} className="p-2 hover:bg-red-50 rounded-lg shrink-0"><Trash2 className="w-4 h-4 text-red-400" /></button>
+                    </div>
+                    <div className="flex gap-1.5 items-center text-xs">
+                      <span className="text-stone-500 whitespace-nowrap">จำนวนเงิน:</span>
+                      <input type="number" step="0.01" value={item.amount} onChange={e => updateCostItem(cat.id, i, 'amount', Number(e.target.value))} className={inputCls + " flex-1 text-right"} placeholder="0" disabled={!!item.stockId} />
+                      <span className="text-stone-500">฿</span>
+                    </div>
                   </div>
                 );
               })}
