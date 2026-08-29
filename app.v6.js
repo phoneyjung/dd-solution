@@ -2506,6 +2506,8 @@ function DDSolutionManager({ currentUser, onLogout }) {
         )}
 
         {activeTab === 'sales' && (
+          <div className="space-y-4">
+          <QuickCostCalc />
           <SalesPresentation
             customers={customers}
             stock={stock}
@@ -2576,6 +2578,7 @@ function DDSolutionManager({ currentUser, onLogout }) {
               if (action) await logActivity(action, 'ข้อมูลบริษัท', details || 'แก้ไขข้อมูลบริษัท');
             }}
           />
+          </div>
         )}
 
         {activeTab === 'catalog' && (
@@ -7247,6 +7250,157 @@ function CatalogItemModal({ item, onClose, onSave }) {
         <Save className="w-4 h-4" /> บันทึก
       </button>
     </Modal>
+  );
+}
+
+// ============== QUICK COST CALC (⚡ คิดราคาไว) ==============
+// สูตรถอดจากต้นทุนงานจริง (งาน 1 เกรียงศักดิ์ + งาน 2 หลักสี่)
+// ใส่ 5 ช่อง → ราคาต่ำสุดไม่เข้าเนื้อ + ราคาเปิดเผื่อต่อรอง + โซนปิดแนะนำ
+const QUICKCALC_DEFAULTS = {
+  wireRate: 150,    // ค่าสาย PV คู่ + ท่อ ต่อเมตร
+  acFixed: 3000,    // เหมาสาย AC + กราวด์ ต่องาน
+  overhead: 10000,  // ตู้ Combiner + ช่างเสริม + เดินทาง + ข้าว + เบ็ดเตล็ด (จากงาน 2 = 9,652)
+  warrantyPct: 3,   // กันเคลมประกัน % ของทุน
+  openMk: 35,       // ราคาเปิด = ทุน × 1.35
+  closeMk: 20,      // โซนปิดแนะนำเริ่มที่ ทุน × 1.20 (งาน 2 ปิดจริงที่ ×1.21)
+};
+
+function QuickCostCalc() {
+  const [expanded, setExpanded] = useState(false);
+  const [panel, setPanel] = useState('');
+  const [inv, setInv] = useState('');
+  const [batt, setBatt] = useState('');
+  const [dist, setDist] = useState('');
+  const [labor, setLabor] = useState('');
+  const [showSettings, setShowSettings] = useState(false);
+  const [showDetail, setShowDetail] = useState(false);
+  const [cfg, setCfg] = useState(() => {
+    try { return { ...QUICKCALC_DEFAULTS, ...JSON.parse(localStorage.getItem('dd-quickcalc') || '{}') }; }
+    catch (e) { return { ...QUICKCALC_DEFAULTS }; }
+  });
+  const setCfgVal = (k, v) => {
+    const next = { ...cfg, [k]: parseFloat(v) || 0 };
+    setCfg(next);
+    try { localStorage.setItem('dd-quickcalc', JSON.stringify(next)); } catch (e) {}
+  };
+
+  const n = (v) => parseFloat(v) || 0;
+  const upK = (x) => Math.ceil(x / 1000) * 1000;
+  const fmt = (x) => '฿' + Math.round(x).toLocaleString('th-TH');
+
+  const wire = n(dist) * cfg.wireRate + cfg.acFixed;
+  const cost = n(panel) + n(inv) + n(batt) + wire + n(labor) + cfg.overhead;
+  const hasInput = n(panel) > 0 || n(inv) > 0;
+  const floorPrice = upK(cost * (1 + cfg.warrantyPct / 100));
+  const openPrice = roundUpTo999(cost * (1 + cfg.openMk / 100));
+  const closeLo = upK(cost * (1 + cfg.closeMk / 100));
+  const closeHi = upK(cost * (1 + cfg.closeMk / 100 + 0.05));
+
+  const fields = [
+    { label: '1. ราคาแผงรวม', value: panel, set: setPanel, unit: '฿', ph: 'เช่น 26,199' },
+    { label: '2. Inverter', value: inv, set: setInv, unit: '฿', ph: 'เช่น 33,705' },
+    { label: '3. แบต (ไม่มี = ว่าง)', value: batt, set: setBatt, unit: '฿', ph: '0' },
+    { label: '4. ระยะแผง → ตู้', value: dist, set: setDist, unit: 'ม.', ph: 'เช่น 30' },
+    { label: '5. ค่าเหมาติดตั้งแผง', value: labor, set: setLabor, unit: '฿', ph: 'เช่น 20,000' },
+  ];
+  const settings = [
+    { key: 'wireRate', label: 'ค่าสาย/เมตร (PV คู่+ท่อ)' },
+    { key: 'acFixed', label: 'เหมาสาย AC+กราวด์' },
+    { key: 'overhead', label: 'Overhead ต่องาน' },
+    { key: 'warrantyPct', label: 'กันเคลม %' },
+    { key: 'openMk', label: 'ราคาเปิด markup %' },
+    { key: 'closeMk', label: 'โซนปิด markup %' },
+  ];
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-amber-200 overflow-hidden">
+      <button onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between p-4 hover:bg-amber-50 transition-colors">
+        <div className="flex items-center gap-2 text-left">
+          <span className="text-xl">⚡</span>
+          <div>
+            <div className="font-bold text-stone-800 text-sm">คิดราคาไว</div>
+            <div className="text-xs text-stone-500">ใส่ 5 ช่อง → ราคาต่ำสุดไม่เข้าเนื้อ + ราคาเปิด</div>
+          </div>
+        </div>
+        <span className={`text-stone-400 transition-transform ${expanded ? 'rotate-180' : ''}`}>▾</span>
+      </button>
+
+      {expanded && (
+        <div className="p-4 pt-0 space-y-3 animate-fade-in">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {fields.map((f, i) => (
+              <div key={i} className={i === 4 ? 'sm:col-span-2' : ''}>
+                <label className="text-xs font-semibold text-stone-500">{f.label}</label>
+                <div className="relative mt-0.5">
+                  <input type="number" inputMode="decimal" value={f.value} placeholder={f.ph}
+                    onChange={(e) => f.set(e.target.value)}
+                    className="w-full p-2.5 pr-10 border border-stone-300 rounded-xl text-lg font-bold focus:border-amber-500 focus:outline-none" />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-stone-400 font-semibold">{f.unit}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {hasInput && (
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3">
+                  <div className="text-[11px] font-bold text-emerald-700">🟢 ต่ำสุดไม่เข้าเนื้อ</div>
+                  <div className="text-xl font-extrabold text-emerald-700">{fmt(floorPrice)}</div>
+                  <div className="text-[10px] text-emerald-600">รวมกันเคลม {cfg.warrantyPct}% แล้ว</div>
+                </div>
+                <div className="bg-amber-50 border border-amber-300 rounded-xl p-3">
+                  <div className="text-[11px] font-bold text-amber-700">🟠 ราคาเปิด (เผื่อต่อรอง)</div>
+                  <div className="text-xl font-extrabold text-amber-700">{fmt(openPrice)}</div>
+                  <div className="text-[10px] text-amber-600">กำไร {fmt(openPrice - cost)}</div>
+                </div>
+              </div>
+              <div className="bg-sky-50 border border-sky-200 rounded-xl p-2.5 text-center text-sm">
+                🎯 <span className="text-sky-700 font-bold">โซนปิดที่ดี: {fmt(closeLo)} – {fmt(closeHi)}</span>
+                <span className="text-sky-600 text-xs"> (กำไร {fmt(closeLo - cost)}+)</span>
+              </div>
+
+              <button onClick={() => setShowDetail(!showDetail)}
+                className="text-xs text-stone-500 underline">📋 {showDetail ? 'ซ่อน' : 'ดู'}ที่มาต้นทุน (ทุนรวม {fmt(cost)})</button>
+              {showDetail && (
+                <div className="bg-stone-50 rounded-xl p-3 text-xs space-y-1">
+                  {[
+                    ['แผง', n(panel)], ['Inverter', n(inv)], ['แบต', n(batt)],
+                    [`สายไฟ+ท่อ (${n(dist)} ม. × ${cfg.wireRate} + AC ${cfg.acFixed.toLocaleString()})`, wire],
+                    ['ค่าเหมาติดตั้งแผง', n(labor)], ['Overhead ต่องาน', cfg.overhead],
+                  ].filter(([, v]) => v > 0).map(([k, v], i) => (
+                    <div key={i} className="flex justify-between"><span className="text-stone-500">{k}</span><span className="font-bold">{fmt(v)}</span></div>
+                  ))}
+                  <div className="flex justify-between border-t border-stone-300 pt-1 text-amber-700 font-extrabold">
+                    <span>ทุนรวม</span><span>{fmt(cost)}</span>
+                  </div>
+                  <div className="flex justify-between"><span className="text-stone-500">+ กันเคลม {cfg.warrantyPct}%</span><span className="font-bold">{fmt(cost * cfg.warrantyPct / 100)}</span></div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <button onClick={() => setShowSettings(!showSettings)}
+            className="text-xs text-stone-400 underline">⚙️ {showSettings ? 'ซ่อน' : ''}ตั้งค่าสูตร</button>
+          {showSettings && (
+            <div className="grid grid-cols-2 gap-2 bg-stone-50 rounded-xl p-3">
+              {settings.map((s) => (
+                <div key={s.key}>
+                  <label className="text-[10px] text-stone-500">{s.label}</label>
+                  <input type="number" inputMode="decimal" value={cfg[s.key]}
+                    onChange={(e) => setCfgVal(s.key, e.target.value)}
+                    className="w-full p-1.5 border border-stone-300 rounded-lg text-sm font-bold focus:border-amber-500 focus:outline-none" />
+                </div>
+              ))}
+              <div className="col-span-2 text-[10px] text-stone-400 leading-relaxed">
+                ค่าเริ่มต้นถอดจากงานจริง: overhead งานหลักสี่ = 9,652฿ · งานหลักสี่ปิดที่ทุน ×1.21 (อยู่ในโซนแนะนำ) · ถ้าค่าเหมารวมสายแล้ว ใส่ระยะ = 0
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
